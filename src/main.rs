@@ -1,18 +1,20 @@
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 mod commands;
+mod config;
+
+use commands::{BuildCmd, InitCmd};
 
 #[derive(Parser)]
-#[command(name = "cargo")]
-#[command(bin_name = "cargo")]
+#[command(name = "cargo", bin_name = "cargo")]
 enum Cargo {
     #[command(name = "axiom")]
     Axiom(AxiomArgs),
 }
 
-#[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[derive(Args)]
+#[command(author, about, long_about = None)] // TODO: Add version
 struct AxiomArgs {
     #[command(subcommand)]
     command: AxiomCommands,
@@ -20,18 +22,18 @@ struct AxiomArgs {
 
 #[derive(Subcommand)]
 enum AxiomCommands {
-    /// Build the project with Axiom
-    Build {
-        /// Optional build arguments
-        #[arg(last = true)]
-        args: Vec<String>,
-    },
+    /// Initialize Axiom configuration
+    Init(InitCmd),
+    /// Build the project on Axiom Proving Service
+    Build(BuildCmd),
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let Cargo::Axiom(args) = Cargo::parse();
-    
+
     match args.command {
-        AxiomCommands::Build { args } => commands::build::execute(args),
+        AxiomCommands::Build(cmd) => cmd.run(),
+        AxiomCommands::Init(cmd) => cmd.run(),
     }
 }

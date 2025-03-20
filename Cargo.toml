@@ -8,3 +8,12 @@ authors = ["Your Name <your.email@example.com>"]
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
 anyhow = "1.0"
+dialoguer = "0.10.4"
+dirs = "5.0.1"
+reqwest = { version = "0.11", features = ["json", "blocking", "multipart"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tar = "0.4"
+flate2 = "1.0"
+tokio = { version = "1", features = ["full"] }
+walkdir = "2.3"
