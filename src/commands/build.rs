@@ -1,13 +1,13 @@
-use crate::config;
+use std::{fs::File, path::Path};
+
 use anyhow::{Context, Result};
 use clap::Parser;
-use flate2::write::GzEncoder;
-use flate2::Compression;
+use flate2::{write::GzEncoder, Compression};
 use reqwest::blocking::Client;
-use std::fs::File;
-use std::path::Path;
 use tar::Builder;
 use walkdir;
+
+use crate::config;
 
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
