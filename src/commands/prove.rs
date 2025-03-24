@@ -1,7 +1,7 @@
 use std::fs;
 
 use cargo_openvm::input::{is_valid_hex_string, Input};
-use clap::Args;
+use clap::{Args, Subcommand};
 use eyre::{eyre, Context, Result};
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
@@ -10,9 +10,28 @@ use crate::{config, config::API_KEY_HEADER};
 
 #[derive(Args, Debug)]
 pub struct ProveCmd {
+    #[command(subcommand)]
+    command: Option<ProveSubcommand>,
+
+    #[clap(flatten)]
+    prove_args: ProveArgs,
+}
+
+#[derive(Debug, Subcommand)]
+enum ProveSubcommand {
+    /// Check the status of a proof
+    Status {
+        /// The proof ID to check status for
+        #[clap(long, value_name = "ID")]
+        proof_id: String,
+    },
+}
+
+#[derive(Args, Debug)]
+pub struct ProveArgs {
     /// The ID of the program to generate a proof for
     #[arg(long)]
-    program_id: String,
+    program_id: Option<String>,
 
     /// Input data for the proof (file path or hex string)
     #[clap(long, value_parser, help = "Input to OpenVM program")]
@@ -44,61 +63,105 @@ fn validate_input_json(json: &serde_json::Value) -> Result<()> {
 }
 
 impl ProveCmd {
-    pub fn run(&self) -> Result<()> {
-        println!("Generating proof for program ID: {}", self.program_id);
+    pub fn run(self) -> Result<()> {
+        match self.command {
+            Some(ProveSubcommand::Status { proof_id }) => check_proof_status(proof_id),
+            None => execute(self.prove_args),
+        }
+    }
+}
 
-        // Load config
-        let config = config::load_config()?;
-        let url = format!("{}/proofs?program_uuid={}", config.api_url, self.program_id);
-        let api_key = config
-            .api_key
-            .ok_or_else(|| eyre!("API key not found. Please run `cargo axiom init` first."))?;
+fn execute(args: ProveArgs) -> Result<()> {
+    // Get the program_id from args, return error if not provided
+    let program_id = args
+        .program_id
+        .ok_or_else(|| eyre::eyre!("Program ID is required. Use --program-id to specify."))?;
 
-        // Create the request body based on input
-        let body = match &self.input {
-            Some(input) => {
-                match input {
-                    Input::FilePath(path) => {
-                        // Read the file content directly as JSON
-                        let file_content = fs::read_to_string(path)
-                            .context(format!("Failed to read input file: {}", path.display()))?;
-                        let input_json = serde_json::from_str(&file_content).context(format!(
-                            "Failed to parse input file as JSON: {}",
-                            path.display()
-                        ))?;
-                        validate_input_json(&input_json)?;
-                        input_json
+    println!("Generating proof for program ID: {}", program_id);
+
+    // Load config
+    let config = config::load_config()?;
+    let url = format!("{}/proofs?program_uuid={}", config.api_url, program_id);
+    let api_key = config::get_api_key()?;
+
+    // Create the request body based on input
+    let body = match &args.input {
+        Some(input) => {
+            match input {
+                Input::FilePath(path) => {
+                    // Read the file content directly as JSON
+                    let file_content = fs::read_to_string(path)
+                        .context(format!("Failed to read input file: {}", path.display()))?;
+                    let input_json = serde_json::from_str(&file_content).context(format!(
+                        "Failed to parse input file as JSON: {}",
+                        path.display()
+                    ))?;
+                    validate_input_json(&input_json)?;
+                    input_json
+                }
+                Input::HexBytes(s) => {
+                    if !s.trim_start_matches("0x").starts_with("01")
+                        && !s.trim_start_matches("0x").starts_with("02")
+                    {
+                        return Err(eyre::eyre!("Hex string must start with '01' or '02'"));
                     }
-                    Input::HexBytes(hex_str) => {
-                        json!({ "input": [hex_str] })
-                    }
+                    json!({ "input": [s] })
                 }
             }
-            None => json!({ "input": [] }), // Empty JSON if no input provided
-        };
-
-        // Make API request
-        let client = Client::new();
-        let response = client
-            .post(url)
-            .header("Content-Type", "application/json")
-            .header(API_KEY_HEADER, api_key)
-            .body(body.to_string())
-            .send()
-            .context("Failed to send proof request")?;
-
-        // Handle response
-        if response.status().is_success() {
-            let response_json: Value = response.json()?;
-            println!(
-                "Proof generation initiated successfully!: {}",
-                response_json
-            );
-        } else {
-            let error_text = response.text()?;
-            return Err(eyre!("Failed to generate proof: {}", error_text));
         }
+        None => json!({ "input": [] }), // Empty JSON if no input provided
+    };
 
+    // Make API request
+    let client = Client::new();
+    let response = client
+        .post(url)
+        .header("Content-Type", "application/json")
+        .header(API_KEY_HEADER, api_key)
+        .body(body.to_string())
+        .send()
+        .context("Failed to send proof request")?;
+
+    // Handle response
+    if response.status().is_success() {
+        let response_json: Value = response.json()?;
+        println!(
+            "Proof generation initiated successfully!: {}",
+            response_json
+        );
+    } else {
+        let error_text = response.text()?;
+        return Err(eyre!("Failed to generate proof: {}", error_text));
+    }
+
+    Ok(())
+}
+
+fn check_proof_status(proof_id: String) -> Result<()> {
+    // Load configuration
+    let config = config::load_config()?;
+    let url = format!("{}/proofs/{}", config.api_url, proof_id);
+
+    println!("Checking proof status for proof ID: {}", proof_id);
+
+    // Make the GET request
+    let client = Client::new();
+    let api_key = config::get_api_key()?;
+
+    let response = client
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()
+        .context("Failed to send status request")?;
+
+    // Check if the request was successful
+    if response.status().is_success() {
+        println!("Proof status: {}", response.text().unwrap());
         Ok(())
+    } else {
+        Err(eyre::eyre!(
+            "Status request failed with status: {}",
+            response.status()
+        ))
     }
 }
