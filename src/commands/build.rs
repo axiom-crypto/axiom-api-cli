@@ -1,24 +1,40 @@
 use std::{fs::File, path::Path};
 
-use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
+use eyre::{Context, Result};
 use flate2::{write::GzEncoder, Compression};
 use reqwest::blocking::Client;
 use tar::Builder;
 use walkdir;
 
-use crate::config;
+use crate::{config, config::API_KEY_HEADER};
 
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
 pub struct BuildCmd {
+    #[command(subcommand)]
+    command: Option<BuildSubcommand>,
+
     #[clap(flatten)]
     build_args: BuildArgs,
 }
 
+#[derive(Debug, Subcommand)]
+enum BuildSubcommand {
+    /// Check the status of a build
+    Status {
+        /// The program ID to check status for
+        #[clap(long, value_name = "ID")]
+        program_id: String,
+    },
+}
+
 impl BuildCmd {
     pub fn run(self) -> Result<()> {
-        execute(self.build_args)
+        match self.command {
+            Some(BuildSubcommand::Status { program_id }) => check_build_status(program_id),
+            None => execute(self.build_args),
+        }
     }
 }
 
@@ -43,7 +59,7 @@ fn create_tar_archive() -> Result<String> {
     let current_dir = std::env::current_dir()?;
     let dir_name = current_dir
         .file_name()
-        .ok_or_else(|| anyhow::anyhow!("Failed to get current directory name"))?
+        .ok_or_else(|| eyre::eyre!("Failed to get current directory name"))?
         .to_string_lossy()
         .to_string();
 
@@ -92,7 +108,7 @@ fn create_tar_archive() -> Result<String> {
 pub fn execute(args: BuildArgs) -> Result<()> {
     // Check if we're in a Rust project
     if !is_rust_project() {
-        return Err(anyhow::anyhow!(
+        return Err(eyre::eyre!(
             "Not in a Rust project. Make sure Cargo.toml and Cargo.lock exist."
         ));
     }
@@ -100,7 +116,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     // Get the config_id from args, return error if not provided
     let config_id = args
         .config_id
-        .ok_or_else(|| anyhow::anyhow!("Config ID is required. Use --config-id to specify."))?;
+        .ok_or_else(|| eyre::eyre!("Config ID is required. Use --config-id to specify."))?;
 
     // Create tar archive of the current directory
     println!("Creating archive of the project...");
@@ -122,7 +138,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     let response = client
         .post(url)
-        .header("APS-API-Key", api_key)
+        .header(API_KEY_HEADER, api_key)
         .multipart(form)
         .send()
         .context("Failed to send build request")?;
@@ -138,8 +154,37 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         );
         Ok(())
     } else {
-        Err(anyhow::anyhow!(
+        Err(eyre::eyre!(
             "Build request failed with status: {}",
+            response.status()
+        ))
+    }
+}
+
+fn check_build_status(program_id: String) -> Result<()> {
+    // Load configuration
+    let config = config::load_config()?;
+    let url = format!("{}/programs/{}", config.api_url, program_id);
+
+    println!("Checking build status for program ID: {}", program_id);
+
+    // Make the GET request
+    let client = Client::new();
+    let api_key = config::get_api_key()?;
+
+    let response = client
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()
+        .context("Failed to send status request")?;
+
+    // Check if the request was successful
+    if response.status().is_success() {
+        println!("Build status: {}", response.text().unwrap());
+        Ok(())
+    } else {
+        Err(eyre::eyre!(
+            "Status request failed with status: {}",
             response.status()
         ))
     }

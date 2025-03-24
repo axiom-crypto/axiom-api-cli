@@ -1,8 +1,10 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
 use dirs::home_dir;
+use eyre::{Context, Result};
 use serde::{Deserialize, Serialize};
+
+pub const API_KEY_HEADER: &str = "APS-API-Key";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -20,7 +22,7 @@ impl Default for Config {
 }
 
 pub fn get_axiom_dir() -> Result<PathBuf> {
-    let home = home_dir().ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
+    let home = home_dir().ok_or_else(|| eyre::eyre!("Could not find home directory"))?;
     Ok(home.join(".axiom"))
 }
 
@@ -60,5 +62,5 @@ pub fn get_api_key() -> Result<String> {
     let config = load_config()?;
     config
         .api_key
-        .ok_or_else(|| anyhow::anyhow!("API key not found. Run 'cargo axiom init' first."))
+        .ok_or_else(|| eyre::eyre!("API key not found. Run 'cargo axiom init' first."))
 }

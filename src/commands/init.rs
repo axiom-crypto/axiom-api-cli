@@ -1,6 +1,6 @@
-use anyhow::Result;
 use clap::Parser;
 use dialoguer::Password;
+use eyre::Result;
 
 use crate::config;
 
