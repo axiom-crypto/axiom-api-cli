@@ -1,10 +1,10 @@
-use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
+use eyre::Result;
 
 mod commands;
 mod config;
 
-use commands::{BuildCmd, InitCmd};
+use commands::{BuildCmd, InitCmd, ProveCmd};
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -26,6 +26,8 @@ enum AxiomCommands {
     Init(InitCmd),
     /// Build the project on Axiom Proving Service
     Build(BuildCmd),
+    /// Generate a proof using the Axiom Proving Service
+    Prove(ProveCmd),
 }
 
 #[tokio::main]
@@ -35,5 +37,6 @@ async fn main() -> Result<()> {
     match args.command {
         AxiomCommands::Build(cmd) => cmd.run(),
         AxiomCommands::Init(cmd) => cmd.run(),
+        AxiomCommands::Prove(cmd) => cmd.run(),
     }
 }
