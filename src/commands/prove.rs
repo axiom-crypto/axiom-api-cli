@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, io::copy, path::PathBuf};
 
 use cargo_openvm::input::{is_valid_hex_string, Input};
 use clap::{Args, Subcommand};
@@ -24,6 +24,20 @@ enum ProveSubcommand {
         /// The proof ID to check status for
         #[clap(long, value_name = "ID")]
         proof_id: String,
+    },
+    /// Download proof artifacts
+    Download {
+        /// The proof ID to download artifacts for
+        #[clap(long, value_name = "ID")]
+        proof_id: String,
+
+        /// The type of proof artifact to download (stark, root, or evm)
+        #[clap(long, value_parser = ["stark", "root", "evm"])]
+        r#type: String,
+
+        /// Output file path (defaults to proof_id-type.json)
+        #[clap(long, value_name = "FILE")]
+        output: Option<PathBuf>,
     },
 }
 
@@ -66,6 +80,11 @@ impl ProveCmd {
     pub fn run(self) -> Result<()> {
         match self.command {
             Some(ProveSubcommand::Status { proof_id }) => check_proof_status(proof_id),
+            Some(ProveSubcommand::Download {
+                proof_id,
+                r#type,
+                output,
+            }) => download_proof_artifact(proof_id, r#type, output),
             None => execute(self.prove_args),
         }
     }
@@ -161,6 +180,61 @@ fn check_proof_status(proof_id: String) -> Result<()> {
     } else {
         Err(eyre::eyre!(
             "Status request failed with status: {}",
+            response.status()
+        ))
+    }
+}
+
+fn download_proof_artifact(
+    proof_id: String,
+    artifact_type: String,
+    output: Option<PathBuf>,
+) -> Result<()> {
+    // Load configuration
+    let config = config::load_config()?;
+    let url = format!("{}/proofs/{}/{}", config.api_url, proof_id, artifact_type);
+
+    println!(
+        "Downloading {} proof for proof ID: {}",
+        artifact_type, proof_id
+    );
+
+    // Make the GET request
+    let client = Client::new();
+    let api_key = config::get_api_key()?;
+
+    let response = client
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()
+        .context("Failed to send download request")?;
+
+    // Check if the request was successful
+    if response.status().is_success() {
+        // Determine output file path
+        let output_path = match output {
+            Some(path) => path,
+            None => PathBuf::from(format!("{}-{}.proof", proof_id, artifact_type)),
+        };
+
+        // Create file and stream the response body to it
+        let mut file = fs::File::create(&output_path)
+            .context(format!("Failed to create output file: {:?}", output_path))?;
+
+        copy(
+            &mut response
+                .bytes()
+                .context("Failed to read response body")?
+                .as_ref(),
+            &mut file,
+        )
+        .context("Failed to write response to file")?;
+
+        println!("Successfully downloaded to: {:?}", output_path);
+        Ok(())
+    } else {
+        Err(eyre::eyre!(
+            "Download request failed with status: {}",
             response.status()
         ))
     }
