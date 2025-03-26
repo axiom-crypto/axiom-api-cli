@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use clap::Args;
+use clap::{Args, Subcommand};
 use eyre::{Context, Result};
 use reqwest::blocking::Client;
 use serde_json::Value;
@@ -9,18 +9,44 @@ use crate::{config, config::API_KEY_HEADER};
 
 #[derive(Args, Debug)]
 pub struct VerifyCmd {
+    #[command(subcommand)]
+    command: Option<VerifySubcommand>,
+
     /// The config ID to use for verification
     #[clap(long, value_name = "ID")]
-    config_id: String,
+    config_id: Option<String>,
 
     /// Path to the proof file
     #[clap(long, value_name = "FILE")]
-    proof: PathBuf,
+    proof: Option<PathBuf>,
+}
+
+#[derive(Debug, Subcommand)]
+enum VerifySubcommand {
+    /// Check the status of a verification
+    Status {
+        /// The verification ID to check status for
+        #[clap(long, value_name = "ID")]
+        verify_id: String,
+    },
 }
 
 impl VerifyCmd {
     pub fn run(self) -> Result<()> {
-        verify_proof(self.config_id, self.proof)
+        match self.command {
+            Some(VerifySubcommand::Status { verify_id }) => check_verify_status(verify_id),
+            None => {
+                // For the main verify command, both config_id and proof are required
+                let config_id = self.config_id.ok_or_else(|| {
+                    eyre::eyre!("Config ID is required. Use --config-id to specify.")
+                })?;
+                let proof = self.proof.ok_or_else(|| {
+                    eyre::eyre!("Proof file is required. Use --proof to specify.")
+                })?;
+
+                verify_proof(config_id, proof)
+            }
+        }
     }
 }
 
@@ -67,6 +93,40 @@ fn verify_proof(config_id: String, proof_path: PathBuf) -> Result<()> {
     } else {
         Err(eyre::eyre!(
             "Verification request failed with status: {}",
+            response.status()
+        ))
+    }
+}
+
+fn check_verify_status(verify_id: String) -> Result<()> {
+    // Load configuration
+    let config = config::load_config()?;
+    let url = format!("{}/verify/{}", config.api_url, verify_id);
+
+    println!("Checking verification status for ID: {}", verify_id);
+
+    // Make the GET request
+    let client = Client::new();
+    let api_key = config::get_api_key()?;
+
+    let response = client
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()
+        .context("Failed to send status request")?;
+
+    // Check if the request was successful
+    if response.status().is_success() {
+        let response_json: Value = response.json()?;
+        println!("Verification status: {}", response_json);
+        Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+    } else {
+        Err(eyre::eyre!(
+            "Status request failed with status: {}",
             response.status()
         ))
     }
