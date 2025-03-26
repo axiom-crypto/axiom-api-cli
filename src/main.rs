@@ -4,7 +4,7 @@ use eyre::Result;
 mod commands;
 mod config;
 
-use commands::{BuildCmd, InitCmd, KeygenCmd, ProveCmd};
+use commands::{BuildCmd, InitCmd, KeygenCmd, ProveCmd, VerifyCmd};
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -30,6 +30,8 @@ enum AxiomCommands {
     Prove(ProveCmd),
     /// Generate key artifacts
     Keygen(KeygenCmd),
+    /// Verify a proof using the Axiom Verifying Service
+    Verify(VerifyCmd),
 }
 
 #[tokio::main]
@@ -41,5 +43,6 @@ async fn main() -> Result<()> {
         AxiomCommands::Init(cmd) => cmd.run(),
         AxiomCommands::Prove(cmd) => cmd.run(),
         AxiomCommands::Keygen(cmd) => cmd.run(),
+        AxiomCommands::Verify(cmd) => cmd.run(),
     }
 }
