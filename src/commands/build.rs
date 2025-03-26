@@ -124,7 +124,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     // Use the staging API URL
     let config = config::load_config()?;
-    let url = format!("{}/programs?config_uuid={}", config.api_url, config_id);
+    let url = format!("{}/programs?config_id={}", config.api_url, config_id);
 
     println!("Sending build request for config ID: {}", config_id);
 

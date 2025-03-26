@@ -100,7 +100,7 @@ fn execute(args: ProveArgs) -> Result<()> {
 
     // Load config
     let config = config::load_config()?;
-    let url = format!("{}/proofs?program_uuid={}", config.api_url, program_id);
+    let url = format!("{}/proofs?program_id={}", config.api_url, program_id);
     let api_key = config::get_api_key()?;
 
     // Create the request body based on input
