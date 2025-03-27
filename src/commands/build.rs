@@ -43,10 +43,33 @@ pub struct BuildArgs {
     /// The configuration ID to use for the build
     #[clap(long, value_name = "ID")]
     config_id: Option<String>,
+
+    /// Keep the tar archive after uploading
+    #[clap(long)]
+    keep_tarball: Option<bool>,
 }
 
 fn is_rust_project() -> bool {
-    Path::new("Cargo.toml").exists() && Path::new("Cargo.lock").exists()
+    Path::new("Cargo.toml").exists()
+}
+
+fn find_git_root() -> Result<std::path::PathBuf> {
+    // Start from the current directory
+    let mut current_dir = std::env::current_dir()?;
+
+    loop {
+        // Check if .git directory exists in the current directory
+        let git_dir = current_dir.join(".git");
+        if git_dir.exists() && git_dir.is_dir() {
+            return Ok(current_dir);
+        }
+
+        // Move up to parent directory
+        if !current_dir.pop() {
+            // We've reached the root of the filesystem without finding a .git directory
+            return Err(eyre::eyre!("Not in a git repository"));
+        }
+    }
 }
 
 fn create_tar_archive() -> Result<String> {
@@ -55,13 +78,19 @@ fn create_tar_archive() -> Result<String> {
     let enc = GzEncoder::new(tar_file, Compression::default());
     let mut builder = Builder::new(enc);
 
-    // Get the current directory name
-    let current_dir = std::env::current_dir()?;
-    let dir_name = current_dir
+    // Find the git root directory
+    let git_root = find_git_root().context("Failed to find git root directory")?;
+
+    // Get the git root directory name
+    let dir_name = git_root
         .file_name()
-        .ok_or_else(|| eyre::eyre!("Failed to get current directory name"))?
+        .ok_or_else(|| eyre::eyre!("Failed to get git root directory name"))?
         .to_string_lossy()
         .to_string();
+
+    // Change to git root directory
+    let original_dir = std::env::current_dir()?;
+    std::env::set_current_dir(&git_root)?;
 
     // Walk through the directory and add files to the archive
     let walker = walkdir::WalkDir::new(".")
@@ -71,8 +100,9 @@ fn create_tar_archive() -> Result<String> {
             let path = e.path();
             let file_name = path.file_name().unwrap_or_default().to_string_lossy();
 
-            // Skip dotfiles, target directory, and the tar file itself
+            // Skip dotfiles, target directories (anywhere in path), and the tar file itself
             !(file_name.starts_with(".")
+                || path.to_string_lossy().contains("/target/")
                 || path.starts_with("./target")
                 || path.starts_with("./openvm")
                 || path.starts_with("./program.tar.gz"))
@@ -102,6 +132,10 @@ fn create_tar_archive() -> Result<String> {
     }
 
     builder.finish()?;
+
+    // Change back to the original directory
+    std::env::set_current_dir(original_dir)?;
+
     Ok(tar_path.to_string())
 }
 
@@ -109,7 +143,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     // Check if we're in a Rust project
     if !is_rust_project() {
         return Err(eyre::eyre!(
-            "Not in a Rust project. Make sure Cargo.toml and Cargo.lock exist."
+            "Not in a Rust project. Make sure Cargo.toml exists."
         ));
     }
 
@@ -118,15 +152,40 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         .config_id
         .ok_or_else(|| eyre::eyre!("Config ID is required. Use --config-id to specify."))?;
 
+    // Get the git root directory
+    let git_root = find_git_root().context("Failed to find git root directory")?;
+
+    // Get the current directory
+    let current_dir = std::env::current_dir()?;
+
+    // Calculate the relative path from git root to current directory
+    let program_path = current_dir
+        .strip_prefix(&git_root)
+        .context("Failed to determine relative path from git root")?
+        .to_string_lossy()
+        .to_string();
+
     // Create tar archive of the current directory
     println!("Creating archive of the project...");
     let tar_path = create_tar_archive().context("Failed to create project archive")?;
 
     // Use the staging API URL
     let config = config::load_config()?;
-    let url = format!("{}/programs?config_id={}", config.api_url, config_id);
+
+    // Add program_path as a query parameter if it's not empty
+    let url = if program_path.is_empty() {
+        format!("{}/programs?config_id={}", config.api_url, config_id)
+    } else {
+        format!(
+            "{}/programs?config_id={}&program_path={}",
+            config.api_url, config_id, program_path
+        )
+    };
 
     println!("Sending build request for config ID: {}", config_id);
+    if !program_path.is_empty() {
+        println!("Using program path: {}", program_path);
+    }
 
     // Make the POST request with multipart form data
     let client = Client::new();
@@ -144,7 +203,9 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         .context("Failed to send build request")?;
 
     // Clean up the tar file
-    std::fs::remove_file(tar_path).ok();
+    if !args.keep_tarball.unwrap_or(false) {
+        std::fs::remove_file(tar_path).ok();
+    }
 
     // Check if the request was successful
     if response.status().is_success() {
