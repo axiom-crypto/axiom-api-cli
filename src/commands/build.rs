@@ -47,6 +47,10 @@ pub struct BuildArgs {
     /// Keep the tar archive after uploading
     #[clap(long)]
     keep_tarball: Option<bool>,
+
+    /// Comma-separated list of file patterns to exclude (e.g. "*.log,temp/*")
+    #[clap(long, value_name = "PATTERNS")]
+    exclude_files: Option<String>,
 }
 
 fn is_rust_project() -> bool {
@@ -72,7 +76,7 @@ fn find_git_root() -> Result<std::path::PathBuf> {
     }
 }
 
-fn create_tar_archive() -> Result<String> {
+fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
     let tar_path = "program.tar.gz";
     let tar_file = File::create(tar_path)?;
     let enc = GzEncoder::new(tar_file, Compression::default());
@@ -99,17 +103,26 @@ fn create_tar_archive() -> Result<String> {
         .filter_entry(|e| {
             let path = e.path();
             let file_name = path.file_name().unwrap_or_default().to_string_lossy();
+            let path_str = path.to_string_lossy();
 
             // Skip dotfiles, target directories (anywhere in path), and the tar file itself
-            !(file_name.starts_with(".")
-                || path.to_string_lossy().contains("/target/")
-                || path.starts_with("./target")
-                || path.starts_with("./openvm")
-                || path.starts_with("./program.tar.gz"))
+            let default_exclusion = file_name.starts_with(".")
+                || path_str.contains("/target/")
+                || path.starts_with("target/")
+                || path_str.contains("/openvm/")
+                || path.starts_with("openvm/")
+                || path_str.contains("/program.tar.gz")
+                || path.starts_with("program.tar.gz");
+
+            // Check against user-provided exclusion patterns
+            let matches_exclusion = exclude_patterns.iter().any(|s| path_str.contains(s));
+
+            !(default_exclusion || matches_exclusion)
         });
 
     for entry in walker.filter_map(Result::ok) {
         let path = entry.path();
+        println!("path: {}", path.display());
         if path.is_file() {
             // Create path with the parent directory name
             let relative_path = path.strip_prefix(".").unwrap();
@@ -165,9 +178,21 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         .to_string_lossy()
         .to_string();
 
+    // Parse exclude patterns
+    let exclude_patterns = args
+        .exclude_files
+        .map(|patterns| {
+            patterns
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<String>>()
+        })
+        .unwrap_or_default();
+
     // Create tar archive of the current directory
     println!("Creating archive of the project...");
-    let tar_path = create_tar_archive().context("Failed to create project archive")?;
+    let tar_path =
+        create_tar_archive(&exclude_patterns).context("Failed to create project archive")?;
 
     // Use the staging API URL
     let config = config::load_config()?;
