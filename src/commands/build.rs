@@ -7,7 +7,7 @@ use reqwest::blocking::Client;
 use tar::Builder;
 use walkdir;
 
-use crate::{config, config::API_KEY_HEADER};
+use crate::config::{get_api_key, load_config, API_KEY_HEADER};
 
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
@@ -27,15 +27,46 @@ enum BuildSubcommand {
         #[clap(long, value_name = "ID")]
         program_id: String,
     },
+
+    List,
+
+    /// Download build artifacts
+    Download {
+        /// The program ID to download artifacts for
+        #[clap(long, value_name = "ID")]
+        program_id: String,
+
+        /// The type of artifact to download (exe or elf)
+        #[clap(long, value_name = "TYPE", value_parser = ["exe", "elf"])]
+        program_type: String,
+    },
 }
 
 impl BuildCmd {
     pub fn run(self) -> Result<()> {
         match self.command {
             Some(BuildSubcommand::Status { program_id }) => check_build_status(program_id),
+            Some(BuildSubcommand::List) => list_builds(),
+            Some(BuildSubcommand::Download {
+                program_id,
+                program_type,
+            }) => download_program(program_id, program_type),
             None => execute(self.build_args),
         }
     }
+}
+
+fn list_builds() -> Result<()> {
+    let config = load_config()?;
+    let api_key = get_api_key()?;
+    let url = format!("{}/programs", config.api_url);
+    let response = Client::new()
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()?;
+    let body = response.json::<serde_json::Value>()?;
+    println!("{}", body);
+    Ok(())
 }
 
 #[derive(Debug, Parser)]
@@ -122,7 +153,8 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
 
     for entry in walker.filter_map(Result::ok) {
         let path = entry.path();
-        println!("path: {}", path.display());
+        // TODO: print if verbose
+        // println!("adding to tarball: {}", path.display());
         if path.is_file() {
             // Create path with the parent directory name
             let relative_path = path.strip_prefix(".").unwrap();
@@ -195,7 +227,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         create_tar_archive(&exclude_patterns).context("Failed to create project archive")?;
 
     // Use the staging API URL
-    let config = config::load_config()?;
+    let config = load_config()?;
 
     // Add program_path as a query parameter if it's not empty
     let url = if program_path.is_empty() {
@@ -214,7 +246,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     // Make the POST request with multipart form data
     let client = Client::new();
-    let api_key = config::get_api_key()?;
+    let api_key = get_api_key()?;
 
     let form = reqwest::blocking::multipart::Form::new()
         .file("program", &tar_path)
@@ -234,9 +266,12 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     // Check if the request was successful
     if response.status().is_success() {
+        let body = response.json::<serde_json::Value>().unwrap();
+        let program_id = body["id"].as_str().unwrap();
+        println!("Build request sent successfully: {}", program_id);
         println!(
-            "Build request sent successfully: {}",
-            response.text().unwrap()
+            "To check the build status, run: cargo axiom build status --program-id {}",
+            program_id
         );
         Ok(())
     } else {
@@ -249,14 +284,14 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
 fn check_build_status(program_id: String) -> Result<()> {
     // Load configuration
-    let config = config::load_config()?;
+    let config = load_config()?;
     let url = format!("{}/programs/{}", config.api_url, program_id);
 
     println!("Checking build status for program ID: {}", program_id);
 
     // Make the GET request
     let client = Client::new();
-    let api_key = config::get_api_key()?;
+    let api_key = get_api_key()?;
 
     let response = client
         .get(url)
@@ -271,6 +306,62 @@ fn check_build_status(program_id: String) -> Result<()> {
     } else {
         Err(eyre::eyre!(
             "Status request failed with status: {}",
+            response.status()
+        ))
+    }
+}
+
+fn download_program(program_id: String, program_type: String) -> Result<()> {
+    // Load configuration
+    let config = load_config()?;
+    let url = format!(
+        "{}/programs/{}/{}",
+        config.api_url, program_id, program_type
+    );
+
+    println!(
+        "Downloading {} for program ID: {}",
+        program_type, program_id
+    );
+
+    // Make the GET request
+    let client = Client::new();
+    let api_key = get_api_key()?;
+
+    let response = client
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()
+        .context("Failed to download artifact")?;
+
+    // Check if the request was successful
+    if response.status().is_success() {
+        // Create output filename based on program ID and artifact type
+        let filename = format!("program_{}.{}", program_id, program_type);
+
+        // Write the response body to a file
+        let mut file = File::create(&filename)
+            .context(format!("Failed to create output file: {}", filename))?;
+
+        let content = response.bytes().context("Failed to read response body")?;
+
+        std::io::copy(&mut content.as_ref(), &mut file)
+            .context("Failed to write artifact to file")?;
+
+        // Make the file executable
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut perms = std::fs::metadata(&filename)?.permissions();
+            perms.set_mode(0o755);
+            std::fs::set_permissions(&filename, perms)?;
+        }
+
+        println!("Artifact downloaded successfully to: {}", filename);
+        Ok(())
+    } else {
+        Err(eyre::eyre!(
+            "Download request failed with status: {}",
             response.status()
         ))
     }

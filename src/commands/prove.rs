@@ -39,6 +39,12 @@ enum ProveSubcommand {
         #[clap(long, value_name = "FILE")]
         output: Option<PathBuf>,
     },
+
+    List {
+        /// The ID of the program to list proofs for
+        #[arg(long)]
+        program_id: String,
+    },
 }
 
 #[derive(Args, Debug)]
@@ -85,9 +91,23 @@ impl ProveCmd {
                 r#type,
                 output,
             }) => download_proof_artifact(proof_id, r#type, output),
+            Some(ProveSubcommand::List { program_id }) => list_proofs(program_id),
             None => execute(self.prove_args),
         }
     }
+}
+
+fn list_proofs(program_id: String) -> Result<()> {
+    let config = config::load_config()?;
+    let api_key = config::get_api_key()?;
+    let url = format!("{}/proofs?program_id={}", config.api_url, program_id);
+    let response = Client::new()
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()?;
+    let body = response.json::<serde_json::Value>()?;
+    println!("{}", body);
+    Ok(())
 }
 
 fn execute(args: ProveArgs) -> Result<()> {
@@ -144,9 +164,11 @@ fn execute(args: ProveArgs) -> Result<()> {
     // Handle response
     if response.status().is_success() {
         let response_json: Value = response.json()?;
+        let proof_id = response_json["id"].as_str().unwrap();
+        println!("Proof generation initiated successfully!: {}", proof_id);
         println!(
-            "Proof generation initiated successfully!: {}",
-            response_json
+            "To check the proof status, run: cargo axiom prove status --proof-id {}",
+            proof_id
         );
     } else {
         let error_text = response.text()?;
@@ -214,7 +236,7 @@ fn download_proof_artifact(
         // Determine output file path
         let output_path = match output {
             Some(path) => path,
-            None => PathBuf::from(format!("{}-{}.proof", proof_id, artifact_type)),
+            None => PathBuf::from(format!("{}-{}-proof.json", proof_id, artifact_type)),
         };
 
         // Create file and stream the response body to it
