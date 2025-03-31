@@ -18,5 +18,4 @@ tokio = { version = "1", features = ["full"] }
 walkdir = "2.3"
 eyre = "0.6.12"
 hex = "0.4.3"
-# TODO: fix after that PR is merged
-cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", rev = "2bdf9edd280fa4dd43bbfb11d9f935cec1dc9aeb" }
+cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", rev = "f41640c37bc5468a0775a38098053fe37ea3538a" }
