@@ -40,6 +40,12 @@ enum BuildSubcommand {
         #[clap(long, value_name = "TYPE", value_parser = ["exe", "elf"])]
         program_type: String,
     },
+
+    Logs {
+        /// The program ID to download logs for
+        #[clap(long, value_name = "ID")]
+        program_id: String,
+    },
 }
 
 impl BuildCmd {
@@ -51,6 +57,7 @@ impl BuildCmd {
                 program_id,
                 program_type,
             }) => download_program(program_id, program_type),
+            Some(BuildSubcommand::Logs { program_id }) => download_logs(program_id),
             None => execute(self.build_args),
         }
     }
@@ -315,7 +322,7 @@ fn download_program(program_id: String, program_type: String) -> Result<()> {
     // Load configuration
     let config = load_config()?;
     let url = format!(
-        "{}/programs/{}/{}",
+        "{}/programs/{}/download/{}",
         config.api_url, program_id, program_type
     );
 
@@ -348,15 +355,6 @@ fn download_program(program_id: String, program_type: String) -> Result<()> {
         std::io::copy(&mut content.as_ref(), &mut file)
             .context("Failed to write artifact to file")?;
 
-        // Make the file executable
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut perms = std::fs::metadata(&filename)?.permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(&filename, perms)?;
-        }
-
         println!("Artifact downloaded successfully to: {}", filename);
         Ok(())
     } else {
@@ -365,4 +363,35 @@ fn download_program(program_id: String, program_type: String) -> Result<()> {
             response.status()
         ))
     }
+}
+
+fn download_logs(program_id: String) -> Result<()> {
+    let config = load_config()?;
+    let api_key = get_api_key()?;
+    let url = format!("{}/programs/{}/logs", config.api_url, program_id);
+    let response = Client::new()
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()?;
+    // Check if the request was successful
+    if response.status().is_success() {
+        // Create output filename based on program ID
+        let filename = format!("program_{}_logs.txt", program_id);
+
+        // Write the response body to a file
+        let mut file =
+            File::create(&filename).context(format!("Failed to create log file: {}", filename))?;
+
+        let content = response.bytes().context("Failed to read response body")?;
+
+        std::io::copy(&mut content.as_ref(), &mut file).context("Failed to write logs to file")?;
+
+        println!("Logs downloaded successfully to: {}", filename);
+    } else {
+        return Err(eyre::eyre!(
+            "Logs download request failed with status: {}",
+            response.status()
+        ));
+    }
+    Ok(())
 }
