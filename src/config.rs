@@ -4,7 +4,7 @@ use dirs::home_dir;
 use eyre::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-pub const API_KEY_HEADER: &str = "APS-API-Key";
+pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
