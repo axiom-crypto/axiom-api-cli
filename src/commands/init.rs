@@ -48,7 +48,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
     let config = config::Config {
         api_key: Some(api_key.unwrap()),
         api_url,
-        config_id: None,
+        config_id: Some("c77596d5-511f-4ab3-87fe-6bb0702cfab2".to_string()),
     };
 
     config::save_config(&config)?;
