@@ -1,5 +1,4 @@
 use clap::Parser;
-use dialoguer::Password;
 use eyre::Result;
 
 use crate::config;
@@ -22,15 +21,14 @@ pub struct InitArgs {
     /// The API URL to use (defaults to https://api.staging.app.axiom.xyz)
     #[clap(long, value_name = "URL")]
     api_url: Option<String>,
+
+    /// Axiom API key
+    #[clap(long, value_name = "KEY")]
+    api_key: Option<String>,
 }
 
 pub fn execute(args: InitArgs) -> Result<()> {
     println!("Initializing Axiom configuration...");
-
-    // Ask for API key
-    let api_key = Password::new()
-        .with_prompt("Enter your Axiom API key")
-        .interact()?;
 
     // Use provided API URL or default
     // TODO: default should be prod
@@ -38,10 +36,19 @@ pub fn execute(args: InitArgs) -> Result<()> {
         .api_url
         .unwrap_or_else(|| "https://api.staging.app.axiom.xyz".to_string());
 
+    // Get API key from args or env var AXIOM_API_KEY
+    let api_key = args.api_key.or_else(|| std::env::var("AXIOM_API_KEY").ok());
+
+    if api_key.is_none() {
+        eprintln!("Error: API key must be provided either with --api-key flag or AXIOM_API_KEY environment variable");
+        std::process::exit(1);
+    }
+
     // Create and save the configuration
     let config = config::Config {
-        api_key: Some(api_key),
+        api_key: Some(api_key.unwrap()),
         api_url,
+        config_id: None,
     };
 
     config::save_config(&config)?;

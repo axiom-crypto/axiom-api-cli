@@ -5,7 +5,7 @@ use eyre::{Context, Result};
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-use crate::{config, config::API_KEY_HEADER};
+use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
 #[derive(Args, Debug)]
 pub struct VerifyCmd {
@@ -36,23 +36,20 @@ impl VerifyCmd {
         match self.command {
             Some(VerifySubcommand::Status { verify_id }) => check_verify_status(verify_id),
             None => {
-                // For the main verify command, both config_id and proof are required
-                let config_id = self.config_id.ok_or_else(|| {
-                    eyre::eyre!("Config ID is required. Use --config-id to specify.")
-                })?;
                 let proof = self.proof.ok_or_else(|| {
                     eyre::eyre!("Proof file is required. Use --proof to specify.")
                 })?;
 
-                verify_proof(config_id, proof)
+                verify_proof(self.config_id, proof)
             }
         }
     }
 }
 
-fn verify_proof(config_id: String, proof_path: PathBuf) -> Result<()> {
+fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
     // Load configuration
-    let config = config::load_config()?;
+    let config = load_config()?;
+    let config_id = get_config_id(config_id, &config)?;
     let url = format!("{}/verify?config_id={}", config.api_url, config_id);
 
     println!(
@@ -72,7 +69,7 @@ fn verify_proof(config_id: String, proof_path: PathBuf) -> Result<()> {
 
     // Make the POST request
     let client = Client::new();
-    let api_key = config::get_api_key()?;
+    let api_key = get_api_key()?;
 
     let response = client
         .post(url)
@@ -100,14 +97,14 @@ fn verify_proof(config_id: String, proof_path: PathBuf) -> Result<()> {
 
 fn check_verify_status(verify_id: String) -> Result<()> {
     // Load configuration
-    let config = config::load_config()?;
+    let config = load_config()?;
     let url = format!("{}/verify/{}", config.api_url, verify_id);
 
     println!("Checking verification status for ID: {}", verify_id);
 
     // Make the GET request
     let client = Client::new();
-    let api_key = config::get_api_key()?;
+    let api_key = get_api_key()?;
 
     let response = client
         .get(url)

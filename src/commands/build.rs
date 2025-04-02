@@ -7,7 +7,7 @@ use reqwest::blocking::Client;
 use tar::Builder;
 use walkdir;
 
-use crate::config::{get_api_key, load_config, API_KEY_HEADER};
+use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
@@ -192,6 +192,8 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
 }
 
 pub fn execute(args: BuildArgs) -> Result<()> {
+    let config = load_config()?;
+
     // Check if we're in a Rust project
     if !is_rust_project() {
         return Err(eyre::eyre!(
@@ -200,9 +202,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     }
 
     // Get the config_id from args, return error if not provided
-    let config_id = args
-        .config_id
-        .ok_or_else(|| eyre::eyre!("Config ID is required. Use --config-id to specify."))?;
+    let config_id = get_config_id(args.config_id, &config)?;
 
     // Get the git root directory
     let git_root = find_git_root().context("Failed to find git root directory")?;
@@ -232,9 +232,6 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     println!("Creating archive of the project...");
     let tar_path =
         create_tar_archive(&exclude_patterns).context("Failed to create project archive")?;
-
-    // Use the staging API URL
-    let config = load_config()?;
 
     // Add program_path as a query parameter if it's not empty
     let url = if program_path.is_empty() {

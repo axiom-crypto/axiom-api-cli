@@ -10,6 +10,7 @@ pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 pub struct Config {
     pub api_url: String,
     pub api_key: Option<String>,
+    pub config_id: Option<String>,
 }
 
 impl Default for Config {
@@ -17,6 +18,7 @@ impl Default for Config {
         Self {
             api_url: "https://api.staging.app.axiom.xyz".to_string(),
             api_key: None,
+            config_id: None,
         }
     }
 }
@@ -63,4 +65,22 @@ pub fn get_api_key() -> Result<String> {
     config
         .api_key
         .ok_or_else(|| eyre::eyre!("API key not found. Run 'cargo axiom init' first."))
+}
+
+pub fn set_config_id(id: String) -> Result<()> {
+    let mut config = load_config()?;
+    config.config_id = Some(id);
+    save_config(&config)
+}
+
+pub fn get_config_id(args_config_id: Option<String>, config: &Config) -> Result<String> {
+    if let Some(id) = args_config_id {
+        set_config_id(id.clone())?;
+        Ok(id)
+    } else if let Some(id) = &config.config_id {
+        println!("using cached config ID: {}", id);
+        Ok(id.clone())
+    } else {
+        Err(eyre::eyre!("No config ID provided"))
+    }
 }

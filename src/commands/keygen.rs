@@ -5,7 +5,7 @@ use eyre::{Context, Result};
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-use crate::{config, config::API_KEY_HEADER};
+use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
 #[derive(Args, Debug)]
 pub struct KeygenCmd {
@@ -19,16 +19,16 @@ enum KeygenSubcommand {
     Download {
         /// The config ID to download public key for
         #[clap(long, value_name = "ID")]
-        config_id: String,
+        config_id: Option<String>,
 
         /// The type of key to download
         #[clap(long, value_parser = [
             // These will give a download URL because the files are huge
-            "app_vm", 
-            "leaf_vm", 
-            "internal_vm", 
-            "root_verifier", 
-            "halo2_outer", 
+            "app_vm",
+            "leaf_vm",
+            "internal_vm",
+            "root_verifier",
+            "halo2_outer",
             "halo2_wrapper",
             // These will download (stream) the file because they are small
             "config",
@@ -67,12 +67,13 @@ impl KeygenCmd {
 }
 
 fn download_small_artifact(
-    config_id: String,
+    config_id: Option<String>,
     key_type: String,
     output: Option<PathBuf>,
 ) -> Result<()> {
     // Load configuration
-    let config = config::load_config()?;
+    let config = load_config()?;
+    let config_id = get_config_id(config_id, &config)?;
     let url = format!("{}/configs/{}/{}", config.api_url, config_id, key_type);
 
     println!("Downloading {} for config ID: {}", key_type, config_id);
@@ -93,7 +94,7 @@ fn download_small_artifact(
 
     // Make the GET request
     let client = Client::new();
-    let api_key = config::get_api_key()?;
+    let api_key = get_api_key()?;
 
     let response = client
         .get(&url)
@@ -125,9 +126,10 @@ fn download_small_artifact(
     }
 }
 
-fn download_key_artifact(config_id: String, key_type: String) -> Result<()> {
+fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<()> {
     // Load configuration
-    let config = config::load_config()?;
+    let config = load_config()?;
+    let config_id = get_config_id(config_id, &config)?;
     let url = format!("{}/configs/{}/pk/{}", config.api_url, config_id, key_type);
 
     println!(
@@ -137,7 +139,7 @@ fn download_key_artifact(config_id: String, key_type: String) -> Result<()> {
 
     // Make the GET request
     let client = Client::new();
-    let api_key = config::get_api_key()?;
+    let api_key = get_api_key()?;
 
     let response = client
         .get(&url)
