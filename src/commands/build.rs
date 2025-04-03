@@ -1,6 +1,7 @@
 use std::{fs::File, path::Path};
 
 use clap::{Parser, Subcommand};
+use comfy_table;
 use eyre::{Context, Result};
 use flate2::{write::GzEncoder, Compression};
 use reqwest::blocking::Client;
@@ -67,12 +68,43 @@ fn list_builds() -> Result<()> {
     let config = load_config()?;
     let api_key = get_api_key()?;
     let url = format!("{}/programs", config.api_url);
+
     let response = Client::new()
         .get(url)
         .header(API_KEY_HEADER, api_key)
         .send()?;
+
     let body = response.json::<serde_json::Value>()?;
-    println!("{}", body);
+
+    // Extract the items array from the response
+    if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
+        if items.is_empty() {
+            println!("No builds found");
+            return Ok(());
+        }
+
+        // Create a new table
+        let mut table = comfy_table::Table::new();
+        table.set_header(["ID", "Status", "Created At"]);
+
+        // Add rows to the table
+        for item in items {
+            let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+            let status = item.get("status").and_then(|v| v.as_str()).unwrap_or("-");
+            let created_at = item
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or("-");
+
+            table.add_row([id, status, created_at]);
+        }
+
+        // Print the table
+        println!("{}", table);
+    } else {
+        println!("Unexpected response format: {}", body);
+    }
+
     Ok(())
 }
 

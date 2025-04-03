@@ -2,6 +2,7 @@ use std::{fs, io::copy, path::PathBuf};
 
 use cargo_openvm::input::{is_valid_hex_string, Input};
 use clap::{Args, Subcommand};
+use comfy_table;
 use eyre::{eyre, Context, Result};
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
@@ -105,8 +106,42 @@ fn list_proofs(program_id: String) -> Result<()> {
         .get(url)
         .header(API_KEY_HEADER, api_key)
         .send()?;
+
     let body = response.json::<serde_json::Value>()?;
-    println!("{}", body);
+
+    // Extract the items array from the response
+    if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
+        if items.is_empty() {
+            println!("No proofs found for program ID: {}", program_id);
+            return Ok(());
+        }
+
+        // Create a new table
+        let mut table = comfy_table::Table::new();
+        table.set_header(["ID", "State", "Proof type", "Created At"]);
+
+        // Add rows to the table
+        for item in items {
+            let id = item.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+            let status = item.get("state").and_then(|v| v.as_str()).unwrap_or("-");
+            let proof_type = item
+                .get("proof_type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("-");
+            let created_at = item
+                .get("created_at")
+                .and_then(|v| v.as_str())
+                .unwrap_or("-");
+
+            table.add_row([id, status, proof_type, created_at]);
+        }
+
+        // Print the table
+        println!("{}", table);
+    } else {
+        println!("Unexpected response format: {}", body);
+    }
+
     Ok(())
 }
 
