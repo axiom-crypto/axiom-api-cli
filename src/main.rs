@@ -1,5 +1,6 @@
+use std::process;
+
 use clap::{Args, Parser, Subcommand};
-use eyre::Result;
 
 mod commands;
 mod config;
@@ -16,6 +17,10 @@ enum Cargo {
 #[derive(Args)]
 #[command(author, about, long_about = None)] // TODO: Add version
 struct AxiomArgs {
+    /// Enable debug mode to show full error traces
+    #[arg(long, global = true)]
+    debug: bool,
+
     #[command(subcommand)]
     command: AxiomCommands,
 }
@@ -35,14 +40,25 @@ enum AxiomCommands {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
     let Cargo::Axiom(args) = Cargo::parse();
 
-    match args.command {
+    let result = match args.command {
         AxiomCommands::Build(cmd) => cmd.run(),
         AxiomCommands::Init(cmd) => cmd.run(),
         AxiomCommands::Prove(cmd) => cmd.run(),
         AxiomCommands::Keygen(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
+    };
+
+    if let Err(err) = result {
+        if args.debug {
+            // In debug mode, print the full error with backtrace
+            eprintln!("Error: {:?}", err);
+        } else {
+            // In normal mode, just print the error message
+            eprintln!("Error: {}", err);
+        }
+        process::exit(1);
     }
 }

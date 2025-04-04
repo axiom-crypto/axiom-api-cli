@@ -26,6 +26,12 @@ enum ProveSubcommand {
         #[clap(long, value_name = "ID")]
         proof_id: String,
     },
+    /// Download logs for a proof
+    Logs {
+        /// The proof ID to download logs for
+        #[clap(long, value_name = "ID")]
+        proof_id: String,
+    },
     /// Download proof artifacts
     Download {
         /// The proof ID to download artifacts for
@@ -92,6 +98,7 @@ impl ProveCmd {
                 r#type,
                 output,
             }) => download_proof_artifact(proof_id, r#type, output),
+            Some(ProveSubcommand::Logs { proof_id }) => download_proof_logs(proof_id),
             Some(ProveSubcommand::List { program_id }) => list_proofs(program_id),
             None => execute(self.prove_args),
         }
@@ -205,6 +212,9 @@ fn execute(args: ProveArgs) -> Result<()> {
             "To check the proof status, run: cargo axiom prove status --proof-id {}",
             proof_id
         );
+    } else if response.status().is_client_error() {
+        let error_text = response.text()?;
+        println!("Cannot generate proof for this program: {}", error_text);
     } else {
         let error_text = response.text()?;
         return Err(eyre!("Failed to generate proof: {}", error_text));
@@ -233,10 +243,63 @@ fn check_proof_status(proof_id: String) -> Result<()> {
     // Check if the request was successful
     if response.status().is_success() {
         println!("Proof status: {}", response.text().unwrap());
+    } else if response.status().is_client_error() {
+        println!(
+            "Cannot check proof status for this proof: {}",
+            response.text().unwrap()
+        );
+    } else {
+        return Err(eyre::eyre!(
+            "Status request failed with status: {}",
+            response.status()
+        ));
+    }
+    Ok(())
+}
+
+fn download_proof_logs(proof_id: String) -> Result<()> {
+    let config = config::load_config()?;
+    let url = format!("{}/proofs/{}/logs", config.api_url, proof_id);
+
+    println!("Downloading logs for proof ID: {}", proof_id);
+
+    // Make the GET request
+    let client = Client::new();
+    let api_key = config::get_api_key()?;
+
+    let response = client
+        .get(url)
+        .header(API_KEY_HEADER, api_key)
+        .send()
+        .context("Failed to send logs request")?;
+
+    // Check if the request was successful
+    if response.status().is_success() {
+        // Create file and stream the response body to it
+        let output_path = PathBuf::from(format!("{}-logs.txt", proof_id));
+        let mut file = fs::File::create(&output_path)
+            .context(format!("Failed to create output file: {:?}", output_path))?;
+
+        copy(
+            &mut response
+                .bytes()
+                .context("Failed to read response body")?
+                .as_ref(),
+            &mut file,
+        )
+        .context("Failed to write response to file")?;
+
+        println!("Successfully downloaded logs to: {:?}", output_path);
+        Ok(())
+    } else if response.status().is_client_error() {
+        println!(
+            "Cannot download logs for this proof: {}",
+            response.text().unwrap()
+        );
         Ok(())
     } else {
         Err(eyre::eyre!(
-            "Status request failed with status: {}",
+            "Logs request failed with status: {}",
             response.status()
         ))
     }
@@ -249,7 +312,10 @@ fn download_proof_artifact(
 ) -> Result<()> {
     // Load configuration
     let config = config::load_config()?;
-    let url = format!("{}/proofs/{}/{}", config.api_url, proof_id, artifact_type);
+    let url = format!(
+        "{}/proofs/{}/proof/{}",
+        config.api_url, proof_id, artifact_type
+    );
 
     println!(
         "Downloading {} proof for proof ID: {}",
