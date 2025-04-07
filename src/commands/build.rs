@@ -10,6 +10,8 @@ use walkdir;
 
 use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
+const MAX_PROGRAM_SIZE_MB: u64 = 10;
+
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
 pub struct BuildCmd {
@@ -38,7 +40,7 @@ enum BuildSubcommand {
         program_id: String,
 
         /// The type of artifact to download (exe or elf)
-        #[clap(long, value_name = "TYPE", value_parser = ["exe", "elf"])]
+        #[clap(long, value_name = "TYPE", value_parser = ["exe", "elf", "source"])]
         program_type: String,
     },
 
@@ -265,6 +267,17 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     let tar_path =
         create_tar_archive(&exclude_patterns).context("Failed to create project archive")?;
 
+    // Check if the tar file size exceeds 10MB
+    let metadata = std::fs::metadata(&tar_path).context("Failed to get tar file metadata")?;
+    if metadata.len() > MAX_PROGRAM_SIZE_MB * 1024 * 1024 {
+        std::fs::remove_file(tar_path).ok();
+        return Err(eyre::eyre!(
+            "Project archive size ({}) exceeds maximum allowed size of {}MB",
+            metadata.len(),
+            MAX_PROGRAM_SIZE_MB
+        ));
+    }
+
     // Add program_path as a query parameter if it's not empty
     let url = if program_path.is_empty() {
         format!("{}/programs?config_id={}", config.api_url, config_id)
@@ -310,6 +323,10 @@ pub fn execute(args: BuildArgs) -> Result<()> {
             program_id
         );
         Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
             "Build request failed with status: {}",
@@ -339,6 +356,10 @@ fn check_build_status(program_id: String) -> Result<()> {
     if response.status().is_success() {
         println!("Build status: {}", response.text().unwrap());
         Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
             "Status request failed with status: {}",
@@ -373,7 +394,12 @@ fn download_program(program_id: String, program_type: String) -> Result<()> {
     // Check if the request was successful
     if response.status().is_success() {
         // Create output filename based on program ID and artifact type
-        let filename = format!("program_{}.{}", program_id, program_type);
+        let ext = if program_type == "source" {
+            "tar.gz".to_string()
+        } else {
+            program_type
+        };
+        let filename = format!("program_{}.{}", program_id, ext);
 
         // Write the response body to a file
         let mut file = File::create(&filename)
@@ -386,6 +412,10 @@ fn download_program(program_id: String, program_type: String) -> Result<()> {
 
         println!("Artifact downloaded successfully to: {}", filename);
         Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
             "Download request failed with status: {}",
@@ -416,6 +446,10 @@ fn download_logs(program_id: String) -> Result<()> {
         std::io::copy(&mut content.as_ref(), &mut file).context("Failed to write logs to file")?;
 
         println!("Logs downloaded successfully to: {}", filename);
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        return Err(eyre::eyre!("Client error ({}): {}", status, error_text));
     } else {
         return Err(eyre::eyre!(
             "Logs download request failed with status: {}",
