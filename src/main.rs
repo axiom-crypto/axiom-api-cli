@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand};
 mod commands;
 mod config;
 
-use commands::{BuildCmd, InitCmd, KeygenCmd, ProveCmd, VerifyCmd};
+use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, VerifyCmd};
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -34,7 +34,7 @@ enum AxiomCommands {
     /// Generate a proof using the Axiom Proving Service
     Prove(ProveCmd),
     /// Generate key artifacts
-    Keygen(KeygenCmd),
+    Config(ConfigCmd),
     /// Verify a proof using the Axiom Verifying Service
     Verify(VerifyCmd),
 }
@@ -47,7 +47,7 @@ async fn main() {
         AxiomCommands::Build(cmd) => cmd.run(),
         AxiomCommands::Init(cmd) => cmd.run(),
         AxiomCommands::Prove(cmd) => cmd.run(),
-        AxiomCommands::Keygen(cmd) => cmd.run(),
+        AxiomCommands::Config(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
     };
 

@@ -1132,6 +1132,7 @@ dependencies = [
  "eyre",
  "flate2",
  "hex",
+ "openvm-sdk",
  "reqwest",
  "serde",
  "serde_json",
@@ -4350,6 +4351,7 @@ dependencies = [
  "p3-maybe-rayon",
  "p3-uni-stark",
  "p3-util",
+ "rayon",
  "rustc-hash 2.1.1",
  "serde",
  "thiserror 1.0.69",
@@ -4648,6 +4650,9 @@ dependencies = [
 name = "p3-maybe-rayon"
 version = "0.1.0"
 source = "git+https://github.com/Plonky3/Plonky3.git?rev=1ba4e5c#1ba4e5c40417f4f7aae86bcca56b6484b4b2490b"
+dependencies = [
+ "rayon",
+]
 
 [[package]]
 name = "p3-mds"

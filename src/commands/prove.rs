@@ -355,6 +355,10 @@ fn download_proof_artifact(
 
         println!("Successfully downloaded to: {:?}", output_path);
         Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
             "Download request failed with status: {}",

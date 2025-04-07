@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Args, Subcommand};
 use eyre::{Context, Result};
+use openvm_sdk::types::EvmProof;
 use reqwest::blocking::Client;
 use serde_json::Value;
 
@@ -62,6 +63,10 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
         return Err(eyre::eyre!("Proof file does not exist: {:?}", proof_path));
     }
 
+    let proof_content = std::fs::read_to_string(&proof_path)?;
+    serde_json::from_str::<EvmProof>(&proof_content)
+        .map_err(|e| eyre::eyre!("Invalid evm proof file: {}", e))?;
+
     // Create a multipart form
     let form = reqwest::blocking::multipart::Form::new()
         .file("proof", &proof_path)
@@ -82,6 +87,10 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
     if response.status().is_success() {
         let response_json: Value = response.json()?;
         println!("Verification request sent: {}", response_json);
+        println!(
+            "To check the verification status, run: cargo axiom verify status --verify-id {}",
+            response_json["id"]
+        );
         Ok(())
     } else if response.status().is_client_error() {
         let status = response.status();

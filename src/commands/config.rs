@@ -8,13 +8,13 @@ use serde_json::Value;
 use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
 #[derive(Args, Debug)]
-pub struct KeygenCmd {
+pub struct ConfigCmd {
     #[command(subcommand)]
-    command: Option<KeygenSubcommand>,
+    command: Option<ConfigSubcommand>,
 }
 
 #[derive(Debug, Subcommand)]
-enum KeygenSubcommand {
+enum ConfigSubcommand {
     /// Download config artifacts: proving keys, evm verifier, leaf committed exe etc.
     Download {
         /// The config ID to download public key for
@@ -33,7 +33,7 @@ enum KeygenSubcommand {
             // These will download (stream) the file because they are small
             "config",
             "evm_verifier",
-            "leaf_committed_exe",
+            "app_vm_commit",
         ])]
         key_type: String,
 
@@ -41,19 +41,24 @@ enum KeygenSubcommand {
         #[clap(long, value_name = "FILE")]
         output: Option<PathBuf>,
     },
+
+    Status {
+        /// The config ID to check status for
+        #[clap(long, value_name = "ID")]
+        config_id: Option<String>,
+    },
 }
 
-impl KeygenCmd {
+impl ConfigCmd {
     pub fn run(self) -> Result<()> {
         match self.command {
-            Some(KeygenSubcommand::Download {
+            Some(ConfigSubcommand::Status { config_id }) => check_config_status(config_id),
+            Some(ConfigSubcommand::Download {
                 config_id,
                 key_type,
                 output,
             }) => {
-                if key_type == "evm_verifier"
-                    || key_type == "leaf_committed_exe"
-                    || key_type == "config"
+                if key_type == "evm_verifier" || key_type == "app_vm_commit" || key_type == "config"
                 {
                     // This is a small file, so we'll just download it directly
                     download_small_artifact(config_id, key_type, output)
@@ -61,8 +66,40 @@ impl KeygenCmd {
                     download_key_artifact(config_id, key_type)
                 }
             }
-            None => Err(eyre::eyre!("A subcommand is required for keygen")),
+            None => Err(eyre::eyre!("A subcommand is required for config")),
         }
+    }
+}
+
+fn check_config_status(config_id: Option<String>) -> Result<()> {
+    let config = load_config()?;
+    let config_id = get_config_id(config_id, &config)?;
+    let url = format!("{}/configs/{}", config.api_url, config_id);
+
+    println!("Checking status for config ID: {}", config_id);
+
+    // Make the GET request
+    let client = Client::new();
+    let api_key = get_api_key()?;
+
+    let response = client
+        .get(&url)
+        .header(API_KEY_HEADER, api_key)
+        .send()
+        .context("Failed to send status request")?;
+
+    if response.status().is_success() {
+        println!("Config status: {}", response.text()?);
+        Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+    } else {
+        Err(eyre::eyre!(
+            "Config status request failed with status: {}",
+            response.status()
+        ))
     }
 }
 

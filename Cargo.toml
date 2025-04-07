@@ -19,4 +19,5 @@ walkdir = "2.3"
 eyre = "0.6.12"
 hex = "0.4.3"
 cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", rev = "f41640c37bc5468a0775a38098053fe37ea3538a" }
+openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", rev = "f41640c37bc5468a0775a38098053fe37ea3538a" }
 comfy-table = "6.1.4"
