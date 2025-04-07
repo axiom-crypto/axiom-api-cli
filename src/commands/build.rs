@@ -40,7 +40,7 @@ enum BuildSubcommand {
         program_id: String,
 
         /// The type of artifact to download (exe or elf)
-        #[clap(long, value_name = "TYPE", value_parser = ["exe", "elf", "source"])]
+        #[clap(long, value_name = "TYPE", value_parser = ["exe", "elf", "source", "app_exe_commit"])]
         program_type: String,
     },
 
