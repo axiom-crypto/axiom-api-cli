@@ -168,6 +168,21 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
     let original_dir = std::env::current_dir()?;
     std::env::set_current_dir(&git_root)?;
 
+    // Get list of files tracked by git
+    let output = std::process::Command::new("git")
+        .args(["ls-files"])
+        .output()
+        .context("Failed to run 'git ls-files'")?;
+
+    if !output.status.success() {
+        return Err(eyre::eyre!("Failed to get git tracked files"));
+    }
+
+    let tracked_files: std::collections::HashSet<String> = String::from_utf8(output.stdout)?
+        .lines()
+        .map(|s| s.to_string())
+        .collect();
+
     // Walk through the directory and add files to the archive
     let walker = walkdir::WalkDir::new(".")
         .min_depth(1)
@@ -189,7 +204,11 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
             // Check against user-provided exclusion patterns
             let matches_exclusion = exclude_patterns.iter().any(|s| path_str.contains(s));
 
-            !(default_exclusion || matches_exclusion)
+            // Check if file is tracked by git (directories are allowed to continue traversal)
+            let is_tracked =
+                path.is_dir() || tracked_files.contains(path_str.trim_start_matches("./"));
+
+            !(default_exclusion || matches_exclusion || !is_tracked)
         });
 
     for entry in walker.filter_map(Result::ok) {
