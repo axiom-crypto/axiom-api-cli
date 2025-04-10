@@ -1,8 +1,7 @@
 use clap::Parser;
 use eyre::Result;
 
-use crate::config;
-
+use crate::{config, config::DEFAULT_CONFIG_ID};
 #[derive(Debug, Parser)]
 #[command(name = "init", about = "Initialize Axiom configuration")]
 pub struct InitCmd {
@@ -34,7 +33,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
     // TODO: default should be prod
     let api_url = args
         .api_url
-        .unwrap_or_else(|| "https://api.staging.app.axiom.xyz".to_string());
+        .unwrap_or_else(|| "https://api.axiom.xyz/v1".to_string());
 
     // Get API key from args or env var AXIOM_API_KEY
     let api_key = args.api_key.or_else(|| std::env::var("AXIOM_API_KEY").ok());
@@ -48,7 +47,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
     let config = config::Config {
         api_key: Some(api_key.unwrap()),
         api_url,
-        config_id: Some("c77596d5-511f-4ab3-87fe-6bb0702cfab2".to_string()),
+        config_id: Some(DEFAULT_CONFIG_ID.to_string()),
     };
 
     config::save_config(&config)?;

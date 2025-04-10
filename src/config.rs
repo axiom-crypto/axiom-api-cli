@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 
 pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 
+pub const DEFAULT_CONFIG_ID: &str = "d2259fc0-140a-4ec7-94e3-f7830bd686a9";
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
     pub api_url: String,
@@ -16,9 +18,9 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            api_url: "https://api.staging.app.axiom.xyz".to_string(),
+            api_url: "https://api.axiom.xyz/v1".to_string(),
             api_key: None,
-            config_id: None,
+            config_id: Some(DEFAULT_CONFIG_ID.to_string()),
         }
     }
 }
