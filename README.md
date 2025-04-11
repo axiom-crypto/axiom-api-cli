@@ -1,8 +1,67 @@
-## Running fibonacci on cloud proving
-1. make the fibonacci program, see
-1. `cargo axiom init`. This will ask for an API key.
-1. inside the fibonacci directory, run `cargo axiom build --config-id 62d8a37c-f3ed-42d0-8b4e-75b440ebb7ec`.
-1. If the above succeeds, it will print out a program ID. Check the status by: `cargo axiom build status --program-id 61d20fa4-6ee4-4094-91d4-f17cda7a6047`.
-1. To submit a proving request: `cargo axiom prove --program-id <program-id> --input XXX`.
-1. Check status: `cargo axiom prove status --proof-id <proof-id>`
-1. Download proof: `cargo axiom prove download --proof-id <proof-id> --type [stark|root|evm]`
+# <img src="./favicon.ico" alt="Axiom Proving CLI" width="32" height="32" /> Axiom CLI Guide
+
+## Setup
+
+1. Install the Axiom CLI:
+   ```bash
+   git clone https://github.com/axiom-crypto/axiom-api-cli
+   cd axiom-api-cli
+   cargo install --locked --force --path .
+   ```
+
+2. Initialize with your API key:
+   ```bash
+   cargo axiom init --api-key <API_KEY>
+   ```
+   Alternatively, set the `AXIOM_API_KEY` environment variable.
+
+## Building Programs
+
+1. Navigate to your program directory (containing a Rust workspace with an OpenVM guest program).
+
+2. Build your program:
+   ```bash
+   cargo axiom build
+   ```
+   This uploads your code and triggers a reproducible build on Axiom's servers.
+
+3. Check build status:
+   ```bash
+   cargo axiom build status --program-id <PROGRAM_ID>
+   ```
+
+## Generating Proofs
+
+1. Request a proof for your program:
+   ```bash
+   cargo axiom prove --program-id <PROGRAM_ID> --input <INPUT>
+   ```
+
+2. Check proof generation status:
+   ```bash
+   cargo axiom prove status --proof-id <PROOF_ID>
+   ```
+
+3. Download proof logs if needed:
+   ```bash
+   cargo axiom prove logs --proof-id <PROOF_ID>
+   ```
+
+4. Download proof artifacts:
+   ```bash
+   cargo axiom prove download --proof-id <PROOF_ID> --type evm
+   ```
+
+## Verifying Proofs
+
+1. Verify a proof:
+   ```bash
+   cargo axiom verify --proof <PROOF_FILE>
+   ```
+
+2. Check verification status:
+   ```bash
+   cargo axiom verify status --verify-id <VERIFY_ID>
+   ```
+
+For more details, see the [Axiom API Documentation](https://proving-api-docs.axiom.xyz/api-reference/axiom-cli).
