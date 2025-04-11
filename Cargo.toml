@@ -2,8 +2,8 @@
 name = "cargo-axiom"
 version = "0.1.0"
 edition = "2021"
-description = "A Cargo subcommand for Axiom operations"
-authors = ["Your Name <your.email@example.com>"]
+description = "A Cargo subcommand for the Axiom Proving API"
+authors = ["Axiom Team"]
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
@@ -18,6 +18,6 @@ tokio = { version = "1", features = ["full"] }
 walkdir = "2.3"
 eyre = "0.6.12"
 hex = "0.4.3"
-cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", rev = "f41640c37bc5468a0775a38098053fe37ea3538a" }
-openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", rev = "f41640c37bc5468a0775a38098053fe37ea3538a" }
+cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787" }
+openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787" }
 comfy-table = "6.1.4"
