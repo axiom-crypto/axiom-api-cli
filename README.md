@@ -3,6 +3,11 @@
 ## Setup
 
 1. Install the Axiom CLI:
+   ```
+   cargo install --locked --git https://github.com/axiom-crypto/axiom-api-cli.git --tag v1.0.0 cargo-axiom
+   ```
+
+   Or from source:
    ```bash
    git clone https://github.com/axiom-crypto/axiom-api-cli
    cd axiom-api-cli
