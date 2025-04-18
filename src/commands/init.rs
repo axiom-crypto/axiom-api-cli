@@ -38,7 +38,6 @@ pub fn execute(args: InitArgs) -> Result<()> {
     println!("Initializing Axiom configuration...");
 
     // Use provided API URL or default
-    // TODO: default should be prod
     let api_url = args.api_url.unwrap_or_else(|| {
         if args.staging {
             STAGING_API_URL.to_string()
