@@ -123,6 +123,10 @@ pub struct BuildArgs {
     /// Comma-separated list of file patterns to exclude (e.g. "*.log,temp/*")
     #[clap(long, value_name = "PATTERNS")]
     exclude_files: Option<String>,
+
+    /// Watch the build progress and wait until it's done
+    #[clap(short, long)]
+    watch: bool,
 }
 
 fn is_rust_project() -> bool {
@@ -337,10 +341,17 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         let body = response.json::<serde_json::Value>().unwrap();
         let program_id = body["id"].as_str().unwrap();
         println!("Build request sent successfully: {}", program_id);
-        println!(
-            "To check the build status, run: cargo axiom build status --program-id {}",
-            program_id
-        );
+
+        if args.watch {
+            // Poll the build status until it's done
+            println!("Watching build status...");
+            watch_build_status(program_id.to_string())?;
+        } else {
+            println!(
+                "To check the build status, run: cargo axiom build status --program-id {}",
+                program_id
+            );
+        }
         Ok(())
     } else if response.status().is_client_error() {
         let status = response.status();
@@ -354,37 +365,96 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     }
 }
 
-fn check_build_status(program_id: String) -> Result<()> {
-    // Load configuration
+// Helper function to make API requests
+fn make_api_request(endpoint: &str) -> Result<reqwest::blocking::Response> {
     let config = load_config()?;
-    let url = format!("{}/programs/{}", config.api_url, program_id);
-
-    println!("Checking build status for program ID: {}", program_id);
-
-    // Make the GET request
-    let client = Client::new();
     let api_key = get_api_key()?;
+    let url = format!("{}{}", config.api_url, endpoint);
 
-    let response = client
+    let response = Client::new()
         .get(url)
         .header(API_KEY_HEADER, api_key)
         .send()
-        .context("Failed to send status request")?;
+        .context("Failed to send API request")?;
 
-    // Check if the request was successful
-    if response.status().is_success() {
-        println!("Build status: {}", response.text().unwrap());
-        Ok(())
-    } else if response.status().is_client_error() {
+    if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
-        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-    } else {
-        Err(eyre::eyre!(
-            "Status request failed with status: {}",
+        return Err(eyre::eyre!("Client error ({}): {}", status, error_text));
+    } else if !response.status().is_success() {
+        return Err(eyre::eyre!(
+            "API request failed with status: {}",
             response.status()
-        ))
+        ));
     }
+
+    Ok(response)
+}
+
+// Helper function to get program status
+fn get_program_status(program_id: &str) -> Result<serde_json::Value> {
+    let response = make_api_request(&format!("/programs/{}", program_id))?;
+    let status_json = response
+        .json::<serde_json::Value>()
+        .context("Failed to parse status response")?;
+    Ok(status_json)
+}
+
+// Helper function to fetch logs
+fn fetch_logs(program_id: &str) -> Result<String> {
+    let response = make_api_request(&format!("/programs/{}/logs", program_id))?;
+    let logs = response.text().context("Failed to read logs content")?;
+    Ok(logs)
+}
+
+fn check_build_status(program_id: String) -> Result<()> {
+    println!("Checking build status for program ID: {}", program_id);
+
+    let status = get_program_status(&program_id)?;
+    println!("Build status: {}", status);
+    Ok(())
+}
+
+fn watch_build_status(program_id: String) -> Result<()> {
+    // Poll interval in seconds
+    let poll_interval = std::time::Duration::from_secs(5);
+
+    loop {
+        // Get status using helper function
+        let body = get_program_status(&program_id)?;
+        let status = body
+            .get("status")
+            .and_then(|s| s.as_str())
+            .unwrap_or("unknown");
+
+        // Print the current status with timestamp
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        println!("[{}] Build status: {}", now, status);
+
+        // If the build is done (ready, failed, error) or unknown, break the loop
+        if status == "ready" || status == "failed" || status == "error" || status == "unknown" {
+            if status == "ready" {
+                println!("Build completed successfully!");
+            } else if status == "unknown" {
+                println!("Build status is unknown. Please check manually.");
+            } else {
+                println!("Build failed with status: {}", status);
+
+                // Automatically fetch and display logs on failure
+                println!("\nFetching build logs...");
+                match fetch_and_print_logs(&program_id) {
+                    Ok(_) => {}
+                    Err(e) => println!("Failed to fetch logs: {}", e),
+                }
+            }
+            break;
+        }
+
+        // Wait before polling again
+        std::thread::sleep(poll_interval);
+    }
+
+    Ok(())
 }
 
 fn download_program(program_id: String, program_type: String) -> Result<()> {
@@ -444,36 +514,29 @@ fn download_program(program_id: String, program_type: String) -> Result<()> {
 }
 
 fn download_logs(program_id: String) -> Result<()> {
-    let config = load_config()?;
-    let api_key = get_api_key()?;
-    let url = format!("{}/programs/{}/logs", config.api_url, program_id);
-    let response = Client::new()
-        .get(url)
-        .header(API_KEY_HEADER, api_key)
-        .send()?;
-    // Check if the request was successful
-    if response.status().is_success() {
-        // Create output filename based on program ID
-        let filename = format!("program_{}_logs.txt", program_id);
+    let logs = fetch_logs(&program_id)?;
 
-        // Write the response body to a file
-        let mut file =
-            File::create(&filename).context(format!("Failed to create log file: {}", filename))?;
+    // Create output filename based on program ID
+    let filename = format!("program_{}_logs.txt", program_id);
 
-        let content = response.bytes().context("Failed to read response body")?;
+    // Write the logs to a file
+    let mut file =
+        File::create(&filename).context(format!("Failed to create log file: {}", filename))?;
 
-        std::io::copy(&mut content.as_ref(), &mut file).context("Failed to write logs to file")?;
+    std::io::copy(&mut logs.as_bytes(), &mut file).context("Failed to write logs to file")?;
 
-        println!("Logs downloaded successfully to: {}", filename);
-    } else if response.status().is_client_error() {
-        let status = response.status();
-        let error_text = response.text()?;
-        return Err(eyre::eyre!("Client error ({}): {}", status, error_text));
-    } else {
-        return Err(eyre::eyre!(
-            "Logs download request failed with status: {}",
-            response.status()
-        ));
-    }
+    println!("Logs downloaded successfully to: {}", filename);
+    Ok(())
+}
+
+// Fetch and print logs directly to the console
+fn fetch_and_print_logs(program_id: &str) -> Result<()> {
+    let logs = fetch_logs(program_id)?;
+
+    // Print logs to console with some formatting
+    println!("\n==== BUILD LOGS ====");
+    println!("{}", logs);
+    println!("==== END OF LOGS ====");
+
     Ok(())
 }
