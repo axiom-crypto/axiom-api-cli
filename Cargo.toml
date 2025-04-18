@@ -21,3 +21,4 @@ hex = "0.4.3"
 cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787" }
 openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787" }
 comfy-table = "6.1.4"
+chrono = "0.4"
