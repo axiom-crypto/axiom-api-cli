@@ -2,6 +2,10 @@ use clap::Parser;
 use eyre::Result;
 
 use crate::{config, config::DEFAULT_CONFIG_ID};
+
+const STAGING_API_URL: &str = "https://api.staging.app.axiom.xyz/v1";
+const PROD_API_URL: &str = "https://api.axiom.xyz/v1";
+
 #[derive(Debug, Parser)]
 #[command(name = "init", about = "Initialize Axiom configuration")]
 pub struct InitCmd {
@@ -24,6 +28,10 @@ pub struct InitArgs {
     /// Axiom API key
     #[clap(long, value_name = "KEY")]
     api_key: Option<String>,
+
+    /// Whether to use staging API
+    #[clap(long)]
+    staging: bool,
 }
 
 pub fn execute(args: InitArgs) -> Result<()> {
@@ -31,9 +39,13 @@ pub fn execute(args: InitArgs) -> Result<()> {
 
     // Use provided API URL or default
     // TODO: default should be prod
-    let api_url = args
-        .api_url
-        .unwrap_or_else(|| "https://api.axiom.xyz/v1".to_string());
+    let api_url = args.api_url.unwrap_or_else(|| {
+        if args.staging {
+            STAGING_API_URL.to_string()
+        } else {
+            PROD_API_URL.to_string()
+        }
+    });
 
     // Get API key from args or env var AXIOM_API_KEY
     let api_key = args.api_key.or_else(|| std::env::var("AXIOM_API_KEY").ok());
