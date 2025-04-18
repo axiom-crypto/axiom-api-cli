@@ -1,6 +1,7 @@
 use std::process;
 
 use clap::{Args, Parser, Subcommand};
+use dotenv::dotenv;
 
 mod commands;
 mod config;
@@ -41,6 +42,8 @@ enum AxiomCommands {
 
 #[tokio::main]
 async fn main() {
+    dotenv().ok();
+
     let Cargo::Axiom(args) = Cargo::parse();
 
     let result = match args.command {
