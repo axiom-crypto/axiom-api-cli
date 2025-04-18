@@ -36,18 +36,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
         .unwrap_or_else(|| "https://api.axiom.xyz/v1".to_string());
 
     // Get API key from args or env var AXIOM_API_KEY
-    let api_key = args
-        .api_key
-        .or_else(|| match std::env::var("AXIOM_API_KEY") {
-            Ok(key) => Some(key),
-            Err(e) => {
-                eprintln!(
-                    "Warning: Failed to read AXIOM_API_KEY environment variable: {}",
-                    e
-                );
-                None
-            }
-        });
+    let api_key = args.api_key.or_else(|| std::env::var("AXIOM_API_KEY").ok());
 
     if api_key.is_none() {
         eprintln!("Error: API key must be provided either with --api-key flag or AXIOM_API_KEY environment variable");
