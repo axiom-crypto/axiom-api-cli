@@ -3,11 +3,13 @@
 ## Setup
 
 1. Install the Axiom CLI:
+
    ```
    cargo install --locked --git https://github.com/axiom-crypto/axiom-api-cli.git --tag v0.1.0 cargo-axiom
    ```
 
    Or from source:
+
    ```bash
    git clone https://github.com/axiom-crypto/axiom-api-cli
    cd axiom-api-cli
@@ -18,16 +20,19 @@
    ```bash
    cargo axiom init --api-key <API_KEY>
    ```
-   Alternatively, set the `AXIOM_API_KEY` environment variable.
+   Alternatively, set the `AXIOM_API_KEY` environment variable in a `.env` file and then run `cargo axiom init` at the directory of the `.env` file.
+   See `.env.example` for an example.
 
 ## Building Programs
 
 1. Navigate to your program directory (containing a Rust workspace with an OpenVM guest program).
 
 2. Build your program:
+
    ```bash
    cargo axiom build
    ```
+
    This uploads your code and triggers a reproducible build on Axiom's servers.
 
 3. Check build status:
@@ -38,16 +43,19 @@
 ## Generating Proofs
 
 1. Request a proof for your program:
+
    ```bash
    cargo axiom prove --program-id <PROGRAM_ID> --input <INPUT>
    ```
 
 2. Check proof generation status:
+
    ```bash
    cargo axiom prove status --proof-id <PROOF_ID>
    ```
 
 3. Download proof logs if needed:
+
    ```bash
    cargo axiom prove logs --proof-id <PROOF_ID>
    ```
@@ -60,6 +68,7 @@
 ## Verifying Proofs
 
 1. Verify a proof:
+
    ```bash
    cargo axiom verify --proof <PROOF_FILE>
    ```
