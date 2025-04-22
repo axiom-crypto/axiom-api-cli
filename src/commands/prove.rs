@@ -38,8 +38,8 @@ enum ProveSubcommand {
         #[clap(long, value_name = "ID")]
         proof_id: String,
 
-        /// The type of proof artifact to download (stark, root, or evm)
-        #[clap(long, value_parser = ["stark", "root", "evm"])]
+        /// The type of proof artifact to download (stark, or evm)
+        #[clap(long, value_parser = ["stark", "evm"])]
         r#type: String,
 
         /// Output file path (defaults to proof_id-type.json)

@@ -183,6 +183,19 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
         .map(|s| s.to_string())
         .collect();
 
+    let has_cargo_toml = tracked_files
+        .iter()
+        .any(|path| path.ends_with("Cargo.toml"));
+    let has_cargo_lock = tracked_files
+        .iter()
+        .any(|path| path.ends_with("Cargo.lock"));
+
+    if !has_cargo_toml || !has_cargo_lock {
+        return Err(eyre::eyre!(
+            "Cargo.toml and Cargo.lock are required and should be tracked by git"
+        ));
+    }
+
     // Walk through the directory and add files to the archive
     let walker = walkdir::WalkDir::new(".")
         .min_depth(1)
@@ -283,8 +296,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     // Create tar archive of the current directory
     println!("Creating archive of the project...");
-    let tar_path =
-        create_tar_archive(&exclude_patterns).context("Failed to create project archive")?;
+    let tar_path = create_tar_archive(&exclude_patterns)?;
 
     // Check if the tar file size exceeds 10MB
     let metadata = std::fs::metadata(&tar_path).context("Failed to get tar file metadata")?;
