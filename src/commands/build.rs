@@ -242,8 +242,6 @@ fn create_tar_archive(exclude_patterns: &[String], include_dirs: &[String]) -> R
     // Run cargo fetch for some host dependencies (std stuffs)
     let status = cargo_command("fetch", &[])
         .env("CARGO_HOME", &axiom_cargo_home)
-        .arg("--target")
-        .arg("x86_64-unknown-linux-gnu")
         .status()
         .context("Failed to run 'cargo fetch'")?;
     if !status.success() {
