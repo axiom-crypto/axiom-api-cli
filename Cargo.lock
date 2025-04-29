@@ -1133,6 +1133,7 @@ dependencies = [
  "eyre",
  "flate2",
  "hex",
+ "openvm-build",
  "openvm-sdk",
  "reqwest",
  "serde",
