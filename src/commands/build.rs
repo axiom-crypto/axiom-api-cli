@@ -1,16 +1,25 @@
-use std::{fs::File, path::Path};
+use std::{
+    fs::File,
+    io::{self, Read, Write},
+    path::Path,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
 use clap::{Parser, Subcommand};
 use comfy_table;
 use eyre::{Context, Result};
 use flate2::{write::GzEncoder, Compression};
+use openvm_build::cargo_command;
 use reqwest::blocking::Client;
 use tar::Builder;
 use walkdir;
 
 use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
-const MAX_PROGRAM_SIZE_MB: u64 = 10;
+const MAX_PROGRAM_SIZE_MB: u64 = 1024;
+
+const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
@@ -123,6 +132,10 @@ pub struct BuildArgs {
     /// Comma-separated list of file patterns to exclude (e.g. "*.log,temp/*")
     #[clap(long, value_name = "PATTERNS")]
     exclude_files: Option<String>,
+
+    /// Comma-separated list of directories to include even if not tracked by git
+    #[clap(long, value_name = "DIRS")]
+    include_dirs: Option<String>,
 }
 
 fn is_rust_project() -> bool {
@@ -148,7 +161,45 @@ fn find_git_root() -> Result<std::path::PathBuf> {
     }
 }
 
-fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
+fn find_cargo_workspace_root() -> Result<std::path::PathBuf> {
+    // Start from the current directory
+    let mut current_dir = std::env::current_dir()?;
+    // Keep track of the last directory with a Cargo.toml
+    let mut last_cargo_dir = None;
+
+    loop {
+        // Check if Cargo.toml exists in the current directory
+        let cargo_toml = current_dir.join("Cargo.toml");
+        if cargo_toml.exists() {
+            // Check if this is a workspace root by reading the Cargo.toml file
+            let mut content = String::new();
+            File::open(&cargo_toml)?.read_to_string(&mut content)?;
+            // If the file contains [workspace], it's a workspace root
+            if content.contains("[workspace]") {
+                return Ok(current_dir);
+            }
+            // Remember this directory as it has a Cargo.toml
+            last_cargo_dir = Some(current_dir.clone());
+        }
+        // Move up to parent directory
+        if !current_dir.pop() {
+            // We've reached the root of the filesystem
+            break;
+        }
+    }
+
+    // If we found at least one Cargo.toml, return the topmost directory with one
+    if let Some(dir) = last_cargo_dir {
+        return Ok(dir);
+    }
+
+    // We didn't find any Cargo.toml
+    Err(eyre::eyre!("Not in a Cargo project"))
+}
+
+// The tarball contains everything in the git root of the guest program that's tracked by git.
+// Additionally, it does `cargo fetch` to pre-fetch dependencies so private dependencies are included.
+fn create_tar_archive(exclude_patterns: &[String], include_dirs: &[String]) -> Result<String> {
     let tar_path = "program.tar.gz";
     let tar_file = File::create(tar_path)?;
     let enc = GzEncoder::new(tar_file, Compression::default());
@@ -156,7 +207,6 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
 
     // Find the git root directory
     let git_root = find_git_root().context("Failed to find git root directory")?;
-
     // Get the git root directory name
     let dir_name = git_root
         .file_name()
@@ -164,10 +214,38 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
         .to_string_lossy()
         .to_string();
 
-    // Change to git root directory
     let original_dir = std::env::current_dir()?;
-    std::env::set_current_dir(&git_root)?;
 
+    // Pre-fetch dependencies to pull the private dependencies in the axiom_cargo_home (set it as CARGO_HOME) directory
+    let cargo_workspace_root =
+        find_cargo_workspace_root().context("Failed to find cargo workspace root")?;
+    println!(
+        "found cargo workspace root: {}",
+        cargo_workspace_root.display()
+    );
+    std::env::set_current_dir(&cargo_workspace_root)?;
+    let axiom_cargo_home = cargo_workspace_root.join(AXIOM_CARGO_HOME);
+    std::fs::create_dir_all(&axiom_cargo_home)?;
+
+    // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
+    println!("Fetching dependencies to {}...", AXIOM_CARGO_HOME);
+    let status = std::process::Command::new("cargo")
+        .env("CARGO_HOME", &axiom_cargo_home)
+        .arg("fetch")
+        .status()
+        .context("Failed to run 'cargo fetch'")?;
+    if !status.success() {
+        return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
+    }
+    // Run cargo fetch for some host dependencies (std stuffs)
+    let status = cargo_command("fetch", &[])
+        .status()
+        .context("Failed to run 'cargo fetch'")?;
+    if !status.success() {
+        return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
+    }
+
+    std::env::set_current_dir(&git_root)?;
     // Get list of files tracked by git
     let output = std::process::Command::new("git")
         .args(["ls-files"])
@@ -202,26 +280,21 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
         .into_iter()
         .filter_entry(|e| {
             let path = e.path();
-            let file_name = path.file_name().unwrap_or_default().to_string_lossy();
             let path_str = path.to_string_lossy();
-
-            // Skip dotfiles, target directories (anywhere in path), and the tar file itself
-            let default_exclusion = file_name.starts_with(".")
-                || path_str.contains("/target/")
-                || path.starts_with("target/")
-                || path_str.contains("/openvm/")
-                || path.starts_with("openvm/")
-                || path_str.contains("/program.tar.gz")
-                || path.starts_with("program.tar.gz");
-
             // Check against user-provided exclusion patterns
             let matches_exclusion = exclude_patterns.iter().any(|s| path_str.contains(s));
-
+            // Check if path is in user-provided include directories
+            let in_include_dir = include_dirs.iter().any(|dir| {
+                path_str.starts_with(&format!("./{}", dir)) || path_str.starts_with(dir)
+            });
             // Check if file is tracked by git (directories are allowed to continue traversal)
-            let is_tracked =
-                path.is_dir() || tracked_files.contains(path_str.trim_start_matches("./"));
+            // Allow axiom_cargo_home directory even though it's not tracked by git
+            let is_tracked = path.is_dir()
+                || tracked_files.contains(path_str.trim_start_matches("./"))
+                || path_str.contains(AXIOM_CARGO_HOME)
+                || in_include_dir;
 
-            !(default_exclusion || matches_exclusion || !is_tracked)
+            is_tracked && !matches_exclusion
         });
 
     for entry in walker.filter_map(Result::ok) {
@@ -235,26 +308,32 @@ fn create_tar_archive(exclude_patterns: &[String]) -> Result<String> {
 
             let mut file = File::open(path)?;
             builder.append_file(archive_path, &mut file)?;
-        } else if path.is_dir() {
-            // Skip directories that start with dot or are "target"
-            let dir_name_str = path.file_name().unwrap_or_default().to_string_lossy();
-            if dir_name_str.starts_with(".") || dir_name_str == "target" {
-                continue;
-            }
-
-            // Create directory in the archive
-            let relative_path = path.strip_prefix(".").unwrap();
-            let archive_path = format!("{}/{}", dir_name, relative_path.display());
-            builder.append_dir(archive_path, path)?;
         }
     }
 
     builder.finish()?;
-
+    // Clean up the axiom_cargo_home directory
+    std::fs::remove_dir_all(axiom_cargo_home).ok();
     // Change back to the original directory
     std::env::set_current_dir(original_dir)?;
 
     Ok(tar_path.to_string())
+}
+
+struct ProgressReader<R> {
+    inner: R,
+    progress: Arc<Mutex<(u64, u64)>>, // (bytes_read, total_bytes)
+}
+
+impl<R: Read> Read for ProgressReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        if n > 0 {
+            let mut progress = self.progress.lock().unwrap();
+            progress.0 += n as u64;
+        }
+        Ok(n)
+    }
 }
 
 pub fn execute(args: BuildArgs) -> Result<()> {
@@ -273,7 +352,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     // Get the git root directory
     let git_root = find_git_root().context("Failed to find git root directory")?;
 
-    // Get the current directory
+    // Get the current directory, which should be the guest program directory
     let current_dir = std::env::current_dir()?;
 
     // Calculate the relative path from git root to current directory
@@ -282,6 +361,23 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         .context("Failed to determine relative path from git root")?
         .to_string_lossy()
         .to_string();
+
+    if !program_path.is_empty() {
+        println!("Using program path: {}", program_path);
+    }
+
+    let cargo_workspace_root =
+        find_cargo_workspace_root().context("Failed to find cargo workspace root")?;
+    // Calculate the relative path from git root to cargo workspace root
+    let cargo_root_path = cargo_workspace_root
+        .strip_prefix(&git_root)
+        .context("Failed to determine relative path from git root to cargo workspace root")?
+        .to_string_lossy()
+        .to_string();
+
+    if !cargo_root_path.is_empty() {
+        println!("Using cargo workspace root: {}", cargo_root_path);
+    }
 
     // Parse exclude patterns
     let exclude_patterns = args
@@ -294,9 +390,19 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         })
         .unwrap_or_default();
 
+    // Parse include directories
+    let include_dirs = args
+        .include_dirs
+        .map(|dirs| {
+            dirs.split(',')
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<String>>()
+        })
+        .unwrap_or_default();
+
     // Create tar archive of the current directory
     println!("Creating archive of the project...");
-    let tar_path = create_tar_archive(&exclude_patterns)?;
+    let tar_path = create_tar_archive(&exclude_patterns, &include_dirs)?;
 
     // Check if the tar file size exceeds 10MB
     let metadata = std::fs::metadata(&tar_path).context("Failed to get tar file metadata")?;
@@ -310,34 +416,92 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     }
 
     // Add program_path as a query parameter if it's not empty
-    let url = if program_path.is_empty() {
-        format!("{}/programs?config_id={}", config.api_url, config_id)
+    let program_path_query = if program_path.is_empty() {
+        ".".to_string()
     } else {
-        format!(
-            "{}/programs?config_id={}&program_path={}",
-            config.api_url, config_id, program_path
-        )
+        program_path
     };
+    let cargo_root_query = if cargo_root_path.is_empty() {
+        ".".to_string()
+    } else {
+        cargo_root_path
+    };
+    let url = format!(
+        "{}/programs?config_id={}&program_path={}&cargo_root_path={}",
+        config.api_url, config_id, program_path_query, cargo_root_query
+    );
 
     println!("Sending build request for config ID: {}", config_id);
-    if !program_path.is_empty() {
-        println!("Using program path: {}", program_path);
-    }
 
     // Make the POST request with multipart form data
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(300)) // 5 minute timeout
+        .build()?;
     let api_key = get_api_key()?;
 
-    let form = reqwest::blocking::multipart::Form::new()
-        .file("program", &tar_path)
-        .context("Failed to attach program archive")?;
+    // Create a progress tracker
+    let progress = Arc::new(Mutex::new((0, metadata.len())));
+    let progress_clone = Arc::clone(&progress);
+
+    // Spawn a thread to display progress
+    let progress_handle = std::thread::spawn(move || {
+        let start_time = Instant::now();
+        let mut last_percent = 0;
+
+        loop {
+            std::thread::sleep(Duration::from_millis(100));
+            let (current, total) = *progress_clone.lock().unwrap();
+
+            if total == 0 {
+                break;
+            }
+
+            let percent = ((current as f64 / total as f64) * 100.0) as u8;
+
+            // Only update when the percentage changes
+            if percent != last_percent {
+                // Calculate speed
+                let elapsed = start_time.elapsed().as_secs_f64();
+                let speed = if elapsed > 0.0 {
+                    current as f64 / elapsed / 1024.0
+                } else {
+                    0.0
+                };
+
+                print!("\rUploading: {}% ({:.2} KB/s)", percent, speed);
+                io::stdout().flush().unwrap();
+                last_percent = percent;
+            }
+
+            if current >= total {
+                println!("\rUpload complete!                ");
+                break;
+            }
+        }
+    });
+
+    // Open the file with progress tracking
+    let file = File::open(&tar_path).context("Failed to open tar file")?;
+    let progress_reader = ProgressReader {
+        inner: file,
+        progress: Arc::clone(&progress),
+    };
+
+    // Create the form with the progress-tracking reader
+    let part = reqwest::blocking::multipart::Part::reader(progress_reader)
+        .file_name("program.tar.gz")
+        .mime_str("application/gzip")?;
+
+    let form = reqwest::blocking::multipart::Form::new().part("program", part);
 
     let response = client
         .post(url)
         .header(API_KEY_HEADER, api_key)
         .multipart(form)
-        .send()
-        .context("Failed to send build request")?;
+        .send()?;
+
+    // Wait for the progress thread to finish
+    progress_handle.join().unwrap();
 
     // Clean up the tar file
     if !args.keep_tarball.unwrap_or(false) {
