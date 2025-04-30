@@ -5,7 +5,7 @@
 1. Install the Axiom CLI:
 
    ```
-   cargo install --locked --git https://github.com/axiom-crypto/axiom-api-cli.git --tag v0.1.0 cargo-axiom
+   cargo install --locked --git https://github.com/axiom-crypto/axiom-api-cli.git --tag v0.1.2 cargo-axiom
    ```
 
    Or from source:
