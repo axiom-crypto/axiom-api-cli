@@ -1,7 +1,10 @@
 use clap::Parser;
 use eyre::Result;
 
-use crate::{config, config::DEFAULT_CONFIG_ID};
+use crate::{
+    config,
+    config::{DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID},
+};
 
 const STAGING_API_URL: &str = "https://api.staging.app.axiom.xyz/v1";
 const PROD_API_URL: &str = "https://api.axiom.xyz/v1";
@@ -58,7 +61,11 @@ pub fn execute(args: InitArgs) -> Result<()> {
     let config = config::Config {
         api_key: Some(api_key.unwrap()),
         api_url,
-        config_id: Some(DEFAULT_CONFIG_ID.to_string()),
+        config_id: if args.staging {
+            Some(STAGING_DEFAULT_CONFIG_ID.to_string())
+        } else {
+            Some(DEFAULT_CONFIG_ID.to_string())
+        },
     };
 
     config::save_config(&config)?;

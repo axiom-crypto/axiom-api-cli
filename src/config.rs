@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 
-pub const DEFAULT_CONFIG_ID: &str = "d2259fc0-140a-4ec7-94e3-f7830bd686a9";
+pub const DEFAULT_CONFIG_ID: &str = "3009194f-b813-4fd6-9d9a-d9e572ccb66e";
+pub const STAGING_DEFAULT_CONFIG_ID: &str = "a5269ceb-cdf4-40c7-bd2f-cbbf1e453397";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
