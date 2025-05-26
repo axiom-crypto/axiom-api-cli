@@ -660,6 +660,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "axiom-sdk"
+version = "0.1.1"
+dependencies = [
+ "cargo-openvm",
+ "clap",
+ "comfy-table",
+ "dialoguer",
+ "dirs",
+ "dotenv",
+ "eyre",
+ "flate2",
+ "hex",
+ "openvm-build",
+ "openvm-sdk",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tar",
+ "tokio",
+ "walkdir",
+]
+
+[[package]]
 name = "backtrace"
 version = "0.3.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4889,10 +4912,6 @@ dependencies = [
  "ring",
  "untrusted",
 ]
-
-[[package]]
-name = "sdk"
-version = "0.1.0"
 
 [[package]]
 name = "sec1"

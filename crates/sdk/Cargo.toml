@@ -1,6 +1,30 @@
 [package]
-name = "sdk"
-version = "0.1.0"
-edition = "2021"
+name = "axiom-sdk"
+version = "0.1.1"
+description = "A Rust SDK for the Axiom Proving API"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 
 [dependencies]
+clap = { version = "4.4", features = ["derive"] }
+dialoguer = { version = "0.10.4", default-features = false }
+dirs = "5.0.1"
+reqwest = { version = "0.11", features = [
+    "json",
+    "blocking",
+    "multipart",
+], default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tar = { version = "0.4", default-features = false }
+flate2 = "1.0"
+tokio = { version = "1", features = ["full"] }
+walkdir = "2.3"
+eyre = "0.6.12"
+hex = "0.4.3"
+cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.1.1", default-features = false }
+openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.1.1", default-features = false }
+openvm-build = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.1.1", default-features = false }
+comfy-table = { version = "6.1.4", default-features = false }
+dotenv = "0.15.0"
