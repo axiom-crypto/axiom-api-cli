@@ -97,3 +97,4 @@ pub fn get_config_id(args_config_id: Option<String>, config: &Config) -> Result<
         Err(eyre::eyre!("No config ID provided"))
     }
 }
+
