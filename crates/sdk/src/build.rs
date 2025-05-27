@@ -14,10 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
 
-use crate::{
-    config::{get_config_id, API_KEY_HEADER},
-    AxiomSdk,
-};
+use crate::{get_config_id, AxiomSdk, API_KEY_HEADER};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 
@@ -174,7 +171,7 @@ impl BuildSdk for AxiomSdk {
             let ext = if program_type == "source" {
                 "tar.gz".to_string()
             } else {
-                program_type.to_owned()
+                program_type.to_string()
             };
             let filename = format!("program_{}.{}", program_id, ext);
 
@@ -257,7 +254,7 @@ impl BuildSdk for AxiomSdk {
         }
 
         // Get the config_id from args, return error if not provided
-        let config_id = get_config_id(args.config_id, &self.config)?;
+        let config_id = get_config_id(args.config_id.as_deref(), &self.config)?;
 
         // Get the git root directory
         let git_root =
@@ -428,7 +425,7 @@ impl BuildSdk for AxiomSdk {
             let body = response.json::<serde_json::Value>().unwrap();
             let program_id = body["id"].as_str().unwrap();
             println!("Build request sent successfully: {}", program_id);
-            Ok(program_id.to_owned())
+            Ok(program_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;

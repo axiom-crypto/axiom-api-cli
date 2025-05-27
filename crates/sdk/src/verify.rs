@@ -6,10 +6,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{
-    config::{get_config_id, API_KEY_HEADER},
-    AxiomSdk,
-};
+use crate::{get_config_id, AxiomSdk, API_KEY_HEADER};
 
 pub trait VerifySdk {
     fn get_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
@@ -63,7 +60,7 @@ impl VerifySdk for AxiomSdk {
 
     fn verify_proof(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
         // Load configuration
-        let config_id = get_config_id(config_id.map(|s| s.to_string()), &self.config)?;
+        let config_id = get_config_id(config_id, &self.config)?;
         let url = format!("{}/verify?config_id={}", self.config.api_url, config_id);
 
         println!(
@@ -105,7 +102,7 @@ impl VerifySdk for AxiomSdk {
             let response_json: Value = response.json()?;
             let verify_id = response_json["id"].as_str().unwrap();
             println!("Verification request sent: {}", verify_id);
-            Ok(verify_id.to_owned())
+            Ok(verify_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;

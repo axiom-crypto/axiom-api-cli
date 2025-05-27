@@ -6,7 +6,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::{config::API_KEY_HEADER, AxiomSdk};
+use crate::{AxiomSdk, API_KEY_HEADER};
 
 pub trait ProveSdk {
     fn list_proofs(&self, program_id: &str) -> Result<Vec<ProofStatus>>;
@@ -287,7 +287,7 @@ impl ProveSdk for AxiomSdk {
             let response_json: Value = response.json()?;
             let proof_id = response_json["id"].as_str().unwrap();
             println!("Proof generation initiated successfully!: {}", proof_id);
-            Ok(proof_id.to_owned())
+            Ok(proof_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
