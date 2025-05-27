@@ -28,7 +28,11 @@ pub trait BuildSdk {
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
     fn download_build_logs(&self, program_id: &str) -> Result<()>;
-    fn register_new_program(&self, program_dir: impl AsRef<Path>, args: BuildArgs) -> Result<()>;
+    fn register_new_program(
+        &self,
+        program_dir: impl AsRef<Path>,
+        args: BuildArgs,
+    ) -> Result<String>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -240,7 +244,11 @@ impl BuildSdk for AxiomSdk {
         Ok(())
     }
 
-    fn register_new_program(&self, program_dir: impl AsRef<Path>, args: BuildArgs) -> Result<()> {
+    fn register_new_program(
+        &self,
+        program_dir: impl AsRef<Path>,
+        args: BuildArgs,
+    ) -> Result<String> {
         // Check if we're in a Rust project
         if !is_rust_project(program_dir.as_ref()) {
             return Err(eyre::eyre!(
@@ -420,11 +428,7 @@ impl BuildSdk for AxiomSdk {
             let body = response.json::<serde_json::Value>().unwrap();
             let program_id = body["id"].as_str().unwrap();
             println!("Build request sent successfully: {}", program_id);
-            println!(
-                "To check the build status, run: cargo axiom build status --program-id {}",
-                program_id
-            );
-            Ok(())
+            Ok(program_id.to_owned())
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
