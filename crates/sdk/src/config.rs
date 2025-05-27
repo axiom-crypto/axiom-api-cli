@@ -1,89 +1,222 @@
-use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{copy, Write},
+    path::PathBuf,
+};
 
-use dirs::home_dir;
 use eyre::{Context, Result};
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-pub const API_KEY_HEADER: &str = "Axiom-API-Key";
+use crate::{get_config_id, AxiomConfig, AxiomSdk, API_KEY_HEADER};
 
-pub const DEFAULT_CONFIG_ID: &str = "91b7737e-2f72-479d-b8db-43ca2c6d3328";
-pub const STAGING_DEFAULT_CONFIG_ID: &str = "3796a702-0800-428d-9c14-ddc74df753b5";
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct AxiomConfig {
-    pub api_url: String,
-    pub api_key: Option<String>,
-    pub config_id: Option<String>,
+pub trait ConfigSdk {
+    fn get_vm_config_metadata(&self, config_id: Option<&str>) -> Result<VmConfigMetadata>;
+    fn get_proving_keys(&self, config_id: Option<&str>, key_type: &str) -> Result<PkDownloader>;
+    fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
+    fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
+    fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
 }
 
-impl Default for AxiomConfig {
-    fn default() -> Self {
-        Self {
-            api_url: "https://api.axiom.xyz/v1".to_string(),
-            api_key: None,
-            config_id: Some(DEFAULT_CONFIG_ID.to_string()),
+#[derive(Debug, Serialize, Deserialize)]
+pub struct VmConfigMetadata {
+    pub id: String,
+    pub created_at: String,
+    pub openvm_version: String,
+    pub stark_backend_version: String,
+    pub status: String,
+    pub active: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PkDownloader {
+    pub download_url: String,
+}
+
+impl PkDownloader {
+    pub fn download_pk(&self, output_path: &str) -> Result<()> {
+        std::fs::create_dir_all(output_path)?;
+
+        let client = Client::new();
+
+        let response = client
+            .get(&self.download_url)
+            .send()
+            .context("Failed to download proving keys")?;
+
+        if response.status().is_success() {
+            println!("Proving keys downloaded successfully");
+            let mut file = File::create(output_path)?;
+            file.write_all(&response.bytes()?)?;
+            Ok(())
+        } else if response.status().is_client_error() {
+            let status = response.status();
+            let error_text = response.text()?;
+            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+        } else {
+            Err(eyre::eyre!(
+                "Config status request failed with status: {}",
+                response.status()
+            ))
         }
     }
 }
 
-pub fn get_axiom_dir() -> Result<PathBuf> {
-    let home = home_dir().ok_or_else(|| eyre::eyre!("Could not find home directory"))?;
-    Ok(home.join(".axiom"))
-}
+impl ConfigSdk for AxiomSdk {
+    fn get_vm_config_metadata(&self, config_id: Option<&str>) -> Result<VmConfigMetadata> {
+        let config_id = get_config_id(config_id, &self.config)?;
+        let url = format!("{}/configs/{}", self.config.api_url, config_id);
 
-pub fn get_config_path() -> PathBuf {
-    get_axiom_dir().unwrap().join("config.json")
-}
+        println!("Checking status for config ID: {}", config_id);
 
-pub fn load_config() -> Result<AxiomConfig> {
-    let config_path = get_config_path();
+        // Make the GET request
+        let client = Client::new();
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
+            .ok_or(eyre::eyre!("API key not set"))?;
 
-    if !config_path.exists() {
-        // Try to load from old config format
-        return Ok(AxiomConfig::default());
+        let response = client
+            .get(&url)
+            .header(API_KEY_HEADER, api_key)
+            .send()
+            .context("Failed to send status request")?;
+
+        if response.status().is_success() {
+            let body: Value = response.json()?;
+            let metadata = serde_json::from_value(body)?;
+            Ok(metadata)
+        } else if response.status().is_client_error() {
+            let status = response.status();
+            let error_text = response.text()?;
+            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+        } else {
+            Err(eyre::eyre!(
+                "Config status request failed with status: {}",
+                response.status()
+            ))
+        }
     }
 
-    let config_str = std::fs::read_to_string(config_path).context("Failed to read config file")?;
+    fn get_proving_keys(&self, config_id: Option<&str>, key_type: &str) -> Result<PkDownloader> {
+        // Load configuration
+        let config_id = get_config_id(config_id, &self.config)?;
+        let url = format!(
+            "{}/configs/{}/pk/{}",
+            self.config.api_url, config_id, key_type
+        );
 
-    serde_json::from_str(&config_str).context("Failed to parse config file")
-}
+        println!(
+            "Getting {} proving key for config ID: {}",
+            key_type, config_id
+        );
 
-pub fn save_config(config: &AxiomConfig) -> Result<()> {
-    let config_path = get_config_path();
+        // Make the GET request
+        let client = Client::new();
+        let api_key = self
+            .config
+            .api_key
+            .as_ref()
+            .ok_or(eyre::eyre!("API key not set"))?;
 
-    // Ensure the directory exists
-    if let Some(parent) = config_path.parent() {
-        std::fs::create_dir_all(parent).context("Failed to create config directory")?;
+        let response = client
+            .get(&url)
+            .header(API_KEY_HEADER, api_key)
+            .send()
+            .context("Failed to send download request")?;
+
+        // Check if the request was successful
+        if response.status().is_success() {
+            // Parse the response to get the download URL
+            let response_json: Value = response.json()?;
+            let downloader = serde_json::from_value(response_json)?;
+            Ok(downloader)
+        } else if response.status().is_client_error() {
+            let status = response.status();
+            let error_text = response.text()?;
+            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+        } else {
+            Err(eyre::eyre!(
+                "Download request failed with status: {}",
+                response.status()
+            ))
+        }
     }
 
-    let config_str = serde_json::to_string_pretty(config).context("Failed to serialize config")?;
+    fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+        download_artifact(&self.config, config_id, "evm_verifier", output)
+    }
 
-    std::fs::write(config_path, config_str).context("Failed to write config file")?;
+    fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+        download_artifact(&self.config, config_id, "app_vm_commit", output)
+    }
 
-    Ok(())
+    fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+        download_artifact(&self.config, config_id, "config", output)
+    }
 }
 
-pub fn get_api_key() -> Result<String> {
-    let config = load_config()?;
-    config
+fn download_artifact(
+    config: &AxiomConfig,
+    config_id: Option<&str>,
+    artifact_type: &str,
+    output: Option<PathBuf>,
+) -> Result<()> {
+    // Load configuration
+    let config_id = get_config_id(config_id, config)?;
+    let url = format!("{}/configs/{}/{}", config.api_url, config_id, artifact_type);
+
+    println!("Downloading {} for config ID: {}", artifact_type, config_id);
+
+    // Determine output path
+    let output_path = match output {
+        Some(path) => path,
+        None => {
+            if artifact_type == "evm_verifier" {
+                PathBuf::from(format!("./evm_verifier-{}.json", config_id))
+            } else if artifact_type == "config" {
+                PathBuf::from(format!("./config-{}.toml", config_id))
+            } else {
+                PathBuf::from(format!("./{}-{}", artifact_type, config_id))
+            }
+        }
+    };
+
+    // Make the GET request
+    let client = Client::new();
+    let api_key = config
         .api_key
-        .ok_or_else(|| eyre::eyre!("API key not found. Run 'cargo axiom init' first."))
-}
+        .as_ref()
+        .ok_or(eyre::eyre!("API key not set"))?;
 
-pub fn set_config_id(id: String) -> Result<()> {
-    let mut config = load_config()?;
-    config.config_id = Some(id);
-    save_config(&config)
-}
+    let response = client
+        .get(&url)
+        .header(API_KEY_HEADER, api_key)
+        .send()
+        .context("Failed to send download request")?;
 
-pub fn get_config_id(args_config_id: Option<String>, config: &AxiomConfig) -> Result<String> {
-    if let Some(id) = args_config_id {
-        set_config_id(id.clone())?;
-        Ok(id)
-    } else if let Some(id) = &config.config_id {
-        println!("using cached config ID: {}", id);
-        Ok(id.clone())
+    // Check if the request was successful
+    if response.status().is_success() {
+        // Create the output file
+        let mut file = File::create(&output_path)
+            .context(format!("Failed to create output file: {:?}", output_path))?;
+
+        // Stream the response body to the file
+        copy(&mut response.bytes()?.as_ref(), &mut file)
+            .context("Failed to write response to file")?;
+
+        println!("Successfully downloaded to {:?}", output_path);
+        Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
-        Err(eyre::eyre!("No config ID provided"))
+        Err(eyre::eyre!(
+            "Download request failed with status: {}",
+            response.status()
+        ))
     }
 }
