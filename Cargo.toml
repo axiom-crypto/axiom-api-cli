@@ -6,3 +6,13 @@ license = "MIT"
 [workspace]
 members = ["crates/cli", "crates/sdk"]
 resolver = "2"
+
+[workspace.dependencies]
+# OpenVM
+cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.1.1", default-features = false }
+openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.1.1", default-features = false }
+openvm-build = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.1.1", default-features = false }
+
+# Axiom Proving API
+cargo-axiom = { path = "crates/cli", default-features = false }
+axiom-sdk = { path = "crates/sdk", default-features = false }
