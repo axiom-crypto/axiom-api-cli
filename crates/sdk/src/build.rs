@@ -37,7 +37,17 @@ pub struct BuildStatus {
     pub id: String,
     pub created_at: String,
     pub status: String,
-    pub error_message: String,
+    pub error_message: Option<String>,
+    pub name: String,
+    pub created_by: String,
+    pub last_active_at: String,
+    pub launched_at: String,
+    pub terminated_at: Option<String>,
+    pub program_hash: String,
+    pub openvm_config: String,
+    pub cells_used: u64,
+    pub proofs_run: u64,
+    pub is_favorite: bool,
 }
 
 #[derive(Debug)]
