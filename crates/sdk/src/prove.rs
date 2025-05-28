@@ -35,9 +35,12 @@ pub struct ProofStatus {
     pub created_at: String,
     pub state: String,
     pub proof_type: String,
-    pub error_message: String,
+    pub error_message: Option<String>,
     pub launched_at: String,
-    pub terminated_at: String,
+    pub terminated_at: Option<String>,
+    pub created_by: String,
+    pub cells_used: u64,
+    pub machine_type: String,
 }
 
 impl ProveSdk for AxiomSdk {
