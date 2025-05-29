@@ -63,6 +63,16 @@ pub fn save_config(config: &Config) -> Result<()> {
     Ok(())
 }
 
+pub fn validate_initialization() -> Result<()> {
+    let config = load_config()?;
+    if config.api_key.is_none() {
+        return Err(eyre::eyre!(
+            "CLI not initialized. Run 'cargo axiom init' first."
+        ));
+    }
+    Ok(())
+}
+
 pub fn get_api_key() -> Result<String> {
     let config = load_config()?;
     config
