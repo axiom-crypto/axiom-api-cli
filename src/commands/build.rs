@@ -363,6 +363,18 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         ));
     }
 
+    // Check toolchain version using rustc_version crate
+    let toolchain_version = rustc_version::version_meta()
+        .context("Failed to get toolchain version")?
+        .semver;
+
+    if toolchain_version.major != 1 || toolchain_version.minor != 85 {
+        return Err(eyre::eyre!(
+            "Unsupported toolchain version, expected 1.85, found: {}, Use `rustup default 1.85` to install as your default.",
+            toolchain_version.to_string()
+        ));
+    }
+
     // Get the config_id from args, return error if not provided
     let config_id = get_config_id(args.config_id, &config)?;
 
