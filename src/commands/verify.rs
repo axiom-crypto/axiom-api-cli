@@ -48,6 +48,8 @@ impl VerifyCmd {
 }
 
 fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
+    config::validate_initialization()?;
+    
     // Load configuration
     let config = load_config()?;
     let config_id = get_config_id(config_id, &config)?;

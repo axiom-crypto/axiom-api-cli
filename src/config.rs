@@ -87,3 +87,8 @@ pub fn get_config_id(args_config_id: Option<String>, config: &Config) -> Result<
         Err(eyre::eyre!("No config ID provided"))
     }
 }
+
+pub fn validate_initialization() -> Result<()> {
+    get_api_key()?;
+    Ok(())
+}
