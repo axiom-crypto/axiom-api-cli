@@ -228,6 +228,7 @@ fn create_tar_archive(exclude_patterns: &[String], include_dirs: &[String]) -> R
     std::fs::create_dir_all(&axiom_cargo_home)?;
 
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
+    // Fetch 1: target = x86 linux which is the cloud machine
     println!("Fetching dependencies to {}...", AXIOM_CARGO_HOME);
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
@@ -239,7 +240,20 @@ fn create_tar_archive(exclude_patterns: &[String], include_dirs: &[String]) -> R
     if !status.success() {
         return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
     }
-    // Run cargo fetch for some host dependencies (std stuffs)
+
+    // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
+    // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
+    println!("Fetching dependencies to {}...", AXIOM_CARGO_HOME);
+    let status = std::process::Command::new("cargo")
+        .env("CARGO_HOME", &axiom_cargo_home)
+        .arg("fetch")
+        .status()
+        .context("Failed to run 'cargo fetch'")?;
+    if !status.success() {
+        return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
+    }
+
+    // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
     let status = cargo_command("fetch", &[])
         .env("CARGO_HOME", &axiom_cargo_home)
         .status()
