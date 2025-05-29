@@ -370,7 +370,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 
     if toolchain_version.major != 1 || toolchain_version.minor != 85 {
         return Err(eyre::eyre!(
-            "Unsupported cargo version. Expected cargo 1.85, found: {}",
+            "Unsupported toolchain version, expected 1.85, found: {}, Use `rustup default 1.85` to install as your default.",
             toolchain_version.to_string()
         ));
     }
