@@ -341,7 +341,6 @@ impl<R: Read> Read for ProgressReader<R> {
 
 pub fn execute(args: BuildArgs) -> Result<()> {
     config::validate_initialization()?;
-    
     let config = load_config()?;
 
     // Check if we're in a Rust project

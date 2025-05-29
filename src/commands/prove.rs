@@ -154,7 +154,6 @@ fn list_proofs(program_id: String) -> Result<()> {
 
 fn execute(args: ProveArgs) -> Result<()> {
     config::validate_initialization()?;
-    
     // Get the program_id from args, return error if not provided
     let program_id = args
         .program_id

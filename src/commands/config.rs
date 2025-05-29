@@ -73,7 +73,6 @@ impl ConfigCmd {
 
 fn check_config_status(config_id: Option<String>) -> Result<()> {
     config::validate_initialization()?;
-    
     let config = load_config()?;
     let config_id = get_config_id(config_id, &config)?;
     let url = format!("{}/configs/{}", config.api_url, config_id);
@@ -111,7 +110,6 @@ fn download_small_artifact(
     output: Option<PathBuf>,
 ) -> Result<()> {
     config::validate_initialization()?;
-    
     // Load configuration
     let config = load_config()?;
     let config_id = get_config_id(config_id, &config)?;
@@ -169,7 +167,6 @@ fn download_small_artifact(
 
 fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<()> {
     config::validate_initialization()?;
-    
     // Load configuration
     let config = load_config()?;
     let config_id = get_config_id(config_id, &config)?;
