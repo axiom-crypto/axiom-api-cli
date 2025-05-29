@@ -6,7 +6,9 @@ use openvm_sdk::types::EvmProof;
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
+use crate::config::{
+    get_api_key, get_config_id, load_config, validate_initialization, API_KEY_HEADER,
+};
 
 #[derive(Args, Debug)]
 pub struct VerifyCmd {
@@ -48,6 +50,7 @@ impl VerifyCmd {
 }
 
 fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
+    validate_initialization()?;
     // Load configuration
     let config = load_config()?;
     let config_id = get_config_id(config_id, &config)?;
@@ -105,6 +108,7 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
 }
 
 fn check_verify_status(verify_id: String) -> Result<()> {
+    validate_initialization()?;
     // Load configuration
     let config = load_config()?;
     let url = format!("{}/verify/{}", config.api_url, verify_id);

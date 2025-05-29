@@ -106,6 +106,7 @@ impl ProveCmd {
 }
 
 fn list_proofs(program_id: String) -> Result<()> {
+    config::validate_initialization()?;
     let config = config::load_config()?;
     let api_key = config::get_api_key()?;
     let url = format!("{}/proofs?program_id={}", config.api_url, program_id);
@@ -153,6 +154,8 @@ fn list_proofs(program_id: String) -> Result<()> {
 }
 
 fn execute(args: ProveArgs) -> Result<()> {
+    config::validate_initialization()?;
+
     // Get the program_id from args, return error if not provided
     let program_id = args
         .program_id
@@ -224,6 +227,7 @@ fn execute(args: ProveArgs) -> Result<()> {
 }
 
 fn check_proof_status(proof_id: String) -> Result<()> {
+    config::validate_initialization()?;
     // Load configuration
     let config = config::load_config()?;
     let url = format!("{}/proofs/{}", config.api_url, proof_id);
@@ -258,6 +262,7 @@ fn check_proof_status(proof_id: String) -> Result<()> {
 }
 
 fn download_proof_logs(proof_id: String) -> Result<()> {
+    config::validate_initialization()?;
     let config = config::load_config()?;
     let url = format!("{}/proofs/{}/logs", config.api_url, proof_id);
 
@@ -310,6 +315,7 @@ fn download_proof_artifact(
     artifact_type: String,
     output: Option<PathBuf>,
 ) -> Result<()> {
+    config::validate_initialization()?;
     // Load configuration
     let config = config::load_config()?;
     let url = format!(
