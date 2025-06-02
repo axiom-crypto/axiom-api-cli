@@ -7,20 +7,20 @@ authors = ["Axiom Team"]
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
-dialoguer = "0.10.4"
+dialoguer = { version = "0.10.4", default-features = false }
 dirs = "5.0.1"
-reqwest = { version = "0.11", features = ["json", "blocking", "multipart"] }
+reqwest = { version = "0.11", features = ["json", "blocking", "multipart"], default-features = false }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tar = "0.4"
+tar = { version = "0.4", default-features = false }
 flate2 = "1.0"
 tokio = { version = "1", features = ["full"] }
 walkdir = "2.3"
 eyre = "0.6.12"
 hex = "0.4.3"
-cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787" }
-openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787" }
-openvm-build = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787" }
+cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787", default-features = false }
+openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787", default-features = false }
+openvm-build = { git = "https://github.com/openvm-org/openvm.git", rev = "51f07d50d20174b23091f48e25d9ea421b4e2787", default-features = false }
 comfy-table = "6.1.4"
 dotenv = "0.15.0"
 rustc_version = "0.4.0"
