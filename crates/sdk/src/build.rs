@@ -263,6 +263,18 @@ impl BuildSdk for AxiomSdk {
             ));
         }
 
+        // Check toolchain version using rustc_version crate
+        let toolchain_version = rustc_version::version_meta()
+            .context("Failed to get toolchain version")?
+            .semver;
+
+        if toolchain_version.major != 1 || toolchain_version.minor != 85 {
+            return Err(eyre::eyre!(
+                "Unsupported toolchain version, expected 1.85, found: {}, Use `rustup default 1.85` to install as your default.",
+                toolchain_version.to_string()
+            ));
+        }
+
         // Get the config_id from args, return error if not provided
         let config_id = get_config_id(args.config_id.as_deref(), &self.config)?;
 
@@ -544,6 +556,7 @@ fn create_tar_archive(
     std::fs::create_dir_all(&axiom_cargo_home)?;
 
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
+    // Fetch 1: target = x86 linux which is the cloud machine
     println!("Fetching dependencies to {}...", AXIOM_CARGO_HOME);
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
@@ -555,7 +568,20 @@ fn create_tar_archive(
     if !status.success() {
         return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
     }
-    // Run cargo fetch for some host dependencies (std stuffs)
+
+    // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
+    // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
+    println!("Fetching dependencies to {}...", AXIOM_CARGO_HOME);
+    let status = std::process::Command::new("cargo")
+        .env("CARGO_HOME", &axiom_cargo_home)
+        .arg("fetch")
+        .status()
+        .context("Failed to run 'cargo fetch'")?;
+    if !status.success() {
+        return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
+    }
+
+    // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
     let status = cargo_command("fetch", &[])
         .env("CARGO_HOME", &axiom_cargo_home)
         .status()

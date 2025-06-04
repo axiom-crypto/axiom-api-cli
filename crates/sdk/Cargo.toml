@@ -19,3 +19,4 @@ tar = { version = "0.4", default-features = false }
 flate2 = "1.0"
 walkdir = "2.3"
 eyre = "0.6.12"
+rustc_version = "0.4.0"
