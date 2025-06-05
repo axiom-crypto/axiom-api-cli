@@ -11,8 +11,8 @@ pub mod verify;
 
 pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 
-pub const DEFAULT_CONFIG_ID: &str = "91b7737e-2f72-479d-b8db-43ca2c6d3328";
-pub const STAGING_DEFAULT_CONFIG_ID: &str = "3796a702-0800-428d-9c14-ddc74df753b5";
+pub const DEFAULT_CONFIG_ID: &str = "8700ea25-f3b2-4ac2-a745-3e26d754d7a5";
+pub const STAGING_DEFAULT_CONFIG_ID: &str = "ab67a3b3-c413-4b49-a3c2-ab7d12c5a37e";
 
 #[derive(Default)]
 pub struct AxiomSdk {
