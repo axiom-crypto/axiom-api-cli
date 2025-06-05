@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use dirs::home_dir;
 use eyre::{Context, Result};
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
 pub const API_KEY_HEADER: &str = "Axiom-API-Key";
@@ -74,6 +75,36 @@ pub fn set_config_id(id: String) -> Result<()> {
     let mut config = load_config()?;
     config.config_id = Some(id);
     save_config(&config)
+}
+
+pub fn validate_config_id(config_id: &str, api_url: &str) -> Result<()> {
+    let api_key = get_api_key()?;
+    let url = format!("{}/configs/{}", api_url, config_id);
+    
+    let client = Client::new();
+    let response = client
+        .get(&url)
+        .header(API_KEY_HEADER, &api_key)
+        .send()
+        .context("Failed to validate config ID")?;
+    
+    if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text().unwrap_or_default();
+        if error_text.contains("Config not found") || error_text.contains("Invalid config") {
+            return Err(eyre::eyre!(
+                "Config ID '{}' is not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
+                config_id,
+                DEFAULT_CONFIG_ID,
+                STAGING_DEFAULT_CONFIG_ID
+            ));
+        }
+        return Err(eyre::eyre!("Client error ({}): {}", status, error_text));
+    } else if !response.status().is_success() {
+        return Err(eyre::eyre!("Failed to validate config ID: {}", response.status()));
+    }
+    
+    Ok(())
 }
 
 pub fn get_config_id(args_config_id: Option<String>, config: &Config) -> Result<String> {
