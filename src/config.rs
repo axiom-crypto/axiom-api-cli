@@ -77,6 +77,7 @@ pub fn set_config_id(id: String) -> Result<()> {
     save_config(&config)
 }
 
+#[allow(dead_code)]
 pub fn validate_config_id(config_id: &str, api_url: &str) -> Result<()> {
     let api_key = get_api_key()?;
     let url = format!("{}/configs/{}", api_url, config_id);
