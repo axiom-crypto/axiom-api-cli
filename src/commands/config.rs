@@ -100,7 +100,7 @@ fn check_config_status(config_id: Option<String>) -> Result<()> {
 
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             let is_staging = config.api_url.contains("staging");
-            
+
             if is_staging {
                 return Err(eyre::eyre!(
                     "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
@@ -180,7 +180,7 @@ fn download_small_artifact(
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             let config = load_config()?;
             let is_staging = config.api_url.contains("staging");
-            
+
             if is_staging {
                 return Err(eyre::eyre!(
                     "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
@@ -239,7 +239,7 @@ fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             let config = load_config()?;
             let is_staging = config.api_url.contains("staging");
-            
+
             if is_staging {
                 return Err(eyre::eyre!(
                     "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",

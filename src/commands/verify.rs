@@ -102,7 +102,7 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             let config = load_config()?;
             let is_staging = config.api_url.contains("staging");
-            
+
             if is_staging {
                 return Err(eyre::eyre!(
                     "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
