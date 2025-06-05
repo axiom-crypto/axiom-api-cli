@@ -99,12 +99,21 @@ fn check_config_status(config_id: Option<String>) -> Result<()> {
         let error_text = response.text()?;
 
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
-            return Err(eyre::eyre!(
-                "Config ID '{}' is not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
-                config_id,
-                DEFAULT_CONFIG_ID,
-                STAGING_DEFAULT_CONFIG_ID
-            ));
+            let is_staging = config.api_url.contains("staging");
+            
+            if is_staging {
+                return Err(eyre::eyre!(
+                    "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
+                    config_id,
+                    STAGING_DEFAULT_CONFIG_ID
+                ));
+            } else {
+                return Err(eyre::eyre!(
+                    "Config ID '{}' is not supported by the API.\nTry using the default production config: {}.\nRun 'cargo axiom init' to reset to defaults.",
+                    config_id,
+                    DEFAULT_CONFIG_ID
+                ));
+            }
         }
 
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
@@ -169,12 +178,22 @@ fn download_small_artifact(
         let error_text = response.text()?;
 
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
-            return Err(eyre::eyre!(
-                "Config ID '{}' is not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
-                config_id,
-                DEFAULT_CONFIG_ID,
-                STAGING_DEFAULT_CONFIG_ID
-            ));
+            let config = load_config()?;
+            let is_staging = config.api_url.contains("staging");
+            
+            if is_staging {
+                return Err(eyre::eyre!(
+                    "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
+                    config_id,
+                    STAGING_DEFAULT_CONFIG_ID
+                ));
+            } else {
+                return Err(eyre::eyre!(
+                    "Config ID '{}' is not supported by the API.\nTry using the default production config: {}.\nRun 'cargo axiom init' to reset to defaults.",
+                    config_id,
+                    DEFAULT_CONFIG_ID
+                ));
+            }
         }
 
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
@@ -218,12 +237,22 @@ fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<
         let error_text = response.text()?;
 
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
-            return Err(eyre::eyre!(
-                "Config ID '{}' is not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
-                config_id,
-                DEFAULT_CONFIG_ID,
-                STAGING_DEFAULT_CONFIG_ID
-            ));
+            let config = load_config()?;
+            let is_staging = config.api_url.contains("staging");
+            
+            if is_staging {
+                return Err(eyre::eyre!(
+                    "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
+                    config_id,
+                    STAGING_DEFAULT_CONFIG_ID
+                ));
+            } else {
+                return Err(eyre::eyre!(
+                    "Config ID '{}' is not supported by the API.\nTry using the default production config: {}.\nRun 'cargo axiom init' to reset to defaults.",
+                    config_id,
+                    DEFAULT_CONFIG_ID
+                ));
+            }
         }
 
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
