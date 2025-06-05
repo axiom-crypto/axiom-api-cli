@@ -5,7 +5,10 @@ use eyre::{Context, Result};
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID};
+use crate::config::{
+    get_api_key, get_config_id, load_config, API_KEY_HEADER, DEFAULT_CONFIG_ID,
+    STAGING_DEFAULT_CONFIG_ID,
+};
 
 #[derive(Args, Debug)]
 pub struct ConfigCmd {
@@ -94,7 +97,7 @@ fn check_config_status(config_id: Option<String>) -> Result<()> {
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
-        
+
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             return Err(eyre::eyre!(
                 "Config ID '{}' is not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
@@ -103,7 +106,7 @@ fn check_config_status(config_id: Option<String>) -> Result<()> {
                 STAGING_DEFAULT_CONFIG_ID
             ));
         }
-        
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
@@ -164,7 +167,7 @@ fn download_small_artifact(
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
-        
+
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             return Err(eyre::eyre!(
                 "Config ID '{}' is not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
@@ -173,7 +176,7 @@ fn download_small_artifact(
                 STAGING_DEFAULT_CONFIG_ID
             ));
         }
-        
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
@@ -213,7 +216,7 @@ fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
-        
+
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             return Err(eyre::eyre!(
                 "Config ID '{}' is not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
@@ -222,7 +225,7 @@ fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<
                 STAGING_DEFAULT_CONFIG_ID
             ));
         }
-        
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(

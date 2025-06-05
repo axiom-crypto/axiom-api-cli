@@ -6,7 +6,10 @@ use openvm_sdk::types::EvmProof;
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID};
+use crate::config::{
+    get_api_key, get_config_id, load_config, API_KEY_HEADER, DEFAULT_CONFIG_ID,
+    STAGING_DEFAULT_CONFIG_ID,
+};
 
 #[derive(Args, Debug)]
 pub struct VerifyCmd {
@@ -95,7 +98,7 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
-        
+
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             return Err(eyre::eyre!(
                 "Config ID '{}' is not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
@@ -104,7 +107,7 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
                 STAGING_DEFAULT_CONFIG_ID
             ));
         }
-        
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(

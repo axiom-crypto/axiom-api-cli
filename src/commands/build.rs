@@ -15,7 +15,10 @@ use reqwest::blocking::Client;
 use tar::Builder;
 use walkdir;
 
-use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID};
+use crate::config::{
+    get_api_key, get_config_id, load_config, API_KEY_HEADER, DEFAULT_CONFIG_ID,
+    STAGING_DEFAULT_CONFIG_ID,
+};
 
 const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 
@@ -550,7 +553,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
-        
+
         if error_text.contains("Config not found") || error_text.contains("Invalid config") {
             return Err(eyre::eyre!(
                 "Config not supported by the API.\nTry using one of the default configs: {} (production) or {} (staging).\nRun 'cargo axiom init' to reset to defaults.",
@@ -558,7 +561,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
                 STAGING_DEFAULT_CONFIG_ID
             ));
         }
-        
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(

@@ -80,14 +80,14 @@ pub fn set_config_id(id: String) -> Result<()> {
 pub fn validate_config_id(config_id: &str, api_url: &str) -> Result<()> {
     let api_key = get_api_key()?;
     let url = format!("{}/configs/{}", api_url, config_id);
-    
+
     let client = Client::new();
     let response = client
         .get(&url)
         .header(API_KEY_HEADER, &api_key)
         .send()
         .context("Failed to validate config ID")?;
-    
+
     if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text().unwrap_or_default();
@@ -101,9 +101,12 @@ pub fn validate_config_id(config_id: &str, api_url: &str) -> Result<()> {
         }
         return Err(eyre::eyre!("Client error ({}): {}", status, error_text));
     } else if !response.status().is_success() {
-        return Err(eyre::eyre!("Failed to validate config ID: {}", response.status()));
+        return Err(eyre::eyre!(
+            "Failed to validate config ID: {}",
+            response.status()
+        ));
     }
-    
+
     Ok(())
 }
 
