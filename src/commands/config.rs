@@ -94,6 +94,9 @@ fn check_config_status(config_id: Option<String>) -> Result<()> {
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
+
+        crate::config::handle_config_error(&error_text, &config_id)?;
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
@@ -154,6 +157,9 @@ fn download_small_artifact(
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
+
+        crate::config::handle_config_error(&error_text, &config_id)?;
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
@@ -193,6 +199,9 @@ fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
+
+        crate::config::handle_config_error(&error_text, &config_id)?;
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(

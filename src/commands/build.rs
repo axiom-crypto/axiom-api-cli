@@ -550,6 +550,9 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
+
+        crate::config::handle_config_error(&error_text, "")?;
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(

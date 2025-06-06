@@ -76,6 +76,28 @@ pub fn set_config_id(id: String) -> Result<()> {
     save_config(&config)
 }
 
+pub fn handle_config_error(error_text: &str, config_id: &str) -> Result<()> {
+    if error_text.contains("Config not found") || error_text.contains("Invalid config") {
+        let config = load_config()?;
+        let is_staging = config.api_url.contains("staging");
+
+        if is_staging {
+            return Err(eyre::eyre!(
+                "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
+                config_id,
+                STAGING_DEFAULT_CONFIG_ID
+            ));
+        } else {
+            return Err(eyre::eyre!(
+                "Config ID '{}' is not supported by the API.\nTry using the default production config: {}.\nRun 'cargo axiom init' to reset to defaults.",
+                config_id,
+                DEFAULT_CONFIG_ID
+            ));
+        }
+    }
+    Ok(())
+}
+
 pub fn get_config_id(args_config_id: Option<String>, config: &Config) -> Result<String> {
     if let Some(id) = args_config_id {
         set_config_id(id.clone())?;

@@ -214,6 +214,9 @@ fn execute(args: ProveArgs) -> Result<()> {
         );
     } else if response.status().is_client_error() {
         let error_text = response.text()?;
+
+        crate::config::handle_config_error(&error_text, "")?;
+
         println!("Cannot generate proof for this program: {}", error_text);
     } else {
         let error_text = response.text()?;

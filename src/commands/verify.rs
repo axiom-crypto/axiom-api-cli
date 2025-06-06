@@ -95,6 +95,9 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
+
+        crate::config::handle_config_error(&error_text, &config_id)?;
+
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
         Err(eyre::eyre!(
