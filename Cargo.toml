@@ -7,12 +7,12 @@ authors = ["Axiom Team"]
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
-dialoguer = { version = "0.10.4", default-features = false }
+dialoguer = { version = "0.10.4" }
 dirs = "5.0.1"
-reqwest = { version = "0.11", features = ["json", "blocking", "multipart"], default-features = false }
+reqwest = { version = "0.11", features = ["json", "blocking", "multipart"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tar = { version = "0.4", default-features = false }
+tar = { version = "0.4" }
 flate2 = "1.0"
 tokio = { version = "1", features = ["full"] }
 walkdir = "2.3"
