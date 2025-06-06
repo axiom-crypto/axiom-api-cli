@@ -15,7 +15,9 @@ use reqwest::blocking::Client;
 use tar::Builder;
 use walkdir;
 
-use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
+use crate::config::{
+    get_api_key, get_config_id, load_config, validate_initialization, API_KEY_HEADER,
+};
 
 const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 
@@ -76,6 +78,7 @@ impl BuildCmd {
 }
 
 fn list_builds() -> Result<()> {
+    validate_initialization()?;
     let config = load_config()?;
     let api_key = get_api_key()?;
     let url = format!("{}/programs", config.api_url);
@@ -354,6 +357,7 @@ impl<R: Read> Read for ProgressReader<R> {
 }
 
 pub fn execute(args: BuildArgs) -> Result<()> {
+    validate_initialization()?;
     let config = load_config()?;
 
     // Check if we're in a Rust project
@@ -560,6 +564,7 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 }
 
 fn check_build_status(program_id: String) -> Result<()> {
+    validate_initialization()?;
     // Load configuration
     let config = load_config()?;
     let url = format!("{}/programs/{}", config.api_url, program_id);
@@ -593,6 +598,7 @@ fn check_build_status(program_id: String) -> Result<()> {
 }
 
 fn download_program(program_id: String, program_type: String) -> Result<()> {
+    validate_initialization()?;
     // Load configuration
     let config = load_config()?;
     let url = format!(
@@ -649,6 +655,7 @@ fn download_program(program_id: String, program_type: String) -> Result<()> {
 }
 
 fn download_logs(program_id: String) -> Result<()> {
+    validate_initialization()?;
     let config = load_config()?;
     let api_key = get_api_key()?;
     let url = format!("{}/programs/{}/logs", config.api_url, program_id);
