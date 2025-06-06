@@ -5,10 +5,7 @@ use eyre::{Context, Result};
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-use crate::config::{
-    get_api_key, get_config_id, load_config, API_KEY_HEADER, DEFAULT_CONFIG_ID,
-    STAGING_DEFAULT_CONFIG_ID,
-};
+use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
 #[derive(Args, Debug)]
 pub struct ConfigCmd {
@@ -98,23 +95,7 @@ fn check_config_status(config_id: Option<String>) -> Result<()> {
         let status = response.status();
         let error_text = response.text()?;
 
-        if error_text.contains("Config not found") || error_text.contains("Invalid config") {
-            let is_staging = config.api_url.contains("staging");
-
-            if is_staging {
-                return Err(eyre::eyre!(
-                    "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
-                    config_id,
-                    STAGING_DEFAULT_CONFIG_ID
-                ));
-            } else {
-                return Err(eyre::eyre!(
-                    "Config ID '{}' is not supported by the API.\nTry using the default production config: {}.\nRun 'cargo axiom init' to reset to defaults.",
-                    config_id,
-                    DEFAULT_CONFIG_ID
-                ));
-            }
-        }
+        crate::config::handle_config_error(&error_text, &config_id)?;
 
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
@@ -177,24 +158,7 @@ fn download_small_artifact(
         let status = response.status();
         let error_text = response.text()?;
 
-        if error_text.contains("Config not found") || error_text.contains("Invalid config") {
-            let config = load_config()?;
-            let is_staging = config.api_url.contains("staging");
-
-            if is_staging {
-                return Err(eyre::eyre!(
-                    "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
-                    config_id,
-                    STAGING_DEFAULT_CONFIG_ID
-                ));
-            } else {
-                return Err(eyre::eyre!(
-                    "Config ID '{}' is not supported by the API.\nTry using the default production config: {}.\nRun 'cargo axiom init' to reset to defaults.",
-                    config_id,
-                    DEFAULT_CONFIG_ID
-                ));
-            }
-        }
+        crate::config::handle_config_error(&error_text, &config_id)?;
 
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {
@@ -236,24 +200,7 @@ fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<
         let status = response.status();
         let error_text = response.text()?;
 
-        if error_text.contains("Config not found") || error_text.contains("Invalid config") {
-            let config = load_config()?;
-            let is_staging = config.api_url.contains("staging");
-
-            if is_staging {
-                return Err(eyre::eyre!(
-                    "Config ID '{}' is not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
-                    config_id,
-                    STAGING_DEFAULT_CONFIG_ID
-                ));
-            } else {
-                return Err(eyre::eyre!(
-                    "Config ID '{}' is not supported by the API.\nTry using the default production config: {}.\nRun 'cargo axiom init' to reset to defaults.",
-                    config_id,
-                    DEFAULT_CONFIG_ID
-                ));
-            }
-        }
+        crate::config::handle_config_error(&error_text, &config_id)?;
 
         Err(eyre::eyre!("Client error ({}): {}", status, error_text))
     } else {

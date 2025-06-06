@@ -7,10 +7,7 @@ use eyre::{eyre, Context, Result};
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 
-use crate::{
-    config,
-    config::{API_KEY_HEADER, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID},
-};
+use crate::{config, config::API_KEY_HEADER};
 
 #[derive(Args, Debug)]
 pub struct ProveCmd {
@@ -218,22 +215,7 @@ fn execute(args: ProveArgs) -> Result<()> {
     } else if response.status().is_client_error() {
         let error_text = response.text()?;
 
-        if error_text.contains("Config not found") || error_text.contains("Invalid config") {
-            let config = config::load_config()?;
-            let is_staging = config.api_url.contains("staging");
-
-            if is_staging {
-                return Err(eyre::eyre!(
-                    "Config not supported by the API.\nTry using the default staging config: {}.\nRun 'cargo axiom init --staging' to reset to defaults.",
-                    STAGING_DEFAULT_CONFIG_ID
-                ));
-            } else {
-                return Err(eyre::eyre!(
-                    "Config not supported by the API.\nTry using the default production config: {}.\nRun 'cargo axiom init' to reset to defaults.",
-                    DEFAULT_CONFIG_ID
-                ));
-            }
-        }
+        crate::config::handle_config_error(&error_text, "")?;
 
         println!("Cannot generate proof for this program: {}", error_text);
     } else {
