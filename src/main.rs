@@ -6,7 +6,7 @@ use dotenv::dotenv;
 mod commands;
 mod config;
 
-use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, VerifyCmd, VersionCmd};
+use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, RegisterCmd, VerifyCmd, VersionCmd};
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -28,8 +28,9 @@ struct AxiomArgs {
 
 #[derive(Subcommand)]
 enum AxiomCommands {
-    /// Initialize Axiom configuration
+    /// Initialize an Axiom project with OpenVM integration
     Init(InitCmd),
+    Register(RegisterCmd),
     /// Build the project on Axiom Proving Service
     Build(BuildCmd),
     /// Generate a proof using the Axiom Proving Service
@@ -50,6 +51,7 @@ async fn main() {
     let result = match args.command {
         AxiomCommands::Build(cmd) => cmd.run(),
         AxiomCommands::Init(cmd) => cmd.run(),
+        AxiomCommands::Register(cmd) => cmd.run(),
         AxiomCommands::Prove(cmd) => cmd.run(),
         AxiomCommands::Config(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
