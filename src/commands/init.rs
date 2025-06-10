@@ -2,7 +2,6 @@ use clap::Parser;
 use eyre::{Context, Result};
 
 use crate::{
-    commands::build::find_git_root,
     config,
     config::{load_config_without_validation, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID},
 };
