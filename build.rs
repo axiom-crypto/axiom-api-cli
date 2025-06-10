@@ -1,7 +1,7 @@
 use std::process::Command;
 
 fn main() {
-    let output = Command::new("git").args(&["rev-parse", "HEAD"]).output();
+    let output = Command::new("git").args(["rev-parse", "HEAD"]).output();
 
     let git_hash = match output {
         Ok(output) if output.status.success() => {
