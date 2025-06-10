@@ -23,15 +23,15 @@ fn main() {
     for package in &metadata.packages {
         if package.name == "openvm-sdk" {
             if let Some(source) = &package.source {
-                if source.starts_with("git+") {
-                    if let Some(tag_start) = source.find("tag=") {
-                        let tag_part = &source[tag_start + 4..];
+                if source.repr.starts_with("git+") {
+                    if let Some(tag_start) = source.repr.find("tag=") {
+                        let tag_part = &source.repr[tag_start + 4..];
                         if let Some(tag_end) = tag_part.find('#') {
                             openvm_version = tag_part[..tag_end].to_string();
                         }
                     }
-                    if let Some(hash_start) = source.find('#') {
-                        openvm_commit = source[hash_start + 1..].to_string();
+                    if let Some(hash_start) = source.repr.find('#') {
+                        openvm_commit = source.repr[hash_start + 1..].to_string();
                     }
                 }
             }
