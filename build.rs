@@ -23,7 +23,7 @@ fn main() {
         if package.name == "openvm-sdk" {
             if let Some(source) = &package.source {
                 eprintln!("Found openvm-sdk source: {}", source.repr);
-                
+
                 if source.repr.starts_with("git+") {
                     if let Some(tag_start) = source.repr.find("tag=") {
                         let tag_part = &source.repr[tag_start + 4..];
@@ -43,7 +43,7 @@ fn main() {
             break;
         }
     }
-    
+
     eprintln!("Extracted OpenVM version: {}", openvm_version);
     eprintln!("Extracted OpenVM commit: {}", openvm_commit);
 
