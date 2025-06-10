@@ -146,7 +146,7 @@ fn is_rust_project() -> bool {
     Path::new("Cargo.toml").exists()
 }
 
-fn find_git_root() -> Result<std::path::PathBuf> {
+pub fn find_git_root() -> Result<std::path::PathBuf> {
     // Start from the current directory
     let mut current_dir = std::env::current_dir()?;
 
