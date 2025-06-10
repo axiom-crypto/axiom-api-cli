@@ -16,8 +16,8 @@ impl VersionCmd {
         println!("cargo-axiom v{} ({})", version, commit);
 
         if self.verbose {
-            let openvm_commit = "51f07d50d20174b23091f48e25d9ea421b4e2787";
-            let openvm_version = "1.2.1-rc.0";
+            let openvm_version = env!("OPENVM_VERSION");
+            let openvm_commit = env!("OPENVM_COMMIT");
             println!(
                 "OpenVM compatibility: version {} ({})",
                 openvm_version, openvm_commit
