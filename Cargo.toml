@@ -24,4 +24,6 @@ openvm-build = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.2.1
 comfy-table = "6.1.4"
 dotenv = "0.15.0"
 rustc_version = "0.4.0"
+
+[build-dependencies]
 cargo_metadata = "0.18"
