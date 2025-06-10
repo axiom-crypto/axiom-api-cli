@@ -6,7 +6,7 @@ use dotenv::dotenv;
 mod commands;
 mod config;
 
-use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, VerifyCmd};
+use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, VerifyCmd, VersionCmd};
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -38,6 +38,7 @@ enum AxiomCommands {
     Config(ConfigCmd),
     /// Verify a proof using the Axiom Verifying Service
     Verify(VerifyCmd),
+    Version(VersionCmd),
 }
 
 #[tokio::main]
@@ -52,6 +53,7 @@ async fn main() {
         AxiomCommands::Prove(cmd) => cmd.run(),
         AxiomCommands::Config(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
+        AxiomCommands::Version(cmd) => cmd.run(),
     };
 
     if let Err(err) = result {
