@@ -86,7 +86,7 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
     // Handle the response
     if response.status().is_success() {
         let response_json: Value = response.json()?;
-        println!("Verification request sent: {}", response_json);
+        println!("Verification request sent: {}", response_json["id"]);
         println!(
             "To check the verification status, run: cargo axiom verify status --verify-id {}",
             response_json["id"]
