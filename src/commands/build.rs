@@ -125,6 +125,10 @@ pub struct BuildArgs {
     #[clap(long, value_name = "ID")]
     config_id: Option<String>,
 
+    /// The binary to build, if there are multiple binaries in the project
+    #[clap(long, value_name = "BIN")]
+    bin: Option<String>,
+
     /// Keep the tar archive after uploading
     #[clap(long)]
     keep_tarball: Option<bool>,
@@ -408,6 +412,74 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         println!("Using cargo workspace root: {}", cargo_root_path);
     }
 
+    // Check for bin flag
+    let metadata = cargo_metadata::MetadataCommand::new().exec()?;
+    let current_dir = std::env::current_dir()?;
+    let mut pkgs_in_current_dir: Vec<_> = metadata
+        .workspace_packages()
+        .into_iter()
+        .filter(|p| current_dir.starts_with(p.manifest_path.parent().unwrap()))
+        .collect();
+
+    let packages_to_consider = if pkgs_in_current_dir.is_empty() {
+        if current_dir.as_path() == metadata.workspace_root.as_std_path() {
+            metadata.workspace_packages()
+        } else {
+            return Err(eyre::eyre!("Could not determine which Cargo package to build. Please run this command from a package directory or the workspace root."));
+        }
+    } else {
+        pkgs_in_current_dir.sort_by_key(|p| p.manifest_path.as_str().len());
+        vec![pkgs_in_current_dir.pop().unwrap()]
+    };
+
+    let binaries: Vec<_> = packages_to_consider
+        .iter()
+        .flat_map(|p| p.targets.iter().filter(|t| t.is_bin()))
+        .collect();
+
+    let bin_to_build = if binaries.len() > 1 {
+        if let Some(bin_name) = &args.bin {
+            if !binaries.iter().any(|b| &b.name == bin_name) {
+                return Err(eyre::eyre!(
+                    "Binary '{}' not found. Available binaries: {}",
+                    bin_name,
+                    binaries
+                        .iter()
+                        .map(|b| b.name.as_str())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
+            Some(bin_name.clone())
+        } else {
+            return Err(eyre::eyre!(
+                "Multiple binaries found. Please specify which one to build with the --bin flag. Available binaries: {}",
+                binaries
+                    .iter()
+                    .map(|b| b.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+    } else if let Some(bin) = binaries.first() {
+        args.bin
+            .as_ref()
+            .map_or(Ok(Some(bin.name.clone())), |user_bin| {
+                if &bin.name != user_bin {
+                    Err(eyre::eyre!(
+                        "Binary '{}' not found. Available binary: {}",
+                        user_bin,
+                        bin.name
+                    ))
+                } else {
+                    Ok(Some(user_bin.clone()))
+                }
+            })?
+    } else {
+        None
+    };
+    println!("bin_to_build: {:?}", bin_to_build);
+
     // Parse exclude patterns
     let exclude_patterns = args
         .exclude_files
@@ -455,10 +527,13 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     } else {
         cargo_root_path
     };
-    let url = format!(
+    let mut url = format!(
         "{}/programs?config_id={}&program_path={}&cargo_root_path={}",
         config.api_url, config_id, program_path_query, cargo_root_query
     );
+    if let Some(bin) = bin_to_build {
+        url.push_str(&format!("&bin_name={}", bin));
+    }
 
     println!("Sending build request for config ID: {}", config_id);
 
