@@ -86,10 +86,11 @@ fn verify_proof(config_id: Option<String>, proof_path: PathBuf) -> Result<()> {
     // Handle the response
     if response.status().is_success() {
         let response_json: Value = response.json()?;
-        println!("Verification request sent: {}", response_json["id"]);
+        let verify_id = response_json["id"].as_str().unwrap();
+        println!("Verification request sent: {}", verify_id);
         println!(
             "To check the verification status, run: cargo axiom verify status --verify-id {}",
-            response_json["id"]
+            verify_id
         );
         Ok(())
     } else if response.status().is_client_error() {
