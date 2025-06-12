@@ -41,7 +41,7 @@ pub struct BuildStatus {
     pub name: String,
     pub created_by: String,
     pub last_active_at: String,
-    pub launched_at: String,
+    pub launched_at: Option<String>,
     pub terminated_at: Option<String>,
     pub program_hash: String,
     pub openvm_config: String,

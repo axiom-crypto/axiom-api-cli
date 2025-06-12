@@ -36,7 +36,7 @@ pub struct ProofStatus {
     pub state: String,
     pub proof_type: String,
     pub error_message: Option<String>,
-    pub launched_at: String,
+    pub launched_at: Option<String>,
     pub terminated_at: Option<String>,
     pub created_by: String,
     pub cells_used: u64,
