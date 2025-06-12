@@ -15,3 +15,6 @@ tokio = { version = "1", features = ["full"] }
 eyre = "0.6.12"
 comfy-table = { version = "6.1.4", default-features = false }
 dotenv = "0.15.0"
+
+[build-dependencies]
+cargo_metadata = "0.18"
