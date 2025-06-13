@@ -35,7 +35,7 @@ pub fn get_config_path() -> PathBuf {
     get_axiom_dir().unwrap().join("config.json")
 }
 
-pub fn load_config() -> Result<Config> {
+pub fn load_config_without_validation() -> Result<Config> {
     let config_path = get_config_path();
 
     if !config_path.exists() {
@@ -46,6 +46,16 @@ pub fn load_config() -> Result<Config> {
     let config_str = std::fs::read_to_string(config_path).context("Failed to read config file")?;
 
     serde_json::from_str(&config_str).context("Failed to parse config file")
+}
+
+pub fn load_config() -> Result<Config> {
+    let config = load_config_without_validation()?;
+    if config.api_key.is_none() {
+        return Err(eyre::eyre!(
+            "CLI not initialized. Run 'cargo axiom init' first."
+        ));
+    }
+    Ok(config)
 }
 
 pub fn save_config(config: &Config) -> Result<()> {
@@ -63,15 +73,6 @@ pub fn save_config(config: &Config) -> Result<()> {
     Ok(())
 }
 
-pub fn validate_initialization() -> Result<()> {
-    let config = load_config()?;
-    if config.api_key.is_none() {
-        return Err(eyre::eyre!(
-            "CLI not initialized. Run 'cargo axiom init' first."
-        ));
-    }
-    Ok(())
-}
 
 pub fn get_api_key() -> Result<String> {
     let config = load_config()?;

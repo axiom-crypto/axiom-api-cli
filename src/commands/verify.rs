@@ -7,7 +7,7 @@ use reqwest::blocking::Client;
 use serde_json::Value;
 
 use crate::config::{
-    get_api_key, get_config_id, load_config, validate_initialization, API_KEY_HEADER,
+    get_api_key, get_config_id, load_config, API_KEY_HEADER,
 };
 
 #[derive(Args, Debug)]
@@ -36,8 +36,6 @@ enum VerifySubcommand {
 
 impl VerifyCmd {
     pub fn run(self) -> Result<()> {
-        validate_initialization()?;
-
         match self.command {
             Some(VerifySubcommand::Status { verify_id }) => check_verify_status(verify_id),
             None => {

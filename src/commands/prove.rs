@@ -91,8 +91,6 @@ fn validate_input_json(json: &serde_json::Value) -> Result<()> {
 
 impl ProveCmd {
     pub fn run(self) -> Result<()> {
-        config::validate_initialization()?;
-
         match self.command {
             Some(ProveSubcommand::Status { proof_id }) => check_proof_status(proof_id),
             Some(ProveSubcommand::Download {

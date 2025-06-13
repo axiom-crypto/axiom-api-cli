@@ -16,7 +16,7 @@ use tar::Builder;
 use walkdir;
 
 use crate::config::{
-    get_api_key, get_config_id, load_config, validate_initialization, API_KEY_HEADER,
+    get_api_key, get_config_id, load_config, API_KEY_HEADER,
 };
 
 const MAX_PROGRAM_SIZE_MB: u64 = 1024;
@@ -64,8 +64,6 @@ enum BuildSubcommand {
 
 impl BuildCmd {
     pub fn run(self) -> Result<()> {
-        validate_initialization()?;
-
         match self.command {
             Some(BuildSubcommand::Status { program_id }) => check_build_status(program_id),
             Some(BuildSubcommand::List) => list_builds(),
