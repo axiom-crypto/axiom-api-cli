@@ -64,6 +64,8 @@ enum BuildSubcommand {
 
 impl BuildCmd {
     pub fn run(self) -> Result<()> {
+        validate_initialization()?;
+
         match self.command {
             Some(BuildSubcommand::Status { program_id }) => check_build_status(program_id),
             Some(BuildSubcommand::List) => list_builds(),
@@ -78,7 +80,6 @@ impl BuildCmd {
 }
 
 fn list_builds() -> Result<()> {
-    validate_initialization()?;
     let config = load_config()?;
     let api_key = get_api_key()?;
     let url = format!("{}/programs", config.api_url);
@@ -343,7 +344,6 @@ impl<R: Read> Read for ProgressReader<R> {
 }
 
 pub fn execute(args: BuildArgs) -> Result<()> {
-    validate_initialization()?;
     let config = load_config()?;
 
     // Check if we're in a Rust project
@@ -538,7 +538,6 @@ pub fn execute(args: BuildArgs) -> Result<()> {
 }
 
 fn check_build_status(program_id: String) -> Result<()> {
-    validate_initialization()?;
     // Load configuration
     let config = load_config()?;
     let url = format!("{}/programs/{}", config.api_url, program_id);
@@ -572,7 +571,6 @@ fn check_build_status(program_id: String) -> Result<()> {
 }
 
 fn download_program(program_id: String, program_type: String) -> Result<()> {
-    validate_initialization()?;
     // Load configuration
     let config = load_config()?;
     let url = format!(
@@ -629,7 +627,6 @@ fn download_program(program_id: String, program_type: String) -> Result<()> {
 }
 
 fn download_logs(program_id: String) -> Result<()> {
-    validate_initialization()?;
     let config = load_config()?;
     let api_key = get_api_key()?;
     let url = format!("{}/programs/{}/logs", config.api_url, program_id);

@@ -53,6 +53,8 @@ enum ConfigSubcommand {
 
 impl ConfigCmd {
     pub fn run(self) -> Result<()> {
+        validate_initialization()?;
+
         match self.command {
             Some(ConfigSubcommand::Status { config_id }) => check_config_status(config_id),
             Some(ConfigSubcommand::Download {
@@ -74,7 +76,6 @@ impl ConfigCmd {
 }
 
 fn check_config_status(config_id: Option<String>) -> Result<()> {
-    validate_initialization()?;
     let config = load_config()?;
     let config_id = get_config_id(config_id, &config)?;
     let url = format!("{}/configs/{}", config.api_url, config_id);
@@ -111,7 +112,6 @@ fn download_small_artifact(
     key_type: String,
     output: Option<PathBuf>,
 ) -> Result<()> {
-    validate_initialization()?;
     // Load configuration
     let config = load_config()?;
     let config_id = get_config_id(config_id, &config)?;
@@ -168,7 +168,6 @@ fn download_small_artifact(
 }
 
 fn download_key_artifact(config_id: Option<String>, key_type: String) -> Result<()> {
-    validate_initialization()?;
     // Load configuration
     let config = load_config()?;
     let config_id = get_config_id(config_id, &config)?;
