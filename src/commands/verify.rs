@@ -6,9 +6,7 @@ use openvm_sdk::types::EvmProof;
 use reqwest::blocking::Client;
 use serde_json::Value;
 
-use crate::config::{
-    get_api_key, get_config_id, load_config, API_KEY_HEADER,
-};
+use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
 #[derive(Args, Debug)]
 pub struct VerifyCmd {

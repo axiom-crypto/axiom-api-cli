@@ -15,9 +15,7 @@ use reqwest::blocking::Client;
 use tar::Builder;
 use walkdir;
 
-use crate::config::{
-    get_api_key, get_config_id, load_config, API_KEY_HEADER,
-};
+use crate::config::{get_api_key, get_config_id, load_config, API_KEY_HEADER};
 
 const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 

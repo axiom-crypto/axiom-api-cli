@@ -73,7 +73,6 @@ pub fn save_config(config: &Config) -> Result<()> {
     Ok(())
 }
 
-
 pub fn get_api_key() -> Result<String> {
     let config = load_config()?;
     config

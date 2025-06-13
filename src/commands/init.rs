@@ -62,7 +62,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
         api_key: None,
         config_id: None,
     });
-    
+
     config.api_key = Some(api_key.unwrap());
     config.api_url = api_url;
     config.config_id = if args.staging {
