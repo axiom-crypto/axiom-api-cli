@@ -122,8 +122,12 @@ fn list_builds() -> Result<()> {
 #[derive(Debug, Parser)]
 pub struct BuildArgs {
     /// The configuration ID to use for the build
-    #[clap(long, value_name = "ID")]
+    #[clap(long, value_name = "ID", conflicts_with = "config")]
     config_id: Option<String>,
+
+    /// Path to a local configuration file.
+    #[clap(long, value_name = "PATH")]
+    config: Option<String>,
 
     /// The binary to build, if there are multiple binaries in the project
     #[clap(long, value_name = "BIN")]
@@ -380,7 +384,11 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     }
 
     // Get the config_id from args, return error if not provided
-    let config_id = get_config_id(args.config_id, &config)?;
+    let config_id = if args.config.is_none() {
+        Some(get_config_id(args.config_id, &config)?)
+    } else {
+        None
+    };
 
     // Get the git root directory
     let git_root = find_git_root().context("Failed to find git root directory")?;
@@ -528,14 +536,24 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         cargo_root_path
     };
     let mut url = format!(
-        "{}/programs?config_id={}&program_path={}&cargo_root_path={}",
-        config.api_url, config_id, program_path_query, cargo_root_query
+        "{}/programs?program_path={}&cargo_root_path={}",
+        config.api_url, program_path_query, cargo_root_query
     );
+    if let Some(id) = &config_id {
+        url.push_str(&format!("&config_id={}", id));
+    }
     if let Some(bin) = bin_to_build {
         url.push_str(&format!("&bin_name={}", bin));
     }
 
-    println!("Sending build request for config ID: {}", config_id);
+    if let Some(id) = &config_id {
+        println!("Sending build request for config ID: {}", id);
+    } else {
+        println!(
+            "Sending build request with config file: {}",
+            args.config.as_ref().unwrap()
+        );
+    }
 
     // Make the POST request with multipart form data
     let client = Client::builder()
@@ -596,7 +614,22 @@ pub fn execute(args: BuildArgs) -> Result<()> {
         .file_name("program.tar.gz")
         .mime_str("application/gzip")?;
 
-    let form = reqwest::blocking::multipart::Form::new().part("program", part);
+    let mut form = reqwest::blocking::multipart::Form::new().part("program", part);
+
+    if let Some(config_path_str) = &args.config {
+        let config_path = Path::new(config_path_str);
+        let config_file_content = std::fs::read(config_path)
+            .with_context(|| format!("Failed to read config file at: {}", config_path.display()))?;
+        let file_name = config_path
+            .file_name()
+            .ok_or_else(|| eyre::eyre!("Invalid config file path"))?
+            .to_string_lossy()
+            .to_string();
+        let config_part = reqwest::blocking::multipart::Part::bytes(config_file_content)
+            .file_name(file_name)
+            .mime_str("application/octet-stream")?;
+        form = form.part("config", config_part);
+    }
 
     let response = client
         .post(url)
