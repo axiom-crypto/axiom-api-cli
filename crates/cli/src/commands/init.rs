@@ -1,10 +1,8 @@
+use axiom_sdk::{
+    load_config_without_validation, AxiomConfig, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID,
+};
 use clap::Parser;
 use eyre::Result;
-
-use crate::{
-    config,
-    config::{load_config_without_validation, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID},
-};
 
 const STAGING_API_URL: &str = "https://api.staging.app.axiom.xyz/v1";
 const PROD_API_URL: &str = "https://api.axiom.xyz/v1";
@@ -57,21 +55,17 @@ pub fn execute(args: InitArgs) -> Result<()> {
         std::process::exit(1);
     }
 
-    let mut config = load_config_without_validation().unwrap_or_else(|_| config::Config {
-        api_url: api_url.clone(),
-        api_key: None,
-        config_id: None,
-    });
-
-    config.api_key = Some(api_key.unwrap());
-    config.api_url = api_url;
-    config.config_id = if args.staging {
+    // Create and save the configuration
+    let config_id = if args.staging {
         Some(STAGING_DEFAULT_CONFIG_ID.to_string())
     } else {
         Some(DEFAULT_CONFIG_ID.to_string())
     };
 
-    config::save_config(&config)?;
+    let config = load_config_without_validation()
+        .unwrap_or_else(|_| AxiomConfig::new(api_url, api_key, config_id));
+
+    axiom_sdk::save_config(&config)?;
 
     println!("Axiom configuration initialized successfully!");
 
