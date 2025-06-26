@@ -1,4 +1,7 @@
-use axiom_sdk::{build::BuildSdk, AxiomSdk};
+use axiom_sdk::{
+    build::{BuildSdk, ConfigSource},
+    AxiomSdk,
+};
 use clap::{Parser, Subcommand};
 use comfy_table;
 use eyre::Result;
@@ -45,8 +48,12 @@ enum BuildSubcommand {
 #[derive(Debug, Parser)]
 pub struct BuildArgs {
     /// The configuration ID to use for the build
-    #[clap(long, value_name = "ID")]
+    #[clap(long, value_name = "ID", conflicts_with = "config")]
     config_id: Option<String>,
+
+    /// Path to a local configuration file
+    #[clap(long, value_name = "PATH")]
+    config: Option<String>,
 
     /// The binary to build, if there are multiple binaries in the project
     #[clap(long, value_name = "BIN")]
@@ -110,8 +117,13 @@ impl BuildCmd {
             Some(BuildSubcommand::Logs { program_id }) => sdk.download_build_logs(&program_id),
             None => {
                 let program_dir = std::env::current_dir()?;
+                let config_source = match (self.build_args.config_id, self.build_args.config) {
+                    (Some(config_id), _) => Some(ConfigSource::ConfigId(config_id)),
+                    (_, Some(config)) => Some(ConfigSource::ConfigPath(config)),
+                    (None, None) => None,
+                };
                 let args = axiom_sdk::build::BuildArgs {
-                    config_id: self.build_args.config_id,
+                    config_source,
                     bin: self.build_args.bin,
                     keep_tarball: self.build_args.keep_tarball,
                     exclude_files: self.build_args.exclude_files,

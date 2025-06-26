@@ -53,7 +53,7 @@ pub struct BuildStatus {
 #[derive(Debug)]
 pub struct BuildArgs {
     /// The configuration ID to use for the build
-    pub config_id: Option<String>,
+    pub config_source: Option<ConfigSource>,
     /// The binary to build, if there are multiple binaries in the project
     pub bin: Option<String>,
     /// Keep the tar archive after uploading
@@ -62,6 +62,14 @@ pub struct BuildArgs {
     pub exclude_files: Option<String>,
     /// Comma-separated list of directories to include even if not tracked by git
     pub include_dirs: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConfigSource {
+    /// The configuration ID to use for the build
+    ConfigId(String),
+    /// Path to a local configuration file
+    ConfigPath(String),
 }
 
 struct ProgressReader<R> {
@@ -278,7 +286,11 @@ impl BuildSdk for AxiomSdk {
         }
 
         // Get the config_id from args, return error if not provided
-        let config_id = get_config_id(args.config_id.as_deref(), &self.config)?;
+        let config_id = if let Some(ConfigSource::ConfigId(id)) = args.config_source.clone() {
+            Some(get_config_id(Some(id.as_str()), &self.config)?)
+        } else {
+            None
+        };
 
         // Get the git root directory
         let git_root =
@@ -429,14 +441,23 @@ impl BuildSdk for AxiomSdk {
             cargo_root_path
         };
         let mut url = format!(
-            "{}/programs?config_id={}&program_path={}&cargo_root_path={}",
-            self.config.api_url, config_id, program_path_query, cargo_root_query
+            "{}/programs?program_path={}&cargo_root_path={}",
+            self.config.api_url, program_path_query, cargo_root_query
         );
+        if let Some(id) = &config_id {
+            url.push_str(&format!("&config_id={}", id));
+        }
         if let Some(bin) = bin_to_build {
             url.push_str(&format!("&bin_name={}", bin));
         }
 
-        println!("Sending build request for config ID: {}", config_id);
+        if let Some(id) = &config_id {
+            println!("Sending build request for config ID: {}", id);
+        } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
+            println!("Sending build request with config file: {}", path);
+        } else {
+            println!("Sending build request with default config");
+        }
 
         // Make the POST request with multipart form data
         let client = Client::builder()
@@ -501,7 +522,23 @@ impl BuildSdk for AxiomSdk {
             .file_name("program.tar.gz")
             .mime_str("application/gzip")?;
 
-        let form = reqwest::blocking::multipart::Form::new().part("program", part);
+        let mut form = reqwest::blocking::multipart::Form::new().part("program", part);
+
+        if let Some(ConfigSource::ConfigPath(config_path_str)) = args.config_source {
+            let config_path = Path::new(&config_path_str);
+            let config_file_content = std::fs::read(config_path).with_context(|| {
+                format!("Failed to read config file at: {}", config_path.display())
+            })?;
+            let file_name = config_path
+                .file_name()
+                .ok_or_else(|| eyre::eyre!("Invalid config file path"))?
+                .to_string_lossy()
+                .to_string();
+            let config_part = reqwest::blocking::multipart::Part::bytes(config_file_content)
+                .file_name(file_name)
+                .mime_str("application/octet-stream")?;
+            form = form.part("config", config_part);
+        }
 
         let response = client
             .post(url)
