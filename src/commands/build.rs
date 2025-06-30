@@ -129,6 +129,10 @@ pub struct BuildArgs {
     #[clap(long, value_name = "PATH")]
     config: Option<String>,
 
+    /// Internal Only: Force creating the config and triggering keygen.
+    #[clap(long)]
+    force_keygen: bool,
+
     /// The binary to build, if there are multiple binaries in the project
     #[clap(long, value_name = "BIN")]
     bin: Option<String>,
@@ -544,6 +548,9 @@ pub fn execute(args: BuildArgs) -> Result<()> {
     }
     if let Some(bin) = bin_to_build {
         url.push_str(&format!("&bin_name={}", bin));
+    }
+    if args.force_keygen {
+        url.push_str("&force_keygen=true");
     }
 
     if let Some(id) = &config_id {
