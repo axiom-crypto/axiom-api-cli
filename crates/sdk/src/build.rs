@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
 
-use crate::{get_config_id, AxiomSdk, API_KEY_HEADER};
+use crate::{AxiomSdk, API_KEY_HEADER};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 
@@ -285,11 +285,15 @@ impl BuildSdk for AxiomSdk {
             ));
         }
 
-        // Get the config_id from args, return error if not provided
-        let config_id = if let Some(ConfigSource::ConfigId(id)) = args.config_source.clone() {
-            Some(get_config_id(Some(id.as_str()), &self.config)?)
-        } else {
-            None
+        // Use config id if it was provided
+        let config_id = match &args.config_source {
+            // If config id was provided, use it
+            Some(ConfigSource::ConfigId(id)) => Some(id.to_string()),
+            // If config path was provided, do nothing
+            Some(ConfigSource::ConfigPath(_)) => None,
+            // If no config source was provided, use the config id from the
+            // config file (which could be None)
+            None => self.config.config_id.clone(),
         };
 
         // Get the git root directory

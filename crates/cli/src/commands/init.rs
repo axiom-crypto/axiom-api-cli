@@ -1,6 +1,4 @@
-use axiom_sdk::{
-    load_config_without_validation, AxiomConfig, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID,
-};
+use axiom_sdk::{AxiomConfig, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID};
 use clap::Parser;
 use eyre::Result;
 
@@ -22,7 +20,7 @@ impl InitCmd {
 
 #[derive(Debug, Parser)]
 pub struct InitArgs {
-    /// The API URL to use (defaults to https://api.staging.app.axiom.xyz)
+    /// The API URL to use (defaults to https://api.axiom.xyz/v1)
     #[clap(long, value_name = "URL")]
     api_url: Option<String>,
 
@@ -62,8 +60,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
         Some(DEFAULT_CONFIG_ID.to_string())
     };
 
-    let config = load_config_without_validation()
-        .unwrap_or_else(|_| AxiomConfig::new(api_url, api_key, config_id));
+    let config = AxiomConfig::new(api_url, api_key, config_id);
 
     axiom_sdk::save_config(&config)?;
 
