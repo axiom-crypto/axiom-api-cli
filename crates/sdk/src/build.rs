@@ -286,16 +286,14 @@ impl BuildSdk for AxiomSdk {
         }
 
         // Use config id if it was provided
-        let config_id = if let Some(ConfigSource::ConfigId(id)) = args.config_source.clone() {
-            Some(id.to_string())
-        }
-        // Otherwise check if there is a config id in the config file
-        else if let Some(id) = &self.config.config_id {
-            Some(id.to_string())
-        }
-        // Otherwise return an error
-         else {
-            None
+        let config_id = match &args.config_source {
+            // If config id was provided, use it
+            Some(ConfigSource::ConfigId(id)) => Some(id.to_string()),
+            // If config path was provided, do nothing
+            Some(ConfigSource::ConfigPath(_)) => None,
+            // If no config source was provided, use the config id from the
+            // config file (which could be None)
+            None => self.config.config_id.clone(),
         };
 
         // Get the git root directory
