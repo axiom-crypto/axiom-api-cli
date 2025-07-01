@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
 
-use crate::{get_config_id, AxiomSdk, API_KEY_HEADER};
+use crate::{AxiomSdk, API_KEY_HEADER};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 
@@ -285,10 +285,16 @@ impl BuildSdk for AxiomSdk {
             ));
         }
 
-        // Get the config_id from args, return error if not provided
+        // Use config id if it was provided
         let config_id = if let Some(ConfigSource::ConfigId(id)) = args.config_source.clone() {
-            Some(get_config_id(Some(id.as_str()), &self.config)?)
-        } else {
+            Some(id.to_string())
+        }
+        // Otherwise check if there is a config id in the config file
+        else if let Some(id) = &self.config.config_id {
+            Some(id.to_string())
+        }
+        // Otherwise return an error
+         else {
             None
         };
 
