@@ -4,7 +4,6 @@ use clap::{Args, Parser, Subcommand};
 use dotenv::dotenv;
 
 mod commands;
-mod config;
 
 use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, VerifyCmd, VersionCmd};
 
@@ -38,6 +37,7 @@ enum AxiomCommands {
     Config(ConfigCmd),
     /// Verify a proof using the Axiom Verifying Service
     Verify(VerifyCmd),
+    /// Display version information
     Version(VersionCmd),
 }
 

@@ -12,7 +12,7 @@
 
    ```bash
    git clone https://github.com/axiom-crypto/axiom-api-cli
-   cd axiom-api-cli
+   cd axiom-api-cli/crates/cli
    cargo install --locked --force --path .
    ```
 
