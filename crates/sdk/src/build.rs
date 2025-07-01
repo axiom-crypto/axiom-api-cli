@@ -62,6 +62,8 @@ pub struct BuildArgs {
     pub exclude_files: Option<String>,
     /// Comma-separated list of directories to include even if not tracked by git
     pub include_dirs: Option<String>,
+    /// Internal Only: Force creating the config and triggering keygen.
+    pub force_keygen: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -453,6 +455,9 @@ impl BuildSdk for AxiomSdk {
         }
         if let Some(bin) = bin_to_build {
             url.push_str(&format!("&bin_name={}", bin));
+        }
+        if args.force_keygen {
+            url.push_str("&force_keygen=true");
         }
 
         if let Some(id) = &config_id {
