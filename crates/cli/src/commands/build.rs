@@ -84,7 +84,10 @@ impl BuildCmd {
         match self.command {
             Some(BuildSubcommand::Status { program_id }) => {
                 let build_status = sdk.get_build_status(&program_id)?;
-                println!("Build status: {}", serde_json::to_string(&build_status).unwrap());
+                println!(
+                    "Build status: {}",
+                    serde_json::to_string(&build_status).unwrap()
+                );
                 Ok(())
             }
             Some(BuildSubcommand::List) => {

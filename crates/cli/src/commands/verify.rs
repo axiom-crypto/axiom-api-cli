@@ -36,7 +36,10 @@ impl VerifyCmd {
         match self.command {
             Some(VerifySubcommand::Status { verify_id }) => {
                 let verify_status = sdk.get_verification_result(&verify_id)?;
-                println!("Verification status: {}", serde_json::to_string(&verify_status).unwrap());
+                println!(
+                    "Verification status: {}",
+                    serde_json::to_string(&verify_status).unwrap()
+                );
                 Ok(())
             }
             None => {

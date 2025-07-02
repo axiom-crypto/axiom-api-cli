@@ -70,7 +70,10 @@ impl ProveCmd {
         match self.command {
             Some(ProveSubcommand::Status { proof_id }) => {
                 let proof_status = sdk.get_proof_status(&proof_id)?;
-                println!("Proof status: {}", serde_json::to_string(&proof_status).unwrap());
+                println!(
+                    "Proof status: {}",
+                    serde_json::to_string(&proof_status).unwrap()
+                );
                 Ok(())
             }
             Some(ProveSubcommand::Download {
