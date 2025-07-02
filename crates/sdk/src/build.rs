@@ -780,8 +780,8 @@ fn create_tar_archive(
     }
 
     builder.finish()?;
-    // Clean up the axiom_cargo_home directory
-    std::fs::remove_dir_all(axiom_cargo_home).ok();
+    // TODO: restore Clean up the axiom_cargo_home directory
+    // std::fs::remove_dir_all(axiom_cargo_home).ok();
     // Change back to the original directory
     std::env::set_current_dir(original_dir)?;
 
