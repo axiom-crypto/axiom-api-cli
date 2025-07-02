@@ -459,6 +459,9 @@ impl BuildSdk for AxiomSdk {
         if args.force_keygen {
             url.push_str("&force_keygen=true");
         }
+        if let Some(sha) = get_git_commit_sha(&git_root).ok() {
+            url.push_str(&format!("&commit_sha={}", sha));
+        }
 
         if let Some(id) = &config_id {
             println!("Sending build request for config ID: {}", id);
@@ -639,6 +642,42 @@ fn find_cargo_workspace_root(program_dir: impl AsRef<Path>) -> Result<std::path:
 
     // We didn't find any Cargo.toml
     Err(eyre::eyre!("Not in a Cargo project"))
+}
+
+fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
+    let git_dir = git_root.as_ref().join(".git");
+
+    // Read .git/HEAD to get the current reference
+    let head_file = git_dir.join("HEAD");
+    let head_content = std::fs::read_to_string(&head_file).context("Failed to read .git/HEAD")?;
+
+    let head_content = head_content.trim();
+
+    // Check if HEAD contains a direct SHA or a reference
+    if head_content.starts_with("ref: ") {
+        // It's a reference, read the referenced file
+        let ref_path = head_content.strip_prefix("ref: ").unwrap();
+        let ref_file = git_dir.join(ref_path);
+
+        let commit_sha = std::fs::read_to_string(&ref_file)
+            .context(format!("Failed to read git reference file: {}", ref_path))?
+            .trim()
+            .to_string();
+
+        if commit_sha.is_empty() {
+            return Err(eyre::eyre!("Got empty commit SHA from git reference"));
+        }
+
+        Ok(commit_sha)
+    } else if head_content.len() == 40 && head_content.chars().all(|c| c.is_ascii_hexdigit()) {
+        // It's a direct SHA (40 hex characters)
+        Ok(head_content.to_string())
+    } else {
+        Err(eyre::eyre!(
+            "Unexpected format in .git/HEAD: {}",
+            head_content
+        ))
+    }
 }
 
 // The tarball contains everything in the git root of the guest program that's tracked by git.
