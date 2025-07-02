@@ -948,6 +948,7 @@ dependencies = [
  "comfy-table",
  "dotenv",
  "eyre",
+ "serde_json",
  "tokio",
 ]
 
