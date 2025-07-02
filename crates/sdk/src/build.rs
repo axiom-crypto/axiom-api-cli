@@ -7,14 +7,14 @@ use std::{
 };
 
 use eyre::{Context, Result};
-use flate2::{write::GzEncoder, Compression};
+use flate2::{Compression, write::GzEncoder};
 use openvm_build::cargo_command;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
 
-use crate::{AxiomSdk, API_KEY_HEADER};
+use crate::{API_KEY_HEADER, AxiomSdk};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 
@@ -344,7 +344,9 @@ impl BuildSdk for AxiomSdk {
             if current_dir.as_path() == metadata.workspace_root.as_std_path() {
                 metadata.workspace_packages()
             } else {
-                return Err(eyre::eyre!("Could not determine which Cargo package to build. Please run this command from a package directory or the workspace root."));
+                return Err(eyre::eyre!(
+                    "Could not determine which Cargo package to build. Please run this command from a package directory or the workspace root."
+                ));
             }
         } else {
             pkgs_in_current_dir.sort_by_key(|p| p.manifest_path.as_str().len());

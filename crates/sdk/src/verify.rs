@@ -6,7 +6,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{get_config_id, AxiomSdk, API_KEY_HEADER};
+use crate::{API_KEY_HEADER, AxiomSdk, get_config_id};
 
 pub trait VerifySdk {
     fn get_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;

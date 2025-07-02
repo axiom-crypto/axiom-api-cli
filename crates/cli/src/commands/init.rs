@@ -49,7 +49,9 @@ pub fn execute(args: InitArgs) -> Result<()> {
     let api_key = args.api_key.or_else(|| std::env::var("AXIOM_API_KEY").ok());
 
     if api_key.is_none() {
-        eprintln!("Error: API key must be provided either with --api-key flag or AXIOM_API_KEY environment variable");
+        eprintln!(
+            "Error: API key must be provided either with --api-key flag or AXIOM_API_KEY environment variable"
+        );
         std::process::exit(1);
     }
 

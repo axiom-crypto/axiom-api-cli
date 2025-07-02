@@ -1,12 +1,12 @@
 use std::{fs, io::copy, path::PathBuf};
 
-use cargo_openvm::input::{is_valid_hex_string, Input};
+use cargo_openvm::input::{Input, is_valid_hex_string};
 use eyre::{Context, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::{AxiomSdk, API_KEY_HEADER};
+use crate::{API_KEY_HEADER, AxiomSdk};
 
 pub trait ProveSdk {
     fn list_proofs(&self, program_id: &str) -> Result<Vec<ProofStatus>>;

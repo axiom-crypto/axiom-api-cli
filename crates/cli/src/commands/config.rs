@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use axiom_sdk::{config::ConfigSdk, AxiomSdk};
+use axiom_sdk::{AxiomSdk, config::ConfigSdk};
 use clap::{Args, Subcommand};
 use eyre::Result;
 
