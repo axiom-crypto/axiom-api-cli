@@ -280,7 +280,7 @@ impl BuildSdk for AxiomSdk {
             .context("Failed to get toolchain version")?
             .semver;
 
-        if toolchain_version.major != 1 || toolchain_version.minor != 85 {
+        if toolchain_version.major < 1 || toolchain_version.minor < 85 {
             return Err(eyre::eyre!(
                 "Unsupported toolchain version, expected 1.85, found: {}, Use `rustup default 1.85` to install as your default.",
                 toolchain_version.to_string()
