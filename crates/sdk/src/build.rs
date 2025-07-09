@@ -459,7 +459,7 @@ impl BuildSdk for AxiomSdk {
         if args.force_keygen {
             url.push_str("&force_keygen=true");
         }
-        if let Some(sha) = get_git_commit_sha(&git_root).ok() {
+        if let Ok(sha) = get_git_commit_sha(&git_root) {
             url.push_str(&format!("&commit_sha={}", sha));
         }
 
