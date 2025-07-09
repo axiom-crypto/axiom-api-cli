@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: ["**"]
     paths:
-      - "src/**"
+      - "crates/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - "rust-toolchain.toml"
