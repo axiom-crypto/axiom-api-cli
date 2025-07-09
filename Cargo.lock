@@ -675,6 +675,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tar",
+ "url",
  "walkdir",
 ]
 

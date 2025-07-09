@@ -5,7 +5,7 @@ use dotenv::dotenv;
 
 mod commands;
 
-use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, VerifyCmd, VersionCmd};
+use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, RunCmd, VerifyCmd, VersionCmd};
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -33,6 +33,8 @@ enum AxiomCommands {
     Build(BuildCmd),
     /// Generate a proof using the Axiom Proving Service
     Prove(ProveCmd),
+    /// Execute a program using the Axiom Execution Service
+    Run(RunCmd),
     /// Generate key artifacts
     Config(ConfigCmd),
     /// Verify a proof using the Axiom Verifying Service
@@ -51,6 +53,7 @@ async fn main() {
         AxiomCommands::Build(cmd) => cmd.run(),
         AxiomCommands::Init(cmd) => cmd.run(),
         AxiomCommands::Prove(cmd) => cmd.run(),
+        AxiomCommands::Run(cmd) => cmd.run(),
         AxiomCommands::Config(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
         AxiomCommands::Version(cmd) => cmd.run(),
