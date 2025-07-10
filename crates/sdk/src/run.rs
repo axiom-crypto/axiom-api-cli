@@ -1,7 +1,7 @@
 use std::fs;
 
 use cargo_openvm::input::Input;
-use eyre::{Context, Result};
+use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -163,7 +163,7 @@ fn validate_input_json(json: &serde_json::Value) -> Result<()> {
 
     json["input"]
         .as_array()
-        .ok_or_else(|| eyre::eyre!("Input must be an array under 'input' key"))?
+        .ok_or_eyre("Input must be an array under 'input' key")?
         .iter()
         .try_for_each(|inner| {
             inner

@@ -249,30 +249,24 @@ impl ProveSdk for AxiomSdk {
 
         // Create the request body based on input
         let body = match &args.input {
-            Some(input) => {
-                match input {
-                    Input::FilePath(path) => {
-                        // Read the file content directly as JSON
-                        let file_content = fs::read_to_string(path)
-                            .context(format!("Failed to read input file: {}", path.display()))?;
-                        let input_json = serde_json::from_str(&file_content).context(format!(
-                            "Failed to parse input file as JSON: {}",
-                            path.display()
-                        ))?;
-                        validate_input_json(&input_json)?;
-                        input_json
-                    }
-                    Input::HexBytes(s) => {
-                        if !s.trim_start_matches("0x").starts_with("01")
-                            && !s.trim_start_matches("0x").starts_with("02")
-                        {
-                            return Err(eyre::eyre!("Hex string must start with '01' or '02'"));
-                        }
-                        json!({ "input": [s] })
-                    }
-                }
+            Some(Input::FilePath(path)) => {
+                let file_content = fs::read_to_string(path)
+                    .context(format!("Failed to read input file: {}", path.display()))?;
+                let input_json = serde_json::from_str(&file_content).context(format!(
+                    "Failed to parse input file as JSON: {}",
+                    path.display()
+                ))?;
+                validate_input_json(&input_json)?;
+                input_json
             }
-            None => json!({ "input": [] }), // Empty JSON if no input provided
+            Some(Input::HexBytes(s)) => {
+                let trimmed = s.trim_start_matches("0x");
+                if !trimmed.starts_with("01") && !trimmed.starts_with("02") {
+                    return Err(eyre::eyre!("Hex string must start with '01' or '02'"));
+                }
+                json!({ "input": [s] })
+            }
+            None => json!({ "input": [] }),
         };
 
         // Make API request
