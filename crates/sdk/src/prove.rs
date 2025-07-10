@@ -27,6 +27,8 @@ pub struct ProveArgs {
     pub program_id: Option<String>,
     /// Input data for the proof (file path or hex string)
     pub input: Option<Input>,
+    /// The type of proof to generate (stark or evm)
+    pub proof_type: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -235,9 +237,14 @@ impl ProveSdk for AxiomSdk {
             .program_id
             .ok_or_else(|| eyre::eyre!("Program ID is required. Use --program-id to specify."))?;
 
-        println!("Generating proof for program ID: {program_id}");
+        let proof_type = args.proof_type.unwrap_or_else(|| "stark".to_string());
 
-        let url = format!("{}/proofs?program_id={}", self.config.api_url, program_id);
+        println!("Generating {proof_type} proof for program ID: {program_id}");
+
+        let url = format!(
+            "{}/proofs?program_id={program_id}&proof_type={proof_type}",
+            self.config.api_url
+        );
         let api_key = self
             .config
             .api_key

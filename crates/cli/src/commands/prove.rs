@@ -60,6 +60,10 @@ pub struct ProveArgs {
     /// Input data for the proof (file path or hex string)
     #[clap(long, value_parser, help = "Input to OpenVM program")]
     input: Option<Input>,
+
+    /// The type of proof to generate (stark or evm)
+    #[clap(long, value_parser = ["stark", "evm"], default_value = "stark")]
+    proof_type: String,
 }
 
 impl ProveCmd {
@@ -114,6 +118,7 @@ impl ProveCmd {
                 let args = axiom_sdk::prove::ProveArgs {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
+                    proof_type: Some(self.prove_args.proof_type),
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
                 println!(
