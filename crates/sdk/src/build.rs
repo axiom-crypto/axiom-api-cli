@@ -37,6 +37,7 @@ pub struct BuildStatus {
     pub id: String,
     pub created_at: String,
     pub status: String,
+    pub config_uuid: String,
     pub error_message: Option<String>,
     pub name: String,
     pub created_by: String,
