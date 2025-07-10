@@ -62,7 +62,7 @@ impl ProveSdk for AxiomSdk {
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
             if items.is_empty() {
-                println!("No proofs found for program ID: {}", program_id);
+                println!("No proofs found for program ID: {program_id}");
                 return Ok(vec![]);
             }
 
@@ -83,7 +83,7 @@ impl ProveSdk for AxiomSdk {
     fn get_proof_status(&self, proof_id: &str) -> Result<ProofStatus> {
         let url = format!("{}/proofs/{}", self.config.api_url, proof_id);
 
-        println!("Checking proof status for proof ID: {}", proof_id);
+        println!("Checking proof status for proof ID: {proof_id}");
 
         // Make the GET request
         let client = Client::new();
@@ -107,7 +107,7 @@ impl ProveSdk for AxiomSdk {
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
-            println!("Cannot check proof status for this proof: {}", error_text);
+            println!("Cannot check proof status for this proof: {error_text}");
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
             Err(eyre::eyre!(
@@ -128,10 +128,7 @@ impl ProveSdk for AxiomSdk {
             self.config.api_url, proof_id, proof_type
         );
 
-        println!(
-            "Downloading {} proof for proof ID: {}",
-            proof_type, proof_id
-        );
+        println!("Downloading {proof_type} proof for proof ID: {proof_id}");
 
         // Make the GET request
         let client = Client::new();
@@ -152,12 +149,12 @@ impl ProveSdk for AxiomSdk {
             // Determine output file path
             let output_path = match output {
                 Some(path) => path,
-                None => PathBuf::from(format!("{}-{}-proof.json", proof_id, proof_type)),
+                None => PathBuf::from(format!("{proof_id}-{proof_type}-proof.json")),
             };
 
             // Create file and stream the response body to it
             let mut file = fs::File::create(&output_path)
-                .context(format!("Failed to create output file: {:?}", output_path))?;
+                .context(format!("Failed to create output file: {output_path:?}"))?;
 
             copy(
                 &mut response
@@ -168,7 +165,7 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
-            println!("Successfully downloaded to: {:?}", output_path);
+            println!("Successfully downloaded to: {output_path:?}");
             Ok(())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -185,7 +182,7 @@ impl ProveSdk for AxiomSdk {
     fn get_proof_logs(&self, proof_id: &str) -> Result<()> {
         let url = format!("{}/proofs/{}/logs", self.config.api_url, proof_id);
 
-        println!("Downloading logs for proof ID: {}", proof_id);
+        println!("Downloading logs for proof ID: {proof_id}");
 
         // Make the GET request
         let client = Client::new();
@@ -204,9 +201,9 @@ impl ProveSdk for AxiomSdk {
         // Check if the request was successful
         if response.status().is_success() {
             // Create file and stream the response body to it
-            let output_path = PathBuf::from(format!("{}-logs.txt", proof_id));
+            let output_path = PathBuf::from(format!("{proof_id}-logs.txt"));
             let mut file = fs::File::create(&output_path)
-                .context(format!("Failed to create output file: {:?}", output_path))?;
+                .context(format!("Failed to create output file: {output_path:?}"))?;
 
             copy(
                 &mut response
@@ -217,12 +214,12 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
-            println!("Successfully downloaded logs to: {:?}", output_path);
+            println!("Successfully downloaded logs to: {output_path:?}");
             Ok(())
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
-            println!("Cannot download logs for this proof: {}", error_text);
+            println!("Cannot download logs for this proof: {error_text}");
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
             Err(eyre::eyre!(
@@ -238,7 +235,7 @@ impl ProveSdk for AxiomSdk {
             .program_id
             .ok_or_else(|| eyre::eyre!("Program ID is required. Use --program-id to specify."))?;
 
-        println!("Generating proof for program ID: {}", program_id);
+        println!("Generating proof for program ID: {program_id}");
 
         let url = format!("{}/proofs?program_id={}", self.config.api_url, program_id);
         let api_key = self
@@ -283,12 +280,12 @@ impl ProveSdk for AxiomSdk {
         if response.status().is_success() {
             let response_json: Value = response.json()?;
             let proof_id = response_json["id"].as_str().unwrap();
-            println!("Proof generation initiated successfully!: {}", proof_id);
+            println!("Proof generation initiated successfully!: {proof_id}");
             Ok(proof_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
-            println!("Cannot generate proof for this program: {}", error_text);
+            println!("Cannot generate proof for this program: {error_text}");
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
             let status = response.status();

@@ -114,7 +114,7 @@ impl BuildCmd {
                 }
 
                 // Print the table
-                println!("{}", table);
+                println!("{table}");
                 Ok(())
             }
             Some(BuildSubcommand::Download {
@@ -139,8 +139,7 @@ impl BuildCmd {
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
                 println!(
-                    "To check the build status, run: cargo axiom build status --program-id {}",
-                    program_id
+                    "To check the build status, run: cargo axiom build status --program-id {program_id}"
                 );
                 Ok(())
             }

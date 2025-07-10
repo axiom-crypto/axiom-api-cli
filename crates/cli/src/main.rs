@@ -62,10 +62,10 @@ async fn main() {
     if let Err(err) = result {
         if args.debug {
             // In debug mode, print the full error with backtrace
-            eprintln!("Error: {:?}", err);
+            eprintln!("Error: {err:?}");
         } else {
             // In normal mode, just print the error message
-            eprintln!("Error: {}", err);
+            eprintln!("Error: {err}");
         }
         process::exit(1);
     }

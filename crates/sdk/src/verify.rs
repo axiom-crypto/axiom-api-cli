@@ -25,7 +25,7 @@ impl VerifySdk for AxiomSdk {
         // Load configuration
         let url = format!("{}/verify/{}", self.config.api_url, verify_id);
 
-        println!("Checking verification status for ID: {}", verify_id);
+        println!("Checking verification status for ID: {verify_id}");
 
         // Make the GET request
         let client = Client::new();
@@ -63,10 +63,7 @@ impl VerifySdk for AxiomSdk {
         let config_id = get_config_id(config_id, &self.config)?;
         let url = format!("{}/verify?config_id={}", self.config.api_url, config_id);
 
-        println!(
-            "Verifying proof at {:?} with config ID: {}",
-            proof_path, config_id
-        );
+        println!("Verifying proof at {proof_path:?} with config ID: {config_id}");
 
         // Check if the proof file exists
         if !proof_path.exists() {
@@ -80,7 +77,7 @@ impl VerifySdk for AxiomSdk {
         // Create a multipart form
         let form = reqwest::blocking::multipart::Form::new()
             .file("proof", &proof_path)
-            .context(format!("Failed to read proof file: {:?}", proof_path))?;
+            .context(format!("Failed to read proof file: {proof_path:?}"))?;
 
         // Make the POST request
         let client = Client::new();
@@ -101,7 +98,7 @@ impl VerifySdk for AxiomSdk {
         if response.status().is_success() {
             let response_json: Value = response.json()?;
             let verify_id = response_json["id"].as_str().unwrap();
-            println!("Verification request sent: {}", verify_id);
+            println!("Verification request sent: {verify_id}");
             Ok(verify_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();

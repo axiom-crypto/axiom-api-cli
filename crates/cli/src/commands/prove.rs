@@ -107,7 +107,7 @@ impl ProveCmd {
                 }
 
                 // Print the table
-                println!("{}", table);
+                println!("{table}");
                 Ok(())
             }
             None => {
@@ -117,8 +117,7 @@ impl ProveCmd {
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
                 println!(
-                    "To check the proof status, run: cargo axiom prove status --proof-id {}",
-                    proof_id
+                    "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
                 );
                 Ok(())
             }
