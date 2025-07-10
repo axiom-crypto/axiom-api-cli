@@ -129,7 +129,7 @@ impl BuildSdk for AxiomSdk {
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus> {
         let url = format!("{}/programs/{}", self.config.api_url, program_id);
 
-        println!("Checking build status for program ID: {}", program_id);
+        println!("Checking build status for program ID: {program_id}");
 
         // Make the GET request
         let client = Client::new();
@@ -168,10 +168,7 @@ impl BuildSdk for AxiomSdk {
             self.config.api_url, program_id, program_type
         );
 
-        println!(
-            "Downloading {} for program ID: {}",
-            program_type, program_id
-        );
+        println!("Downloading {program_type} for program ID: {program_id}");
 
         // Make the GET request
         let client = Client::new();
@@ -195,18 +192,18 @@ impl BuildSdk for AxiomSdk {
             } else {
                 program_type.to_string()
             };
-            let filename = format!("program_{}.{}", program_id, ext);
+            let filename = format!("program_{program_id}.{ext}");
 
             // Write the response body to a file
             let mut file = File::create(&filename)
-                .context(format!("Failed to create output file: {}", filename))?;
+                .context(format!("Failed to create output file: {filename}"))?;
 
             let content = response.bytes().context("Failed to read response body")?;
 
             std::io::copy(&mut content.as_ref(), &mut file)
                 .context("Failed to write artifact to file")?;
 
-            println!("Artifact downloaded successfully to: {}", filename);
+            println!("Artifact downloaded successfully to: {filename}");
             Ok(())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -237,18 +234,18 @@ impl BuildSdk for AxiomSdk {
         // Check if the request was successful
         if response.status().is_success() {
             // Create output filename based on program ID
-            let filename = format!("program_{}_logs.txt", program_id);
+            let filename = format!("program_{program_id}_logs.txt");
 
             // Write the response body to a file
             let mut file = File::create(&filename)
-                .context(format!("Failed to create log file: {}", filename))?;
+                .context(format!("Failed to create log file: {filename}"))?;
 
             let content = response.bytes().context("Failed to read response body")?;
 
             std::io::copy(&mut content.as_ref(), &mut file)
                 .context("Failed to write logs to file")?;
 
-            println!("Logs downloaded successfully to: {}", filename);
+            println!("Logs downloaded successfully to: {filename}");
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
@@ -313,7 +310,7 @@ impl BuildSdk for AxiomSdk {
             .to_string();
 
         if !program_path.is_empty() {
-            println!("Using program path: {}", program_path);
+            println!("Using program path: {program_path}");
         }
 
         let cargo_workspace_root = find_cargo_workspace_root(program_dir.as_ref())
@@ -326,7 +323,7 @@ impl BuildSdk for AxiomSdk {
             .to_string();
 
         if !cargo_root_path.is_empty() {
-            println!("Using cargo workspace root: {}", cargo_root_path);
+            println!("Using cargo workspace root: {cargo_root_path}");
         }
 
         // Check for bin flag
@@ -397,7 +394,7 @@ impl BuildSdk for AxiomSdk {
         } else {
             None
         };
-        println!("bin_to_build: {:?}", bin_to_build);
+        println!("bin_to_build: {bin_to_build:?}");
 
         // Parse exclude patterns
         let exclude_patterns = args
@@ -451,22 +448,22 @@ impl BuildSdk for AxiomSdk {
             self.config.api_url, program_path_query, cargo_root_query
         );
         if let Some(id) = &config_id {
-            url.push_str(&format!("&config_id={}", id));
+            url.push_str(&format!("&config_id={id}"));
         }
         if let Some(bin) = bin_to_build {
-            url.push_str(&format!("&bin_name={}", bin));
+            url.push_str(&format!("&bin_name={bin}"));
         }
         if args.force_keygen {
             url.push_str("&force_keygen=true");
         }
         if let Ok(sha) = get_git_commit_sha(&git_root) {
-            url.push_str(&format!("&commit_sha={}", sha));
+            url.push_str(&format!("&commit_sha={sha}"));
         }
 
         if let Some(id) = &config_id {
-            println!("Sending build request for config ID: {}", id);
+            println!("Sending build request for config ID: {id}");
         } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
-            println!("Sending build request with config file: {}", path);
+            println!("Sending build request with config file: {path}");
         } else {
             println!("Sending build request with default config");
         }
@@ -510,7 +507,7 @@ impl BuildSdk for AxiomSdk {
                         0.0
                     };
 
-                    print!("\rUploading: {}% ({:.2} KB/s)", percent, speed);
+                    print!("\rUploading: {percent}% ({speed:.2} KB/s)");
                     io::stdout().flush().unwrap();
                     last_percent = percent;
                 }
@@ -570,7 +567,7 @@ impl BuildSdk for AxiomSdk {
         if response.status().is_success() {
             let body = response.json::<serde_json::Value>().unwrap();
             let program_id = body["id"].as_str().unwrap();
-            println!("Build request sent successfully: {}", program_id);
+            println!("Build request sent successfully: {program_id}");
             Ok(program_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -660,7 +657,7 @@ fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
         let ref_file = git_dir.join(ref_path);
 
         let commit_sha = std::fs::read_to_string(&ref_file)
-            .context(format!("Failed to read git reference file: {}", ref_path))?
+            .context(format!("Failed to read git reference file: {ref_path}"))?
             .trim()
             .to_string();
 
@@ -717,7 +714,7 @@ fn create_tar_archive(
 
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
     // Fetch 1: target = x86 linux which is the cloud machine
-    println!("Fetching dependencies to {}...", AXIOM_CARGO_HOME);
+    println!("Fetching dependencies to {AXIOM_CARGO_HOME}...");
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
         .arg("fetch")
@@ -731,7 +728,7 @@ fn create_tar_archive(
 
     // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
     // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
-    println!("Fetching dependencies to {}...", AXIOM_CARGO_HOME);
+    println!("Fetching dependencies to {AXIOM_CARGO_HOME}...");
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
         .arg("fetch")
@@ -789,9 +786,9 @@ fn create_tar_archive(
             // Check against user-provided exclusion patterns
             let matches_exclusion = exclude_patterns.iter().any(|s| path_str.contains(s));
             // Check if path is in user-provided include directories
-            let in_include_dir = include_dirs.iter().any(|dir| {
-                path_str.starts_with(&format!("./{}", dir)) || path_str.starts_with(dir)
-            });
+            let in_include_dir = include_dirs
+                .iter()
+                .any(|dir| path_str.starts_with(&format!("./{dir}")) || path_str.starts_with(dir));
             // Check if file is tracked by git (directories are allowed to continue traversal)
             // Allow axiom_cargo_home directory even though it's not tracked by git
             let is_tracked = path.is_dir()

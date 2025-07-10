@@ -10,7 +10,7 @@ fn main() {
         }
         _ => "unknown".to_string(),
     };
-    println!("cargo:rustc-env=GIT_COMMIT_HASH={}", git_hash);
+    println!("cargo:rustc-env=GIT_COMMIT_HASH={git_hash}");
 
     let metadata = MetadataCommand::new()
         .exec()
@@ -44,11 +44,11 @@ fn main() {
         }
     }
 
-    eprintln!("Extracted OpenVM version: {}", openvm_version);
-    eprintln!("Extracted OpenVM commit: {}", openvm_commit);
+    eprintln!("Extracted OpenVM version: {openvm_version}");
+    eprintln!("Extracted OpenVM commit: {openvm_commit}");
 
-    println!("cargo:rustc-env=OPENVM_VERSION={}", openvm_version);
-    println!("cargo:rustc-env=OPENVM_COMMIT={}", openvm_commit);
+    println!("cargo:rustc-env=OPENVM_VERSION={openvm_version}");
+    println!("cargo:rustc-env=OPENVM_COMMIT={openvm_commit}");
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=Cargo.toml");
 }

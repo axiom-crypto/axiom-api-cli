@@ -54,7 +54,7 @@ impl ConfigCmd {
         match self.command {
             Some(ConfigSubcommand::Status { config_id }) => {
                 let vm_config_metadata = sdk.get_vm_config_metadata(config_id.as_deref())?;
-                println!("Config status: {:?}", vm_config_metadata);
+                println!("Config status: {vm_config_metadata:?}");
                 Ok(())
             }
             Some(ConfigSubcommand::Download {

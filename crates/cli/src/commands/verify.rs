@@ -49,8 +49,7 @@ impl VerifyCmd {
 
                 let verify_id = sdk.verify_proof(self.config_id.as_deref(), proof)?;
                 println!(
-                    "To check the verification status, run: cargo axiom verify status --verify-id {}",
-                    verify_id
+                    "To check the verification status, run: cargo axiom verify status --verify-id {verify_id}"
                 );
                 Ok(())
             }

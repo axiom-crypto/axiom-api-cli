@@ -117,7 +117,7 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
         set_config_id(id)?;
         Ok(id.to_string())
     } else if let Some(id) = &config.config_id {
-        println!("using cached config ID: {}", id);
+        println!("using cached config ID: {id}");
         Ok(id.clone())
     } else {
         Err(eyre::eyre!("No config ID provided"))
