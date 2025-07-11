@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use dirs::home_dir;
 use eyre::{Context, Result};
+use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
 pub mod build;
@@ -122,5 +123,26 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
         Ok(id.clone())
     } else {
         Err(eyre::eyre!("No config ID provided"))
+    }
+}
+
+pub fn validate_api_key(api_url: &str, api_key: &str) -> Result<()> {
+    let client = Client::new();
+    let url = format!("{}/validate_api_key", api_url);
+
+    let response = client.get(url).header(API_KEY_HEADER, api_key).send()?;
+
+    if response.status().is_success() {
+        // API key is valid - backend returns {"message": "OK"}
+        Ok(())
+    } else if response.status().is_client_error() {
+        // API key is invalid - backend returns 401/403
+        Err(eyre::eyre!("API key is not valid or inactive"))
+    } else {
+        // Server error or other issues
+        Err(eyre::eyre!(
+            "Failed to validate API key: HTTP {}",
+            response.status()
+        ))
     }
 }

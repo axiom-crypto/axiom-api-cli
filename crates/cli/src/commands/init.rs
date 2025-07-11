@@ -46,12 +46,18 @@ pub fn execute(args: InitArgs) -> Result<()> {
     });
 
     // Get API key from args or env var AXIOM_API_KEY
-    let api_key = args.api_key.or_else(|| std::env::var("AXIOM_API_KEY").ok());
+    let api_key = args.api_key
+        .or_else(|| std::env::var("AXIOM_API_KEY").ok())
+        .ok_or_else(|| {
+            eyre::eyre!("API key must be provided either with --api-key flag or AXIOM_API_KEY environment variable")
+        })?;
 
-    if api_key.is_none() {
-        eprintln!("Error: API key must be provided either with --api-key flag or AXIOM_API_KEY environment variable");
-        std::process::exit(1);
-    }
+    // Validate the API key with the backend
+    println!("Validating API key...");
+    axiom_sdk::validate_api_key(&api_url, &api_key)
+        .map_err(|e| eyre::eyre!("Invalid API key - {}", e))?;
+
+    println!("API key is valid!");
 
     // Create and save the configuration
     let config_id = if args.staging {
@@ -60,7 +66,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
         Some(DEFAULT_CONFIG_ID.to_string())
     };
 
-    let config = AxiomConfig::new(api_url, api_key, config_id);
+    let config = AxiomConfig::new(api_url, Some(api_key), config_id);
 
     axiom_sdk::save_config(&config)?;
 
