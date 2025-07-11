@@ -36,8 +36,8 @@ enum ProveSubcommand {
         proof_id: String,
 
         /// The type of proof artifact to download (stark, or evm)
-        #[clap(long, value_parser = ["stark", "evm"])]
-        r#type: String,
+        #[clap(long = "type", value_parser = ["stark", "evm"])]
+        proof_type: String,
 
         /// Output file path (defaults to proof_id-type.json)
         #[clap(long, value_name = "FILE")]
@@ -60,6 +60,10 @@ pub struct ProveArgs {
     /// Input data for the proof (file path or hex string)
     #[clap(long, value_parser, help = "Input to OpenVM program")]
     input: Option<Input>,
+
+    /// The type of proof to generate (stark or evm)
+    #[clap(long = "type", value_parser = ["stark", "evm"], default_value = "stark")]
+    proof_type: String,
 }
 
 impl ProveCmd {
@@ -78,9 +82,9 @@ impl ProveCmd {
             }
             Some(ProveSubcommand::Download {
                 proof_id,
-                r#type,
+                proof_type,
                 output,
-            }) => sdk.get_generated_proof(&proof_id, &r#type, output),
+            }) => sdk.get_generated_proof(&proof_id, &proof_type, output),
             Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
             Some(ProveSubcommand::List { program_id }) => {
                 let proof_status_list = sdk.list_proofs(&program_id)?;
@@ -114,6 +118,7 @@ impl ProveCmd {
                 let args = axiom_sdk::prove::ProveArgs {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
+                    proof_type: Some(self.prove_args.proof_type),
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
                 println!(
