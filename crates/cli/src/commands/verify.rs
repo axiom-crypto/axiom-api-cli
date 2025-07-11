@@ -38,7 +38,7 @@ impl VerifyCmd {
                 let verify_status = sdk.get_verification_result(&verify_id)?;
                 println!(
                     "Verification status: {}",
-                    serde_json::to_string(&verify_status).unwrap()
+                    serde_json::to_string_pretty(&verify_status).unwrap()
                 );
                 Ok(())
             }

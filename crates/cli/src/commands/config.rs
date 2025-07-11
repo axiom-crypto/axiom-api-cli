@@ -12,29 +12,24 @@ pub struct ConfigCmd {
 
 #[derive(Debug, Subcommand)]
 enum ConfigSubcommand {
-    /// Download config artifacts: proving keys, evm verifier, leaf committed exe etc.
+    /// Get config information
+    Get {
+        /// The config ID to get information for
+        #[clap(long, value_name = "ID")]
+        config_id: Option<String>,
+    },
+
+    /// Download config artifacts
     Download {
-        /// The config ID to download public key for
+        /// The config ID to download for
         #[clap(long, value_name = "ID")]
         config_id: Option<String>,
 
-        /// The type of key to download
-        #[clap(long, value_parser = [
-            // These will give a download URL because the files are huge
-            "app_vm",
-            "leaf_vm",
-            "internal_vm",
-            "root_verifier",
-            "halo2_outer",
-            "halo2_wrapper",
-            // These will download (stream) the file because they are small
-            "config",
-            "evm_verifier",
-            "app_vm_commit",
-        ])]
-        key_type: String,
+        /// Download EVM verifier instead of config
+        #[clap(long)]
+        evm_verifier: bool,
 
-        /// Optional output file path (defaults to key_type name in current directory)
+        /// Optional output file path (defaults to artifact name in current directory)
         #[clap(long, value_name = "FILE")]
         output: Option<PathBuf>,
     },
@@ -52,6 +47,11 @@ impl ConfigCmd {
         let sdk = AxiomSdk::new(config);
 
         match self.command {
+            Some(ConfigSubcommand::Get { config_id }) => {
+                let vm_config_metadata = sdk.get_vm_config_metadata(config_id.as_deref())?;
+                println!("{}", serde_json::to_string_pretty(&vm_config_metadata)?);
+                Ok(())
+            }
             Some(ConfigSubcommand::Status { config_id }) => {
                 let vm_config_metadata = sdk.get_vm_config_metadata(config_id.as_deref())?;
                 println!("Config status: {vm_config_metadata:?}");
@@ -59,18 +59,15 @@ impl ConfigCmd {
             }
             Some(ConfigSubcommand::Download {
                 config_id,
-                key_type,
+                evm_verifier,
                 output,
-            }) => match key_type.as_str() {
-                "evm_verifier" => sdk.get_evm_verifier(config_id.as_deref(), output),
-                "app_vm_commit" => sdk.get_vm_commitment(config_id.as_deref(), output),
-                "config" => sdk.download_config(config_id.as_deref(), output),
-                _ => {
-                    let pk_downloader = sdk.get_proving_keys(config_id.as_deref(), &key_type)?;
-                    println!("Download URL: {}", pk_downloader.download_url);
-                    Ok(())
+            }) => {
+                if evm_verifier {
+                    sdk.get_evm_verifier(config_id.as_deref(), output)
+                } else {
+                    sdk.download_config(config_id.as_deref(), output)
                 }
-            },
+            }
             None => Err(eyre::eyre!("A subcommand is required for config")),
         }
     }

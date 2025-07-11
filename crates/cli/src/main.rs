@@ -5,7 +5,9 @@ use dotenv::dotenv;
 
 mod commands;
 
-use commands::{BuildCmd, ConfigCmd, InitCmd, ProveCmd, RunCmd, VerifyCmd, VersionCmd};
+use commands::{
+    BuildCmd, ConfigCmd, DownloadKeysCmd, InitCmd, ProveCmd, RunCmd, VerifyCmd, VersionCmd,
+};
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -37,6 +39,9 @@ enum AxiomCommands {
     Run(RunCmd),
     /// Generate key artifacts
     Config(ConfigCmd),
+    /// Download proving keys
+    #[command(name = "download-keys")]
+    DownloadKeys(DownloadKeysCmd),
     /// Verify a proof using the Axiom Verifying Service
     Verify(VerifyCmd),
     /// Display version information
@@ -55,6 +60,7 @@ async fn main() {
         AxiomCommands::Prove(cmd) => cmd.run(),
         AxiomCommands::Run(cmd) => cmd.run(),
         AxiomCommands::Config(cmd) => cmd.run(),
+        AxiomCommands::DownloadKeys(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
         AxiomCommands::Version(cmd) => cmd.run(),
     };

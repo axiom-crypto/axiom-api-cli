@@ -76,7 +76,7 @@ impl ProveCmd {
                 let proof_status = sdk.get_proof_status(&proof_id)?;
                 println!(
                     "Proof status: {}",
-                    serde_json::to_string(&proof_status).unwrap()
+                    serde_json::to_string_pretty(&proof_status).unwrap()
                 );
                 Ok(())
             }
