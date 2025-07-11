@@ -36,8 +36,8 @@ enum ProveSubcommand {
         proof_id: String,
 
         /// The type of proof artifact to download (stark, or evm)
-        #[clap(long, value_parser = ["stark", "evm"])]
-        r#type: String,
+        #[clap(long = "type", value_parser = ["stark", "evm"])]
+        proof_type: String,
 
         /// Output file path (defaults to proof_id-type.json)
         #[clap(long, value_name = "FILE")]
@@ -62,7 +62,7 @@ pub struct ProveArgs {
     input: Option<Input>,
 
     /// The type of proof to generate (stark or evm)
-    #[clap(long, value_parser = ["stark", "evm"], default_value = "stark")]
+    #[clap(long = "type", value_parser = ["stark", "evm"], default_value = "stark")]
     proof_type: String,
 }
 
@@ -82,9 +82,9 @@ impl ProveCmd {
             }
             Some(ProveSubcommand::Download {
                 proof_id,
-                r#type,
+                proof_type,
                 output,
-            }) => sdk.get_generated_proof(&proof_id, &r#type, output),
+            }) => sdk.get_generated_proof(&proof_id, &proof_type, output),
             Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
             Some(ProveSubcommand::List { program_id }) => {
                 let proof_status_list = sdk.list_proofs(&program_id)?;
