@@ -715,7 +715,7 @@ fn create_tar_archive(
 
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
     // Fetch 1: target = x86 linux which is the cloud machine
-    println!("Fetching dependencies to {AXIOM_CARGO_HOME}...");
+    println!("Fetching dependencies to {AXIOM_CARGO_HOME} for x86_64-unknown-linux-gnu target...");
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
         .arg("fetch")
@@ -729,7 +729,7 @@ fn create_tar_archive(
 
     // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
     // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
-    println!("Fetching dependencies to {AXIOM_CARGO_HOME}...");
+    println!("Fetching dependencies to {AXIOM_CARGO_HOME} for local target...");
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
         .arg("fetch")
