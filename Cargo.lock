@@ -672,6 +672,7 @@ dependencies = [
  "openvm-sdk",
  "reqwest",
  "rustc_version",
+ "scopeguard",
  "serde",
  "serde_json",
  "tar",

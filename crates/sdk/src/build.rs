@@ -10,6 +10,7 @@ use eyre::{Context, Result};
 use flate2::{write::GzEncoder, Compression};
 use openvm_build::cargo_command;
 use reqwest::blocking::Client;
+use scopeguard::defer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
@@ -559,9 +560,12 @@ impl BuildSdk for AxiomSdk {
         // Wait for the progress thread to finish
         progress_handle.join().unwrap();
 
-        // Clean up the tar file
-        if !args.keep_tarball.unwrap_or(false) {
-            std::fs::remove_file(tar_path).ok();
+        // Clean up the tar file when the function exits
+        let keep_tarball = args.keep_tarball.unwrap_or(false);
+        defer! {
+            if !keep_tarball {
+                std::fs::remove_file(&tar_path).ok();
+            }
         }
 
         // Check if the request was successful
@@ -713,6 +717,11 @@ fn create_tar_archive(
     let axiom_cargo_home = cargo_workspace_root.join(AXIOM_CARGO_HOME);
     std::fs::create_dir_all(&axiom_cargo_home)?;
 
+    // Clean up the axiom_cargo_home directory when the function exits
+    defer! {
+        std::fs::remove_dir_all(&axiom_cargo_home).ok();
+    }
+
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
     // Fetch 1: target = x86 linux which is the cloud machine
     println!("Fetching dependencies to {AXIOM_CARGO_HOME}...");
@@ -784,6 +793,12 @@ fn create_tar_archive(
         .filter_entry(|e| {
             let path = e.path();
             let path_str = path.to_string_lossy();
+
+            // Exclude the tar file itself to avoid adding it to the tarball
+            if path_str.ends_with("program.tar.gz") {
+                return false;
+            }
+
             // Check against user-provided exclusion patterns
             let matches_exclusion = exclude_patterns.iter().any(|s| path_str.contains(s));
             // Check if path is in user-provided include directories
@@ -815,8 +830,6 @@ fn create_tar_archive(
     }
 
     builder.finish()?;
-    // Clean up the axiom_cargo_home directory
-    std::fs::remove_dir_all(axiom_cargo_home).ok();
     // Change back to the original directory
     std::env::set_current_dir(original_dir)?;
 
