@@ -432,7 +432,12 @@ impl BuildSdk for AxiomSdk {
 
         // Create tar archive of the current directory
         println!("Creating archive of the project...");
-        let tar_file = create_tar_archive(program_dir.as_ref(), args.keep_tarball.unwrap_or(false), &exclude_patterns, &include_dirs)?;
+        let tar_file = create_tar_archive(
+            program_dir.as_ref(),
+            args.keep_tarball.unwrap_or(false),
+            &exclude_patterns,
+            &include_dirs,
+        )?;
         let tar_path = &tar_file.path;
 
         // Check if the tar file size exceeds 10MB

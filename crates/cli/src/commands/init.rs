@@ -19,8 +19,6 @@ openvm::init!();
 
 "#;
 
-
-
 const OPENVM_TOML_TEMPLATE: &str = r#"openvm_version = "v1.2"
 
 [app_vm_config.system.config]
@@ -193,7 +191,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
     if cargo_toml_path.exists() {
         let cargo_content = fs::read_to_string(&cargo_toml_path)?;
         let mut doc = cargo_content.parse::<DocumentMut>()?;
-        
+
         // Extract tag from existing openvm dependency
         let extracted_tag = doc
             .get("dependencies")
@@ -201,16 +199,16 @@ pub fn execute(args: InitArgs) -> Result<()> {
             .and_then(|openvm| openvm.get("tag"))
             .and_then(|tag| tag.as_str())
             .map(|s| s.to_string());
-        
+
         // Get or create dependencies table
         let deps = doc["dependencies"]
             .or_insert(Item::Table(Table::new()))
             .as_table_mut()
             .ok_or_else(|| eyre::eyre!("Failed to access dependencies table"))?;
-        
+
         // Add each dependency with proper TOML structure
         let git_url = "https://github.com/openvm-org/openvm.git";
-        
+
         // Helper to create a dependency entry
         let create_dep = |tag: Option<&str>| -> Item {
             let mut table = toml_edit::InlineTable::new();
@@ -221,12 +219,12 @@ pub fn execute(args: InitArgs) -> Result<()> {
             table.insert("default-features", false.into());
             Item::Value(Value::InlineTable(table))
         };
-        
+
         let tag_as_str = extracted_tag.as_deref();
-        
+
         deps["openvm-algebra-guest"] = create_dep(tag_as_str);
         deps["openvm-ecc-guest"] = create_dep(tag_as_str);
-        
+
         // For openvm-pairing with features
         let mut pairing_table = toml_edit::InlineTable::new();
         pairing_table.insert("git", git_url.into());
@@ -236,7 +234,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
         let features = toml_edit::Array::from_iter(["bn254", "bls12_381"]);
         pairing_table.insert("features", Value::Array(features));
         deps["openvm-pairing"] = Item::Value(Value::InlineTable(pairing_table));
-        
+
         // For packages with different names
         let create_dep_with_package = |package: &str, tag: Option<&str>| -> Item {
             let mut table = toml_edit::InlineTable::new();
@@ -247,10 +245,10 @@ pub fn execute(args: InitArgs) -> Result<()> {
             table.insert("package", package.into());
             Item::Value(Value::InlineTable(table))
         };
-        
+
         deps["openvm-k256"] = create_dep_with_package("k256", tag_as_str);
         deps["openvm-p256"] = create_dep_with_package("p256", tag_as_str);
-        
+
         // Write back preserving formatting
         fs::write(&cargo_toml_path, doc.to_string())?;
     }
