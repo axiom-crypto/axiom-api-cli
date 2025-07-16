@@ -1,8 +1,9 @@
 use clap::Parser;
-use eyre::Result;
+use eyre::{bail, Result};
 use std::fs;
 use std::path::Path;
 use std::process::Command;
+use toml_edit::{DocumentMut, Item, Table, Value};
 
 const MAIN_RS_PREPEND: &str = r#"#[allow(unused_imports)]
 use {
@@ -18,23 +19,7 @@ openvm::init!();
 
 "#;
 
-fn generate_additional_deps(tag: Option<&str>) -> String {
-    let tag_part = tag.map_or(String::new(), |tag| format!(r#", tag = "{}""#, tag));
 
-    format!(
-        r#"
-openvm-algebra-guest = {{ git = "https://github.com/openvm-org/openvm.git"{}, default-features = false }}
-openvm-ecc-guest = {{ git = "https://github.com/openvm-org/openvm.git"{}, default-features = false }}
-openvm-pairing = {{ git = "https://github.com/openvm-org/openvm.git"{}, features = [
-    "bn254",
-    "bls12_381",
-] }}
-openvm-k256 = {{ git = "https://github.com/openvm-org/openvm.git"{}, package = "k256" }}
-openvm-p256 = {{ git = "https://github.com/openvm-org/openvm.git"{}, package = "p256" }}
-"#,
-        tag_part, tag_part, tag_part, tag_part, tag_part
-    )
-}
 
 const OPENVM_TOML_TEMPLATE: &str = r#"openvm_version = "v1.2"
 
@@ -165,9 +150,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
         .map_err(|_| eyre::eyre!("cargo openvm is not installed. Please install it first."))?;
 
     if !check_status.status.success() {
-        return Err(eyre::eyre!(
-            "cargo openvm is not installed or not working properly."
-        ));
+        bail!("cargo openvm is not installed or not working properly.");
     }
 
     // Build the cargo openvm init command
@@ -187,7 +170,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
     // Execute cargo openvm init
     let status = cmd.status()?;
     if !status.success() {
-        return Err(eyre::eyre!("Failed to initialize OpenVM project"));
+        bail!("Failed to initialize OpenVM project");
     }
 
     // Determine the project directory
@@ -209,58 +192,67 @@ pub fn execute(args: InitArgs) -> Result<()> {
     let cargo_toml_path = project_dir.join("Cargo.toml");
     if cargo_toml_path.exists() {
         let cargo_content = fs::read_to_string(&cargo_toml_path)?;
-
-        // Find the openvm dependency line and extract tag, then insert additional dependencies after it
-        let lines: Vec<&str> = cargo_content.lines().collect();
-        let mut new_lines = Vec::new();
-        let mut openvm_found = false;
-        let mut extracted_tag = None;
-
-        for line in lines {
-            new_lines.push(line);
-
-            // Look for the openvm dependency line
-            if !openvm_found && line.contains("openvm = {") {
-                // Extract tag from the openvm dependency line
-                if let Some(tag_start) = line.find(r#"tag = ""#) {
-                    let tag_part = &line[tag_start + 7..]; // Skip 'tag = "'
-                    if let Some(tag_end) = tag_part.find('"') {
-                        extracted_tag = Some(&tag_part[..tag_end]);
-                    }
-                }
-                openvm_found = true;
+        let mut doc = cargo_content.parse::<DocumentMut>()?;
+        
+        // Extract tag from existing openvm dependency
+        let extracted_tag = doc
+            .get("dependencies")
+            .and_then(|deps| deps.get("openvm"))
+            .and_then(|openvm| openvm.get("tag"))
+            .and_then(|tag| tag.as_str())
+            .map(|s| s.to_string());
+        
+        // Get or create dependencies table
+        let deps = doc["dependencies"]
+            .or_insert(Item::Table(Table::new()))
+            .as_table_mut()
+            .ok_or_else(|| eyre::eyre!("Failed to access dependencies table"))?;
+        
+        // Add each dependency with proper TOML structure
+        let git_url = "https://github.com/openvm-org/openvm.git";
+        
+        // Helper to create a dependency entry
+        let create_dep = |tag: Option<&str>| -> Item {
+            let mut table = toml_edit::InlineTable::new();
+            table.insert("git", git_url.into());
+            if let Some(t) = tag {
+                table.insert("tag", t.into());
             }
-        }
-
-        // Generate and add the additional dependencies after processing all lines
-        let additional_deps = if openvm_found {
-            generate_additional_deps(extracted_tag)
-        } else {
-            generate_additional_deps(None)
+            table.insert("default-features", false.into());
+            Item::Value(Value::InlineTable(table))
         };
-
-        // Find where to insert the additional dependencies
-        if openvm_found {
-            // Find the openvm line again and insert after it
-            let mut final_lines = Vec::new();
-            for line in &new_lines {
-                final_lines.push(*line);
-                if line.contains("openvm = {") {
-                    for dep_line in additional_deps.trim_end().lines() {
-                        final_lines.push(dep_line);
-                    }
-                }
-            }
-            new_lines = final_lines;
-        } else {
-            // Append at the end
-            for dep_line in additional_deps.trim_end().lines() {
-                new_lines.push(dep_line);
-            }
+        
+        let tag_as_str = extracted_tag.as_deref();
+        
+        deps["openvm-algebra-guest"] = create_dep(tag_as_str);
+        deps["openvm-ecc-guest"] = create_dep(tag_as_str);
+        
+        // For openvm-pairing with features
+        let mut pairing_table = toml_edit::InlineTable::new();
+        pairing_table.insert("git", git_url.into());
+        if let Some(t) = &extracted_tag {
+            pairing_table.insert("tag", t.into());
         }
-
-        let new_cargo_content = new_lines.join("\n");
-        fs::write(&cargo_toml_path, new_cargo_content)?;
+        let features = toml_edit::Array::from_iter(["bn254", "bls12_381"]);
+        pairing_table.insert("features", Value::Array(features));
+        deps["openvm-pairing"] = Item::Value(Value::InlineTable(pairing_table));
+        
+        // For packages with different names
+        let create_dep_with_package = |package: &str, tag: Option<&str>| -> Item {
+            let mut table = toml_edit::InlineTable::new();
+            table.insert("git", git_url.into());
+            if let Some(t) = tag {
+                table.insert("tag", t.into());
+            }
+            table.insert("package", package.into());
+            Item::Value(Value::InlineTable(table))
+        };
+        
+        deps["openvm-k256"] = create_dep_with_package("k256", tag_as_str);
+        deps["openvm-p256"] = create_dep_with_package("p256", tag_as_str);
+        
+        // Write back preserving formatting
+        fs::write(&cargo_toml_path, doc.to_string())?;
     }
 
     // Create .env.example if it doesn't exist

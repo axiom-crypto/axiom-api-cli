@@ -952,6 +952,7 @@ dependencies = [
  "eyre",
  "serde_json",
  "tokio",
+ "toml_edit",
 ]
 
 [[package]]

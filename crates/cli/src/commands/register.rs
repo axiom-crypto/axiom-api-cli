@@ -1,6 +1,6 @@
 use axiom_sdk::{AxiomConfig, DEFAULT_CONFIG_ID, STAGING_DEFAULT_CONFIG_ID};
 use clap::Parser;
-use eyre::Result;
+use eyre::{OptionExt, Result};
 
 const STAGING_API_URL: &str = "https://api.staging.app.axiom.xyz/v1";
 const PROD_API_URL: &str = "https://api.axiom.xyz/v1";
@@ -48,9 +48,7 @@ pub fn execute(args: RegisterArgs) -> Result<()> {
     // Get API key from args or env var AXIOM_API_KEY
     let api_key = args.api_key
         .or_else(|| std::env::var("AXIOM_API_KEY").ok())
-        .ok_or_else(|| {
-            eyre::eyre!("API key must be provided either with --api-key flag or AXIOM_API_KEY environment variable")
-        })?;
+        .ok_or_eyre("API key must be provided either with --api-key flag or AXIOM_API_KEY environment variable")?;
 
     // Validate the API key with the backend
     println!("Validating API key...");
