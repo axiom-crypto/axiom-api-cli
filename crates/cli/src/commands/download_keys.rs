@@ -11,7 +11,7 @@ pub struct DownloadKeysCmd {
     config_id: Option<String>,
 
     /// The type of key to download
-    #[clap(long, value_parser = [
+    #[clap(long = "type", value_parser = [
         "app_vm",
         "leaf_vm",
         "internal_vm",
@@ -19,7 +19,7 @@ pub struct DownloadKeysCmd {
         "halo2_outer",
         "halo2_wrapper",
     ])]
-    r#type: String,
+    key_type: String,
 
     /// Optional output file path (defaults to key_type name in current directory)
     #[clap(long, value_name = "FILE")]
@@ -31,7 +31,7 @@ impl DownloadKeysCmd {
         let config = axiom_sdk::load_config()?;
         let sdk = AxiomSdk::new(config);
 
-        let pk_downloader = sdk.get_proving_keys(self.config_id.as_deref(), &self.r#type)?;
+        let pk_downloader = sdk.get_proving_keys(self.config_id.as_deref(), &self.key_type)?;
         println!("Download URL: {}", pk_downloader.download_url);
         Ok(())
     }
