@@ -86,7 +86,7 @@ impl BuildCmd {
                 let build_status = sdk.get_build_status(&program_id)?;
                 println!(
                     "Build status: {}",
-                    serde_json::to_string(&build_status).unwrap()
+                    serde_json::to_string_pretty(&build_status).unwrap()
                 );
                 Ok(())
             }
