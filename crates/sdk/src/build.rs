@@ -539,7 +539,7 @@ impl BuildSdk for AxiomSdk {
         });
 
         // Open the file with progress tracking
-        let file = File::open(&tar_path).context("Failed to open tar file")?;
+        let file = File::open(tar_path).context("Failed to open tar file")?;
         let progress_reader = ProgressReader {
             inner: file,
             progress: Arc::clone(&progress),
