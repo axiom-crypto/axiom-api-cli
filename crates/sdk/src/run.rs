@@ -83,7 +83,7 @@ impl RunSdk for AxiomSdk {
         // Get the program_id from args, return error if not provided
         let program_id = args
             .program_id
-            .ok_or_else(|| eyre::eyre!("Program ID is required. Use --program-id to specify."))?;
+            .ok_or_eyre("Program ID is required. Use --program-id to specify.")?;
 
         println!("Executing program ID: {}", program_id);
 
@@ -113,7 +113,7 @@ impl RunSdk for AxiomSdk {
                         if !s.trim_start_matches("0x").starts_with("01")
                             && !s.trim_start_matches("0x").starts_with("02")
                         {
-                            return Err(eyre::eyre!("Hex string must start with '01' or '02'"));
+                            eyre::bail!("Hex string must start with '01' or '02'");
                         }
                         json!({ "input": [s] })
                     }
@@ -168,15 +168,15 @@ fn validate_input_json(json: &serde_json::Value) -> Result<()> {
         .try_for_each(|inner| {
             inner
                 .as_str()
-                .ok_or_else(|| eyre::eyre!("Each value must be a hex string"))
+                .ok_or_eyre("Each value must be a hex string")
                 .and_then(|s| {
                     if !is_valid_hex_string(s) {
-                        return Err(eyre::eyre!("Invalid hex string"));
+                        eyre::bail!("Invalid hex string");
                     }
                     if !s.trim_start_matches("0x").starts_with("01")
                         && !s.trim_start_matches("0x").starts_with("02")
                     {
-                        return Err(eyre::eyre!("Hex string must start with '01' or '02'"));
+                        eyre::bail!("Hex string must start with '01' or '02'");
                     }
                     Ok(())
                 })

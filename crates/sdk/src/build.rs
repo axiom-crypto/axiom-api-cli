@@ -6,10 +6,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use eyre::{Context, Result};
+use eyre::{Context, OptionExt, Result};
 use flate2::{write::GzEncoder, Compression};
 use openvm_build::cargo_command;
 use reqwest::blocking::Client;
+use scopeguard::defer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
@@ -88,6 +89,19 @@ impl<R: Read> Read for ProgressReader<R> {
             progress.0 += n as u64;
         }
         Ok(n)
+    }
+}
+
+struct TarFile {
+    path: String,
+    keep: bool,
+}
+
+impl Drop for TarFile {
+    fn drop(&mut self) {
+        if !self.keep {
+            std::fs::remove_file(&self.path).unwrap();
+        }
     }
 }
 
@@ -250,12 +264,12 @@ impl BuildSdk for AxiomSdk {
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
-            return Err(eyre::eyre!("Client error ({}): {}", status, error_text));
+            eyre::bail!("Client error ({}): {}", status, error_text);
         } else {
-            return Err(eyre::eyre!(
+            eyre::bail!(
                 "Logs download request failed with status: {}",
                 response.status()
-            ));
+            );
         }
 
         Ok(())
@@ -268,9 +282,7 @@ impl BuildSdk for AxiomSdk {
     ) -> Result<String> {
         // Check if we're in a Rust project
         if !is_rust_project(program_dir.as_ref()) {
-            return Err(eyre::eyre!(
-                "Not in a Rust project. Make sure Cargo.toml exists."
-            ));
+            eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
         }
 
         // Check toolchain version using rustc_version crate
@@ -279,10 +291,10 @@ impl BuildSdk for AxiomSdk {
             .semver;
 
         if toolchain_version.major != 1 || toolchain_version.minor != 85 {
-            return Err(eyre::eyre!(
+            eyre::bail!(
                 "Unsupported toolchain version, expected 1.85, found: {}, Use `rustup default 1.85` to install as your default.",
                 toolchain_version.to_string()
-            ));
+            );
         }
 
         // Use config id if it was provided
@@ -342,7 +354,7 @@ impl BuildSdk for AxiomSdk {
             if current_dir.as_path() == metadata.workspace_root.as_std_path() {
                 metadata.workspace_packages()
             } else {
-                return Err(eyre::eyre!("Could not determine which Cargo package to build. Please run this command from a package directory or the workspace root."));
+                eyre::bail!("Could not determine which Cargo package to build. Please run this command from a package directory or the workspace root.");
             }
         } else {
             pkgs_in_current_dir.sort_by_key(|p| p.manifest_path.as_str().len());
@@ -357,7 +369,7 @@ impl BuildSdk for AxiomSdk {
         let bin_to_build = if binaries.len() > 1 {
             if let Some(bin_name) = &args.bin {
                 if !binaries.iter().any(|b| &b.name == bin_name) {
-                    return Err(eyre::eyre!(
+                    eyre::bail!(
                         "Binary '{}' not found. Available binaries: {}",
                         bin_name,
                         binaries
@@ -365,18 +377,18 @@ impl BuildSdk for AxiomSdk {
                             .map(|b| b.name.as_str())
                             .collect::<Vec<_>>()
                             .join(", ")
-                    ));
+                    );
                 }
                 Some(bin_name.clone())
             } else {
-                return Err(eyre::eyre!(
+                eyre::bail!(
                     "Multiple binaries found. Please specify which one to build with the --bin flag. Available binaries: {}",
                     binaries
                         .iter()
                         .map(|b| b.name.as_str())
                         .collect::<Vec<_>>()
                         .join(", ")
-                ));
+                );
             }
         } else if let Some(bin) = binaries.first() {
             args.bin
@@ -420,17 +432,23 @@ impl BuildSdk for AxiomSdk {
 
         // Create tar archive of the current directory
         println!("Creating archive of the project...");
-        let tar_path = create_tar_archive(program_dir.as_ref(), &exclude_patterns, &include_dirs)?;
+        let tar_file = create_tar_archive(
+            program_dir.as_ref(),
+            args.keep_tarball.unwrap_or(false),
+            &exclude_patterns,
+            &include_dirs,
+        )?;
+        let tar_path = &tar_file.path;
 
         // Check if the tar file size exceeds 10MB
-        let metadata = std::fs::metadata(&tar_path).context("Failed to get tar file metadata")?;
+        let metadata = std::fs::metadata(tar_path).context("Failed to get tar file metadata")?;
         if metadata.len() > MAX_PROGRAM_SIZE_MB * 1024 * 1024 {
             std::fs::remove_file(tar_path).ok();
-            return Err(eyre::eyre!(
+            eyre::bail!(
                 "Project archive size ({}) exceeds maximum allowed size of {}MB",
                 metadata.len(),
                 MAX_PROGRAM_SIZE_MB
-            ));
+            );
         }
 
         // Add program_path as a query parameter if it's not empty
@@ -521,7 +539,7 @@ impl BuildSdk for AxiomSdk {
         });
 
         // Open the file with progress tracking
-        let file = File::open(&tar_path).context("Failed to open tar file")?;
+        let file = File::open(tar_path).context("Failed to open tar file")?;
         let progress_reader = ProgressReader {
             inner: file,
             progress: Arc::clone(&progress),
@@ -541,7 +559,7 @@ impl BuildSdk for AxiomSdk {
             })?;
             let file_name = config_path
                 .file_name()
-                .ok_or_else(|| eyre::eyre!("Invalid config file path"))?
+                .ok_or_eyre("Invalid config file path")?
                 .to_string_lossy()
                 .to_string();
             let config_part = reqwest::blocking::multipart::Part::bytes(config_file_content)
@@ -558,11 +576,6 @@ impl BuildSdk for AxiomSdk {
 
         // Wait for the progress thread to finish
         progress_handle.join().unwrap();
-
-        // Clean up the tar file
-        if !args.keep_tarball.unwrap_or(false) {
-            std::fs::remove_file(tar_path).ok();
-        }
 
         // Check if the request was successful
         if response.status().is_success() {
@@ -601,7 +614,7 @@ fn find_git_root(program_dir: impl AsRef<Path>) -> Result<std::path::PathBuf> {
         // Move up to parent directory
         if !current_dir.pop() {
             // We've reached the root of the filesystem without finding a .git directory
-            return Err(eyre::eyre!("Not in a git repository"));
+            eyre::bail!("Not in a git repository");
         }
     }
 }
@@ -663,7 +676,7 @@ fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
             .to_string();
 
         if commit_sha.is_empty() {
-            return Err(eyre::eyre!("Got empty commit SHA from git reference"));
+            eyre::bail!("Got empty commit SHA from git reference");
         }
 
         Ok(commit_sha)
@@ -682,11 +695,16 @@ fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
 // Additionally, it does `cargo fetch` to pre-fetch dependencies so private dependencies are included.
 fn create_tar_archive(
     program_dir: impl AsRef<Path>,
+    keep_tarball: bool,
     exclude_patterns: &[String],
     include_dirs: &[String],
-) -> Result<String> {
+) -> Result<TarFile> {
     let tar_path = program_dir.as_ref().join("program.tar.gz");
     let tar_file = File::create(&tar_path)?;
+    let tar = TarFile {
+        path: tar_path.to_string_lossy().to_string(),
+        keep: keep_tarball,
+    };
     let enc = GzEncoder::new(tar_file, Compression::default());
     let mut builder = Builder::new(enc);
 
@@ -696,7 +714,7 @@ fn create_tar_archive(
     // Get the git root directory name
     let dir_name = git_root
         .file_name()
-        .ok_or_else(|| eyre::eyre!("Failed to get git root directory name"))?
+        .ok_or_eyre("Failed to get git root directory name")?
         .to_string_lossy()
         .to_string();
 
@@ -713,6 +731,11 @@ fn create_tar_archive(
     let axiom_cargo_home = cargo_workspace_root.join(AXIOM_CARGO_HOME);
     std::fs::create_dir_all(&axiom_cargo_home)?;
 
+    // Clean up the axiom_cargo_home directory when the function exits
+    defer! {
+        std::fs::remove_dir_all(&axiom_cargo_home).ok();
+    }
+
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
     // Fetch 1: target = x86 linux which is the cloud machine
     println!("Fetching dependencies to {AXIOM_CARGO_HOME}...");
@@ -724,7 +747,7 @@ fn create_tar_archive(
         .status()
         .context("Failed to run 'cargo fetch'")?;
     if !status.success() {
-        return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
+        eyre::bail!("Failed to fetch cargo dependencies");
     }
 
     // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
@@ -736,7 +759,7 @@ fn create_tar_archive(
         .status()
         .context("Failed to run 'cargo fetch'")?;
     if !status.success() {
-        return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
+        eyre::bail!("Failed to fetch cargo dependencies");
     }
 
     // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
@@ -745,7 +768,7 @@ fn create_tar_archive(
         .status()
         .context("Failed to run 'cargo fetch'")?;
     if !status.success() {
-        return Err(eyre::eyre!("Failed to fetch cargo dependencies"));
+        eyre::bail!("Failed to fetch cargo dependencies");
     }
 
     std::env::set_current_dir(&git_root)?;
@@ -756,7 +779,7 @@ fn create_tar_archive(
         .context("Failed to run 'git ls-files'")?;
 
     if !output.status.success() {
-        return Err(eyre::eyre!("Failed to get git tracked files"));
+        eyre::bail!("Failed to get git tracked files");
     }
 
     let tracked_files: std::collections::HashSet<String> = String::from_utf8(output.stdout)?
@@ -772,9 +795,7 @@ fn create_tar_archive(
         .any(|path| path.ends_with("Cargo.lock"));
 
     if !has_cargo_toml || !has_cargo_lock {
-        return Err(eyre::eyre!(
-            "Cargo.toml and Cargo.lock are required and should be tracked by git"
-        ));
+        eyre::bail!("Cargo.toml and Cargo.lock are required and should be tracked by git");
     }
 
     // Walk through the directory and add files to the archive
@@ -784,6 +805,12 @@ fn create_tar_archive(
         .filter_entry(|e| {
             let path = e.path();
             let path_str = path.to_string_lossy();
+
+            // Exclude the tar file itself to avoid adding it to the tarball
+            if path_str.ends_with("program.tar.gz") {
+                return false;
+            }
+
             // Check against user-provided exclusion patterns
             let matches_exclusion = exclude_patterns.iter().any(|s| path_str.contains(s));
             // Check if path is in user-provided include directories
@@ -815,10 +842,8 @@ fn create_tar_archive(
     }
 
     builder.finish()?;
-    // Clean up the axiom_cargo_home directory
-    std::fs::remove_dir_all(axiom_cargo_home).ok();
     // Change back to the original directory
     std::env::set_current_dir(original_dir)?;
 
-    Ok(tar_path.to_string_lossy().to_string())
+    Ok(tar)
 }

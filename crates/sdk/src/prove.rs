@@ -1,7 +1,7 @@
 use std::{fs, io::copy, path::PathBuf};
 
 use cargo_openvm::input::{is_valid_hex_string, Input};
-use eyre::{Context, Result};
+use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -235,7 +235,7 @@ impl ProveSdk for AxiomSdk {
         // Get the program_id from args, return error if not provided
         let program_id = args
             .program_id
-            .ok_or_else(|| eyre::eyre!("Program ID is required. Use --program-id to specify."))?;
+            .ok_or_eyre("Program ID is required. Use --program-id to specify.")?;
 
         let proof_type = args.proof_type.unwrap_or_else(|| "stark".to_string());
 
@@ -266,7 +266,7 @@ impl ProveSdk for AxiomSdk {
             Some(Input::HexBytes(s)) => {
                 let trimmed = s.trim_start_matches("0x");
                 if !trimmed.starts_with("01") && !trimmed.starts_with("02") {
-                    return Err(eyre::eyre!("Hex string must start with '01' or '02'"));
+                    eyre::bail!("Hex string must start with '01' or '02'");
                 }
                 json!({ "input": [s] })
             }
@@ -307,20 +307,20 @@ impl ProveSdk for AxiomSdk {
 fn validate_input_json(json: &serde_json::Value) -> Result<()> {
     json["input"]
         .as_array()
-        .ok_or_else(|| eyre::eyre!("Input must be an array under 'input' key"))?
+        .ok_or_eyre("Input must be an array under 'input' key")?
         .iter()
         .try_for_each(|inner| {
             inner
                 .as_str()
-                .ok_or_else(|| eyre::eyre!("Each value must be a hex string"))
+                .ok_or_eyre("Each value must be a hex string")
                 .and_then(|s| {
                     if !is_valid_hex_string(s) {
-                        return Err(eyre::eyre!("Invalid hex string"));
+                        eyre::bail!("Invalid hex string");
                     }
                     if !s.trim_start_matches("0x").starts_with("01")
                         && !s.trim_start_matches("0x").starts_with("02")
                     {
-                        return Err(eyre::eyre!("Hex string must start with '01' or '02'"));
+                        eyre::bail!("Hex string must start with '01' or '02'");
                     }
                     Ok(())
                 })

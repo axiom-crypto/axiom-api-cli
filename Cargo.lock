@@ -672,6 +672,7 @@ dependencies = [
  "openvm-sdk",
  "reqwest",
  "rustc_version",
+ "scopeguard",
  "serde",
  "serde_json",
  "tar",
@@ -951,6 +952,7 @@ dependencies = [
  "eyre",
  "serde_json",
  "tokio",
+ "toml_edit",
 ]
 
 [[package]]

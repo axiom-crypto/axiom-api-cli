@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use axiom_sdk::{verify::VerifySdk, AxiomSdk};
 use clap::{Args, Subcommand};
-use eyre::Result;
+use eyre::{OptionExt, Result};
 
 #[derive(Args, Debug)]
 pub struct VerifyCmd {
@@ -43,9 +43,9 @@ impl VerifyCmd {
                 Ok(())
             }
             None => {
-                let proof = self.proof.ok_or_else(|| {
-                    eyre::eyre!("Proof file is required. Use --proof to specify.")
-                })?;
+                let proof = self
+                    .proof
+                    .ok_or_eyre("Proof file is required. Use --proof to specify.")?;
 
                 let verify_id = sdk.verify_proof(self.config_id.as_deref(), proof)?;
                 println!(

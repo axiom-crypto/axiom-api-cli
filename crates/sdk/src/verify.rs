@@ -67,7 +67,7 @@ impl VerifySdk for AxiomSdk {
 
         // Check if the proof file exists
         if !proof_path.exists() {
-            return Err(eyre::eyre!("Proof file does not exist: {:?}", proof_path));
+            eyre::bail!("Proof file does not exist: {:?}", proof_path);
         }
 
         let proof_content = std::fs::read_to_string(&proof_path)?;

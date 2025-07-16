@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use dirs::home_dir;
-use eyre::{Context, Result};
+use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 
@@ -55,7 +55,7 @@ impl Default for AxiomConfig {
 }
 
 pub fn get_axiom_dir() -> Result<PathBuf> {
-    let home = home_dir().ok_or_else(|| eyre::eyre!("Could not find home directory"))?;
+    let home = home_dir().ok_or_eyre("Could not find home directory")?;
     Ok(home.join(".axiom"))
 }
 
@@ -79,9 +79,7 @@ pub fn load_config_without_validation() -> Result<AxiomConfig> {
 pub fn load_config() -> Result<AxiomConfig> {
     let config = load_config_without_validation()?;
     if config.api_key.is_none() {
-        return Err(eyre::eyre!(
-            "CLI not initialized. Run 'cargo axiom init' first."
-        ));
+        eyre::bail!("CLI not initialized. Run 'cargo axiom init' first.");
     }
     Ok(config)
 }
@@ -105,7 +103,7 @@ pub fn get_api_key() -> Result<String> {
     let config = load_config()?;
     config
         .api_key
-        .ok_or_else(|| eyre::eyre!("API key not found. Run 'cargo axiom init' first."))
+        .ok_or_eyre("API key not found. Run 'cargo axiom init' first.")
 }
 
 pub fn set_config_id(id: &str) -> Result<()> {
