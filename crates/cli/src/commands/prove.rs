@@ -64,6 +64,10 @@ pub struct ProveArgs {
     /// The type of proof to generate (stark or evm)
     #[clap(long = "type", value_parser = ["stark", "evm"], default_value = "stark")]
     proof_type: String,
+
+    /// Wait for the proof to complete and download artifacts
+    #[clap(long)]
+    wait: bool,
 }
 
 impl ProveCmd {
@@ -84,8 +88,8 @@ impl ProveCmd {
                 proof_id,
                 proof_type,
                 output,
-            }) => sdk.get_generated_proof(&proof_id, &proof_type, output),
-            Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
+            }) => sdk.get_generated_proof(&proof_id, &proof_type, None, output),
+            Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id, None),
             Some(ProveSubcommand::List { program_id }) => {
                 let proof_status_list = sdk.list_proofs(&program_id)?;
 
@@ -116,15 +120,20 @@ impl ProveCmd {
             }
             None => {
                 let args = axiom_sdk::prove::ProveArgs {
-                    program_id: self.prove_args.program_id,
+                    program_id: self.prove_args.program_id.clone(),
                     input: self.prove_args.input,
-                    proof_type: Some(self.prove_args.proof_type),
+                    proof_type: Some(self.prove_args.proof_type.clone()),
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
-                println!(
-                    "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
-                );
-                Ok(())
+                
+                if self.prove_args.wait {
+                    sdk.wait_for_proof_completion(&proof_id, self.prove_args.program_id.as_deref())
+                } else {
+                    println!(
+                        "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
+                    );
+                    Ok(())
+                }
             }
         }
     }

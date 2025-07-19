@@ -70,7 +70,7 @@ impl ConfigSdk for AxiomSdk {
         let config_id = get_config_id(config_id, &self.config)?;
         let url = format!("{}/configs/{}", self.config.api_url, config_id);
 
-        println!("Checking status for config ID: {config_id}");
+
 
         // Make the GET request
         let client = Client::new();
@@ -173,12 +173,17 @@ fn download_artifact(
     let output_path = match output {
         Some(path) => path,
         None => {
+            // Create organized directory structure
+            let config_dir = format!("axiom-artifacts/configs/{}", config_id);
+            std::fs::create_dir_all(&config_dir)
+                .context(format!("Failed to create config directory: {}", config_dir))?;
+            
             if artifact_type == "evm_verifier" {
-                PathBuf::from(format!("./evm_verifier-{config_id}.json"))
+                PathBuf::from(format!("{}/evm_verifier.json", config_dir))
             } else if artifact_type == "config" {
-                PathBuf::from(format!("./config-{config_id}.toml"))
+                PathBuf::from(format!("{}/config.toml", config_dir))
             } else {
-                PathBuf::from(format!("./{artifact_type}-{config_id}"))
+                PathBuf::from(format!("{}/{}", config_dir, artifact_type))
             }
         }
     };

@@ -74,6 +74,10 @@ pub struct BuildArgs {
     /// Comma-separated list of directories to include even if not tracked by git
     #[clap(long, value_name = "DIRS")]
     include_dirs: Option<String>,
+
+    /// Wait for the build to complete and download artifacts
+    #[clap(long)]
+    wait: bool,
 }
 
 impl BuildCmd {
@@ -138,10 +142,15 @@ impl BuildCmd {
                     force_keygen: self.build_args.force_keygen,
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
-                println!(
-                    "To check the build status, run: cargo axiom build status --program-id {program_id}"
-                );
-                Ok(())
+                
+                if self.build_args.wait {
+                    sdk.wait_for_build_completion(&program_id)
+                } else {
+                    println!(
+                        "To check the build status, run: cargo axiom build status --program-id {program_id}"
+                    );
+                    Ok(())
+                }
             }
         }
     }
