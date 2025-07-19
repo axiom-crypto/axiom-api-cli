@@ -16,6 +16,10 @@ pub struct VerifyCmd {
     /// Path to the proof file
     #[clap(long, value_name = "FILE")]
     proof: Option<PathBuf>,
+
+    /// Wait for the verification to complete
+    #[clap(long)]
+    wait: bool,
 }
 
 #[derive(Debug, Subcommand)]
@@ -48,10 +52,15 @@ impl VerifyCmd {
                     .ok_or_eyre("Proof file is required. Use --proof to specify.")?;
 
                 let verify_id = sdk.verify_proof(self.config_id.as_deref(), proof)?;
-                println!(
-                    "To check the verification status, run: cargo axiom verify status --verify-id {verify_id}"
-                );
-                Ok(())
+                
+                if self.wait {
+                    sdk.wait_for_verify_completion(&verify_id)
+                } else {
+                    println!(
+                        "To check the verification status, run: cargo axiom verify status --verify-id {verify_id}"
+                    );
+                    Ok(())
+                }
             }
         }
     }

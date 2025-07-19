@@ -23,3 +23,4 @@ rustc_version = "0.4.0"
 cargo_metadata = "0.18"
 url = "2.5"
 scopeguard = "1.2"
+chrono = { version = "0.4", features = ["serde"] }
