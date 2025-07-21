@@ -64,12 +64,16 @@ pub struct ProveArgs {
     /// The type of proof to generate (stark or evm)
     #[clap(long = "type", value_parser = ["stark", "evm"], default_value = "stark")]
     proof_type: String,
+
+    /// The project ID to associate with the proof
+    #[arg(long)]
+    project_id: Option<u32>,
 }
 
 impl ProveCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config);
+        let sdk = AxiomSdk::new(config.clone());
 
         match self.command {
             Some(ProveSubcommand::Status { proof_id }) => {
@@ -115,10 +119,16 @@ impl ProveCmd {
                 Ok(())
             }
             None => {
+                let project_id = axiom_sdk::get_project_id(self.prove_args.project_id, &config);
+                if let Some(pid) = project_id {
+                    println!("Using project ID: {pid}");
+                }
+
                 let args = axiom_sdk::prove::ProveArgs {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
                     proof_type: Some(self.prove_args.proof_type),
+                    project_id,
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
                 println!(

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod build;
 pub mod config;
+pub mod projects;
 pub mod prove;
 pub mod run;
 pub mod verify;
@@ -27,11 +28,12 @@ impl AxiomSdk {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AxiomConfig {
     pub api_url: String,
     pub api_key: Option<String>,
     pub config_id: Option<String>,
+    pub last_project_id: Option<u32>,
 }
 
 impl AxiomConfig {
@@ -40,6 +42,7 @@ impl AxiomConfig {
             api_url,
             api_key,
             config_id,
+            last_project_id: None,
         }
     }
 }
@@ -50,6 +53,7 @@ impl Default for AxiomConfig {
             api_url: "https://api.axiom.xyz/v1".to_string(),
             api_key: None,
             config_id: Some(DEFAULT_CONFIG_ID.to_string()),
+            last_project_id: None,
         }
     }
 }
@@ -121,6 +125,24 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
         Ok(id.clone())
     } else {
         Err(eyre::eyre!("No config ID provided"))
+    }
+}
+
+pub fn set_project_id(id: u32) -> Result<()> {
+    let mut config = load_config()?;
+    config.last_project_id = Some(id);
+    save_config(&config)
+}
+
+pub fn get_project_id(args_project_id: Option<u32>, config: &AxiomConfig) -> Option<u32> {
+    if let Some(id) = args_project_id {
+        if set_project_id(id).is_ok() {
+            Some(id)
+        } else {
+            args_project_id
+        }
+    } else {
+        config.last_project_id
     }
 }
 

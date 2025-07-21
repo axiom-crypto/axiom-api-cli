@@ -66,6 +66,8 @@ pub struct BuildArgs {
     pub include_dirs: Option<String>,
     /// Internal Only: Force creating the config and triggering keygen.
     pub force_keygen: bool,
+    /// The project ID to associate with the build
+    pub project_id: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -468,6 +470,9 @@ impl BuildSdk for AxiomSdk {
         );
         if let Some(id) = &config_id {
             url.push_str(&format!("&config_id={id}"));
+        }
+        if let Some(project_id) = args.project_id {
+            url.push_str(&format!("&project_id={project_id}"));
         }
         if let Some(bin) = bin_to_build {
             url.push_str(&format!("&bin_name={bin}"));
