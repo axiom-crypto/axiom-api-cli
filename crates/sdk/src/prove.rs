@@ -1,12 +1,11 @@
-use std::{fs, io::copy, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 use cargo_openvm::input::{is_valid_hex_string, Input};
 use eyre::{Context, OptionExt, Result};
-use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::{AxiomSdk, API_KEY_HEADER};
+use crate::{authenticated_get, authenticated_post, download_file, send_request_json, AxiomSdk};
 
 pub trait ProveSdk {
     fn list_proofs(&self, program_id: &str) -> Result<Vec<ProofStatus>>;
@@ -48,18 +47,9 @@ pub struct ProofStatus {
 impl ProveSdk for AxiomSdk {
     fn list_proofs(&self, program_id: &str) -> Result<Vec<ProofStatus>> {
         let url = format!("{}/proofs?program_id={}", self.config.api_url, program_id);
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
 
-        let response = Client::new()
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
-            .send()?;
-
-        let body: Value = response.json()?;
+        let request = authenticated_get(&self.config, &url)?;
+        let body: Value = send_request_json(request, "Failed to send list proofs request")?;
 
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
@@ -70,7 +60,6 @@ impl ProveSdk for AxiomSdk {
 
             let mut proofs = vec![];
 
-            // Add rows to the table
             for item in items {
                 let proof_status = serde_json::from_value(item.clone())?;
                 proofs.push(proof_status);
@@ -87,36 +76,10 @@ impl ProveSdk for AxiomSdk {
 
         println!("Checking proof status for proof ID: {proof_id}");
 
-        // Make the GET request
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
-            .send()
-            .context("Failed to send status request")?;
-
-        // Check if the request was successful
-        if response.status().is_success() {
-            let body: Value = response.json()?;
-            let proof_status = serde_json::from_value(body)?;
-            Ok(proof_status)
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            println!("Cannot check proof status for this proof: {error_text}");
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "Status request failed with status: {}",
-                response.status()
-            ))
-        }
+        let request = authenticated_get(&self.config, &url)?;
+        let body: Value = send_request_json(request, "Failed to send status request")?;
+        let proof_status = serde_json::from_value(body)?;
+        Ok(proof_status)
     }
 
     fn get_generated_proof(
@@ -132,53 +95,14 @@ impl ProveSdk for AxiomSdk {
 
         println!("Downloading {proof_type} proof for proof ID: {proof_id}");
 
-        // Make the GET request
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        // Determine output file path
+        let output_path = match output {
+            Some(path) => path,
+            None => PathBuf::from(format!("{proof_id}-{proof_type}-proof.json")),
+        };
 
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
-            .send()
-            .context("Failed to send download request")?;
-
-        // Check if the request was successful
-        if response.status().is_success() {
-            // Determine output file path
-            let output_path = match output {
-                Some(path) => path,
-                None => PathBuf::from(format!("{proof_id}-{proof_type}-proof.json")),
-            };
-
-            // Create file and stream the response body to it
-            let mut file = fs::File::create(&output_path)
-                .context(format!("Failed to create output file: {output_path:?}"))?;
-
-            copy(
-                &mut response
-                    .bytes()
-                    .context("Failed to read response body")?
-                    .as_ref(),
-                &mut file,
-            )
-            .context("Failed to write response to file")?;
-
-            println!("Successfully downloaded to: {output_path:?}");
-            Ok(())
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "Download request failed with status: {}",
-                response.status()
-            ))
-        }
+        let request = authenticated_get(&self.config, &url)?;
+        download_file(request, &output_path, "Failed to send download request")
     }
 
     fn get_proof_logs(&self, proof_id: &str) -> Result<()> {
@@ -186,49 +110,9 @@ impl ProveSdk for AxiomSdk {
 
         println!("Downloading logs for proof ID: {proof_id}");
 
-        // Make the GET request
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
-            .send()
-            .context("Failed to send logs request")?;
-
-        // Check if the request was successful
-        if response.status().is_success() {
-            // Create file and stream the response body to it
-            let output_path = PathBuf::from(format!("{proof_id}-logs.txt"));
-            let mut file = fs::File::create(&output_path)
-                .context(format!("Failed to create output file: {output_path:?}"))?;
-
-            copy(
-                &mut response
-                    .bytes()
-                    .context("Failed to read response body")?
-                    .as_ref(),
-                &mut file,
-            )
-            .context("Failed to write response to file")?;
-
-            println!("Successfully downloaded logs to: {output_path:?}");
-            Ok(())
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            println!("Cannot download logs for this proof: {error_text}");
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "Logs request failed with status: {}",
-                response.status()
-            ))
-        }
+        let output_path = PathBuf::from(format!("{proof_id}-logs.txt"));
+        let request = authenticated_get(&self.config, &url)?;
+        download_file(request, &output_path, "Failed to send logs request")
     }
 
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String> {
@@ -245,11 +129,6 @@ impl ProveSdk for AxiomSdk {
             "{}/proofs?program_id={program_id}&proof_type={proof_type}",
             self.config.api_url
         );
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
 
         // Create the request body based on input
         let body = match &args.input {
@@ -274,33 +153,14 @@ impl ProveSdk for AxiomSdk {
         };
 
         // Make API request
-        let client = Client::new();
-        let response = client
-            .post(url)
+        let request = authenticated_post(&self.config, &url)?
             .header("Content-Type", "application/json")
-            .header(API_KEY_HEADER, api_key)
-            .body(body.to_string())
-            .send()
-            .context("Failed to send proof request")?;
+            .body(body.to_string());
 
-        // Handle response
-        if response.status().is_success() {
-            let response_json: Value = response.json()?;
-            let proof_id = response_json["id"].as_str().unwrap();
-            println!("Proof generation initiated successfully!: {proof_id}");
-            Ok(proof_id.to_string())
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            println!("Cannot generate proof for this program: {error_text}");
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            let status = response.status();
-            Err(eyre::eyre!(
-                "Generate proof request failed with status: {}",
-                status
-            ))
-        }
+        let response_json: Value = send_request_json(request, "Failed to send proof request")?;
+        let proof_id = response_json["id"].as_str().unwrap();
+        println!("Proof generation initiated successfully!: {proof_id}");
+        Ok(proof_id.to_string())
     }
 }
 
