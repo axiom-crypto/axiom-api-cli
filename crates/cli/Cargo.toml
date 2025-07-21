@@ -16,7 +16,7 @@ serde_json = { workspace = true }
 clap = { version = "4.4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 eyre = "0.6.12"
-dotenv = "0.15.0"
+dotenvy = "0.15.7"
 toml_edit = "0.23.2"
 
 [build-dependencies]

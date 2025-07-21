@@ -1,7 +1,7 @@
 use std::process;
 
 use clap::{Args, Parser, Subcommand};
-use dotenv::dotenv;
+use dotenvy::dotenv;
 
 mod commands;
 
