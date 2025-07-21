@@ -49,7 +49,7 @@ impl ProveSdk for AxiomSdk {
         let url = format!("{}/proofs?program_id={}", self.config.api_url, program_id);
 
         let request = authenticated_get(&self.config, &url)?;
-        let body: Value = send_request_json(request, "Failed to send list proofs request")?;
+        let body: Value = send_request_json(request, "Failed to list proofs")?;
 
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
@@ -77,7 +77,7 @@ impl ProveSdk for AxiomSdk {
         println!("Checking proof status for proof ID: {proof_id}");
 
         let request = authenticated_get(&self.config, &url)?;
-        let body: Value = send_request_json(request, "Failed to send status request")?;
+        let body: Value = send_request_json(request, "Failed to check proof status")?;
         let proof_status = serde_json::from_value(body)?;
         Ok(proof_status)
     }
@@ -102,7 +102,7 @@ impl ProveSdk for AxiomSdk {
         };
 
         let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &output_path, "Failed to send download request")
+        download_file(request, &output_path, "Failed to download proof")
     }
 
     fn get_proof_logs(&self, proof_id: &str) -> Result<()> {
@@ -112,7 +112,7 @@ impl ProveSdk for AxiomSdk {
 
         let output_path = PathBuf::from(format!("{proof_id}-logs.txt"));
         let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &output_path, "Failed to send logs request")
+        download_file(request, &output_path, "Failed to download proof logs")
     }
 
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String> {
@@ -157,7 +157,7 @@ impl ProveSdk for AxiomSdk {
             .header("Content-Type", "application/json")
             .body(body.to_string());
 
-        let response_json: Value = send_request_json(request, "Failed to send proof request")?;
+        let response_json: Value = send_request_json(request, "Failed to generate proof")?;
         let proof_id = response_json["id"].as_str().unwrap();
         println!("Proof generation initiated successfully!: {proof_id}");
         Ok(proof_id.to_string())

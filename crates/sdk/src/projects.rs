@@ -87,7 +87,7 @@ impl ProjectSdk for AxiomSdk {
         );
 
         let request = authenticated_get(&self.config, &url)?;
-        send_request_json(request, "Failed to send list projects request")
+        send_request_json(request, "Failed to list projects")
     }
 
     fn create_project(&self, name: &str) -> Result<ProjectCreateResponse> {
@@ -96,14 +96,14 @@ impl ProjectSdk for AxiomSdk {
         let request = authenticated_post(&self.config, &url)?
             .header("Content-Type", "application/json")
             .json(&name);
-        send_request_json(request, "Failed to send create project request")
+        send_request_json(request, "Failed to create project")
     }
 
     fn get_project(&self, project_id: u32) -> Result<ProjectResponse> {
         let url = format!("{}/projects/{}", self.config.api_url, project_id);
 
         let request = authenticated_get(&self.config, &url)?;
-        send_request_json(request, "Failed to send get project request")
+        send_request_json(request, "Failed to get project")
     }
 
     fn list_project_programs(
@@ -120,7 +120,7 @@ impl ProjectSdk for AxiomSdk {
         );
 
         let request = authenticated_get(&self.config, &url)?;
-        send_request_json(request, "Failed to send list project programs request")
+        send_request_json(request, "Failed to list project programs")
     }
 
     fn move_program_to_project(&self, program_id: &str, project_id: u32) -> Result<()> {
@@ -130,7 +130,7 @@ impl ProjectSdk for AxiomSdk {
         let request = authenticated_put(&self.config, &url)?
             .header("Content-Type", "application/json")
             .json(&request_body);
-        send_request(request, "Failed to send move program request")
+        send_request(request, "Failed to move program to project")
     }
 }
 

@@ -112,7 +112,7 @@ impl BuildSdk for AxiomSdk {
         let url = format!("{}/programs", self.config.api_url);
 
         let request = authenticated_get(&self.config, &url)?;
-        let body: Value = send_request_json(request, "Failed to send list programs request")?;
+        let body: Value = send_request_json(request, "Failed to list programs")?;
 
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
@@ -140,7 +140,7 @@ impl BuildSdk for AxiomSdk {
         println!("Checking build status for program ID: {program_id}");
 
         let request = authenticated_get(&self.config, &url)?;
-        let body: Value = send_request_json(request, "Failed to send status request")?;
+        let body: Value = send_request_json(request, "Failed to get build status")?;
         let build_status = serde_json::from_value(body)?;
         Ok(build_status)
     }
@@ -205,7 +205,7 @@ impl BuildSdk for AxiomSdk {
 
         let filename = std::path::PathBuf::from(format!("program_{program_id}_logs.txt"));
         let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &filename, "Failed to send logs request")
+        download_file(request, &filename, "Failed to download build logs")
     }
 
     fn register_new_program(
