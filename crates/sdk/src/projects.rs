@@ -21,7 +21,7 @@ pub trait ProjectSdk {
     fn move_program_to_project(&self, program_id: &str, project_id: u32) -> Result<()>;
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectResponse {
     pub id: u32,
     pub name: String,
@@ -43,7 +43,7 @@ pub struct ProjectCreateResponse {
     pub id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProgramResponse {
     pub id: String,
     pub name: Option<String>,
@@ -67,8 +67,8 @@ pub struct PaginationInfo {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct MoveProgramRequest {
-    project_id: u32,
+pub(crate) struct MoveProgramRequest {
+    pub project_id: u32,
 }
 
 impl ProjectSdk for AxiomSdk {
@@ -249,5 +249,53 @@ impl ProjectSdk for AxiomSdk {
                 response.status()
             ))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::AxiomConfig;
+
+    #[test]
+    fn test_project_response_serialization() {
+        let project = ProjectResponse {
+            id: 123,
+            name: "Test Project".to_string(),
+            created_at: "2025-01-01T00:00:00Z".to_string(),
+            created_by: "test@example.com".to_string(),
+            program_count: 5,
+            total_proofs_run: 42,
+            last_active_at: Some("2025-01-15T10:30:00Z".to_string()),
+        };
+
+        let json = serde_json::to_string(&project).unwrap();
+        let deserialized: ProjectResponse = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(project.id, deserialized.id);
+        assert_eq!(project.name, deserialized.name);
+        assert_eq!(project.program_count, deserialized.program_count);
+    }
+
+    #[test]
+    fn test_move_program_request_serialization() {
+        let request = MoveProgramRequest { project_id: 456 };
+        let json = serde_json::to_string(&request).unwrap();
+        assert!(json.contains("\"project_id\":456"));
+    }
+
+    #[test]
+    fn test_api_key_missing_error() {
+        let config = AxiomConfig {
+            api_url: "https://api.test.com/v1".to_string(),
+            api_key: None, // No API key
+            config_id: None,
+            last_project_id: None,
+        };
+        let sdk = AxiomSdk::new(config);
+
+        let result = sdk.list_projects(None, None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("API key not set"));
     }
 }
