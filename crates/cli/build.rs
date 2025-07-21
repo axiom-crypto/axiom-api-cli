@@ -20,7 +20,7 @@ fn main() {
     let mut openvm_commit = "unknown".to_string();
 
     for package in &metadata.packages {
-        if package.name == "openvm-sdk" {
+        if package.name.as_str() == "openvm-sdk" {
             if let Some(source) = &package.source {
                 eprintln!("Found openvm-sdk source: {}", source.repr);
 
