@@ -252,7 +252,7 @@ impl RunSdk for AxiomSdk {
             execution_status.program_uuid, execution_status.id
         );
 
-        if let Err(_) = std::fs::create_dir_all(&run_dir) {
+        if std::fs::create_dir_all(&run_dir).is_err() {
             return None;
         }
 

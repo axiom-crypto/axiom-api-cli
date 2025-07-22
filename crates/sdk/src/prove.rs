@@ -214,8 +214,6 @@ impl ProveSdk for AxiomSdk {
             .as_ref()
             .ok_or(eyre::eyre!("API key not set"))?;
 
-        println!("url: {url}");
-
         let response = client
             .get(url)
             .header(API_KEY_HEADER, api_key)
