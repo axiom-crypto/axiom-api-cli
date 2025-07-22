@@ -17,7 +17,7 @@ use tar::Builder;
 
 use crate::{AxiomSdk, API_KEY_HEADER};
 
-pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
+pub const MAX_PROGRAM_SIZE_MB: u64 = 2048;
 
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
@@ -100,6 +100,7 @@ struct TarFile {
 impl Drop for TarFile {
     fn drop(&mut self) {
         if !self.keep {
+            println!("Removing tar file: {}", self.path);
             std::fs::remove_file(&self.path).unwrap();
         }
     }
