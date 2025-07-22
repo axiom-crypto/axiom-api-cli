@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 
 pub mod build;
 pub mod config;
+pub mod formatting;
 pub mod prove;
 pub mod run;
 pub mod verify;
-pub mod formatting;
 
 pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 

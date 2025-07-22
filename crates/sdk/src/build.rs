@@ -146,8 +146,6 @@ impl BuildSdk for AxiomSdk {
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus> {
         let url = format!("{}/programs/{}", self.config.api_url, program_id);
 
-
-
         // Make the GET request
         let client = Client::new();
         let api_key = self
@@ -205,7 +203,7 @@ impl BuildSdk for AxiomSdk {
             let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
             std::fs::create_dir_all(&build_dir)
                 .context(format!("Failed to create build directory: {}", build_dir))?;
-            
+
             // Create output filename based on artifact type
             let ext = if program_type == "source" {
                 "tar.gz".to_string()
@@ -257,7 +255,7 @@ impl BuildSdk for AxiomSdk {
             let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
             std::fs::create_dir_all(&build_dir)
                 .context(format!("Failed to create build directory: {}", build_dir))?;
-            
+
             // Create output filename in the build directory
             let filename = format!("{}/logs.txt", build_dir);
 
@@ -332,8 +330,6 @@ impl BuildSdk for AxiomSdk {
             .to_string_lossy()
             .to_string();
 
-
-
         let cargo_workspace_root = find_cargo_workspace_root(program_dir.as_ref())
             .context("Failed to find cargo workspace root")?;
         // Calculate the relative path from git root to cargo workspace root
@@ -342,8 +338,6 @@ impl BuildSdk for AxiomSdk {
             .context("Failed to determine relative path from git root to cargo workspace root")?
             .to_string_lossy()
             .to_string();
-
-
 
         // Check for bin flag
         let current_dir = program_dir.as_ref().to_path_buf();
@@ -487,7 +481,7 @@ impl BuildSdk for AxiomSdk {
 
         use crate::formatting::Formatter;
         Formatter::print_header("Building Program");
-        
+
         if let Some(id) = &config_id {
             Formatter::print_field("Config ID", id);
         } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
@@ -535,7 +529,10 @@ impl BuildSdk for AxiomSdk {
                         0.0
                     };
 
-                    Formatter::print_status(&format!("Uploading: {}% ({:.2} KB/s)", percent, speed));
+                    Formatter::print_status(&format!(
+                        "Uploading: {}% ({:.2} KB/s)",
+                        percent, speed
+                    ));
                     last_percent = percent;
                 }
 
@@ -606,83 +603,93 @@ impl BuildSdk for AxiomSdk {
 
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
         use crate::config::ConfigSdk;
-        use crate::formatting::{Formatter, calculate_duration};
+        use crate::formatting::{calculate_duration, Formatter};
         use std::time::Duration;
-        
+
         println!();
-        
+
         loop {
             // Get status without printing repetitive messages
             let url = format!("{}/programs/{}", self.config.api_url, program_id);
-            let api_key = self.config.api_key.as_ref().ok_or(eyre::eyre!("API key not set"))?;
-            
+            let api_key = self
+                .config
+                .api_key
+                .as_ref()
+                .ok_or(eyre::eyre!("API key not set"))?;
+
             let response = Client::new()
                 .get(url)
                 .header(API_KEY_HEADER, api_key)
                 .send()
                 .context("Failed to send status request")?;
-            
+
             let build_status: BuildStatus = if response.status().is_success() {
                 let body: Value = response.json()?;
                 serde_json::from_value(body)?
             } else {
-                return Err(eyre::eyre!("Failed to get build status: {}", response.status()));
+                return Err(eyre::eyre!(
+                    "Failed to get build status: {}",
+                    response.status()
+                ));
             };
-            
+
             match build_status.status.as_str() {
                 "ready" => {
                     Formatter::clear_line_and_reset();
                     Formatter::print_success("Build completed successfully!");
-                    
+
                     // Get OpenVM version from config
-                    let config_metadata = self.get_vm_config_metadata(Some(&build_status.config_uuid))?;
-                    
+                    let config_metadata =
+                        self.get_vm_config_metadata(Some(&build_status.config_uuid))?;
+
                     // Print completion information
                     Formatter::print_section("Build Summary");
                     Formatter::print_field("Program ID", &build_status.id);
                     Formatter::print_field("Program Hash", &build_status.program_hash);
                     Formatter::print_field("Config ID", &build_status.config_uuid);
                     Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
-                    
+
                     if let Some(launched_at) = &build_status.launched_at {
                         if let Some(terminated_at) = &build_status.terminated_at {
                             Formatter::print_section("Build Stats");
                             Formatter::print_field("Created", &build_status.created_at);
                             Formatter::print_field("Initiated", launched_at);
                             Formatter::print_field("Finished", terminated_at);
-                            
+
                             if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
                                 Formatter::print_field("Duration", &duration);
                             }
                         }
                     }
-                    
+
                     // Download artifacts automatically
                     Formatter::print_section("Downloading Artifacts");
-                    
+
                     // Download ELF
                     Formatter::print_info("Downloading ELF...");
                     if let Err(e) = self.download_program(&build_status.id, "elf") {
                         println!("Warning: Failed to download ELF: {}", e);
                     }
-                    
-                    // Download EXE  
+
+                    // Download EXE
                     Formatter::print_info("Downloading EXE...");
                     if let Err(e) = self.download_program(&build_status.id, "exe") {
                         println!("Warning: Failed to download EXE: {}", e);
                     }
-                    
+
                     // Download logs
                     Formatter::print_info("Downloading logs...");
                     if let Err(e) = self.download_build_logs(&build_status.id) {
                         println!("Warning: Failed to download logs: {}", e);
                     }
-                    
+
                     return Ok(());
                 }
                 "error" | "failed" => {
                     Formatter::clear_line_and_reset();
-                    let error_msg = build_status.error_message.unwrap_or_else(|| "Unknown error".to_string());
+                    let error_msg = build_status
+                        .error_message
+                        .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Build failed: {}", error_msg);
                 }
                 "processing" => {

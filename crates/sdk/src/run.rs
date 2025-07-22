@@ -66,7 +66,11 @@ impl RunSdk for AxiomSdk {
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
-            Err(eyre::eyre!("Cannot check execution status: {} (status: {})", error_text, status))
+            Err(eyre::eyre!(
+                "Cannot check execution status: {} (status: {})",
+                error_text,
+                status
+            ))
         } else {
             Err(eyre::eyre!(
                 "Status request failed with status: {}",
@@ -144,7 +148,11 @@ impl RunSdk for AxiomSdk {
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
-            Err(eyre::eyre!("Cannot execute this program: {} (status: {})", error_text, status))
+            Err(eyre::eyre!(
+                "Cannot execute this program: {} (status: {})",
+                error_text,
+                status
+            ))
         } else {
             let status = response.status();
             Err(eyre::eyre!(
@@ -153,21 +161,21 @@ impl RunSdk for AxiomSdk {
             ))
         }
     }
-    
+
     fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()> {
-        use crate::formatting::{Formatter, calculate_duration};
+        use crate::formatting::{calculate_duration, Formatter};
         use std::time::Duration;
-        
+
         println!();
-        
+
         loop {
             let execution_status = self.get_execution_status(execution_id)?;
-            
+
             match execution_status.status.as_str() {
                 "Succeeded" => {
                     Formatter::clear_line_and_reset();
                     Formatter::print_success("Execution completed successfully!");
-                    
+
                     // Print completion information
                     Formatter::print_section("Execution Summary");
                     Formatter::print_field("Execution ID", &execution_status.id);
@@ -177,7 +185,7 @@ impl RunSdk for AxiomSdk {
                     if let Some(total_tick) = execution_status.total_tick {
                         Formatter::print_field("Total Ticks", &total_tick.to_string());
                     }
-                    
+
                     // Format public values more nicely
                     if let Some(public_values) = &execution_status.public_values {
                         if !public_values.is_null() {
@@ -189,31 +197,33 @@ impl RunSdk for AxiomSdk {
                             }
                         }
                     }
-                    
+
                     if let Some(launched_at) = &execution_status.launched_at {
                         if let Some(terminated_at) = &execution_status.terminated_at {
                             Formatter::print_section("Execution Stats");
                             Formatter::print_field("Created", &execution_status.created_at);
                             Formatter::print_field("Initiated", launched_at);
                             Formatter::print_field("Finished", terminated_at);
-                            
+
                             if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
                                 Formatter::print_field("Duration", &duration);
                             }
                         }
                     }
-                    
+
                     // Save execution results to file
                     if let Some(results_path) = self.save_execution_results(&execution_status) {
                         Formatter::print_section("Saving Results");
                         println!("  ✓ {}", results_path);
                     }
-                    
+
                     return Ok(());
                 }
                 "Failed" => {
                     Formatter::clear_line_and_reset();
-                    let error_msg = execution_status.error_message.unwrap_or_else(|| "Unknown error".to_string());
+                    let error_msg = execution_status
+                        .error_message
+                        .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Execution failed: {}", error_msg);
                 }
                 "Queued" => {
@@ -225,23 +235,29 @@ impl RunSdk for AxiomSdk {
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    Formatter::print_status(&format!("Execution status: {}...", execution_status.status));
+                    Formatter::print_status(&format!(
+                        "Execution status: {}...",
+                        execution_status.status
+                    ));
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
             }
         }
     }
-    
+
     fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String> {
         // Save execution results under the program folder using program_uuid
-        let run_dir = format!("axiom-artifacts/program-{}/runs/{}", execution_status.program_uuid, execution_status.id);
-        
+        let run_dir = format!(
+            "axiom-artifacts/program-{}/runs/{}",
+            execution_status.program_uuid, execution_status.id
+        );
+
         if let Err(_) = std::fs::create_dir_all(&run_dir) {
             return None;
         }
-        
+
         let results_path = format!("{}/results.json", run_dir);
-        
+
         // Create a results object with summary and public values
         let results = serde_json::json!({
             "execution_id": execution_status.id,
@@ -252,13 +268,13 @@ impl RunSdk for AxiomSdk {
             "total_ticks": execution_status.total_tick,
             "public_values": execution_status.public_values
         });
-        
+
         if let Ok(results_json) = serde_json::to_string_pretty(&results) {
             if std::fs::write(&results_path, results_json).is_ok() {
                 return Some(results_path);
             }
         }
-        
+
         None
     }
 }
