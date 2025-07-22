@@ -29,8 +29,6 @@ pub struct ProveArgs {
     pub input: Option<Input>,
     /// The type of proof to generate (stark or evm)
     pub proof_type: Option<String>,
-    /// The project ID to associate with the proof
-    pub project_id: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -243,17 +241,10 @@ impl ProveSdk for AxiomSdk {
 
         println!("Generating {proof_type} proof for program ID: {program_id}");
 
-        let url = if let Some(project_id) = args.project_id {
-            format!(
-                "{}/proofs?program_id={program_id}&proof_type={proof_type}&project_id={project_id}",
-                self.config.api_url
-            )
-        } else {
-            format!(
-                "{}/proofs?program_id={program_id}&proof_type={proof_type}",
-                self.config.api_url
-            )
-        };
+        let url = format!(
+            "{}/proofs?program_id={program_id}&proof_type={proof_type}",
+            self.config.api_url
+        );
         let api_key = self
             .config
             .api_key
