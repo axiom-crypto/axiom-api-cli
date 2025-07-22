@@ -1,6 +1,6 @@
 [workspace.package]
 version = "0.4.0"
-edition = "2021"
+edition = "2024"
 authors = ["Axiom Team"]
 license = "MIT"
 
@@ -17,3 +17,9 @@ openvm-build = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.2.1
 # Axiom Proving API
 cargo-axiom = { path = "crates/cli", default-features = false }
 axiom-sdk = { path = "crates/sdk", default-features = false }
+
+comfy-table = { version = "7.1.4", default-features = false }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0.141" }
+# Last version that supports Rust 1.85.1
+cargo_metadata = { version = "0.20.0" }
