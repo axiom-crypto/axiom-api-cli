@@ -40,7 +40,7 @@ impl Formatter {
         print!("\r\x1b[K");
         io::stdout().flush().unwrap();
     }
-    
+
     /// Clear the current line and ensure we're on a new line for fresh output
     pub fn clear_line_and_reset() {
         print!("\r\x1b[K");
@@ -78,23 +78,21 @@ impl Formatter {
     /// Check if terminal supports colors
     fn supports_colors() -> bool {
         // Simple check for color support
-        std::env::var("NO_COLOR").is_err() && 
-        std::env::var("TERM").map_or(false, |term| term != "dumb")
+        std::env::var("NO_COLOR").is_err()
+            && std::env::var("TERM").map_or(false, |term| term != "dumb")
     }
 }
 
 /// Parse ISO 8601 timestamp and calculate duration
 pub fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
     use chrono::DateTime;
-    
-    let start_time = DateTime::parse_from_rfc3339(start)
-        .map_err(|_| "Invalid start timestamp")?;
-    let end_time = DateTime::parse_from_rfc3339(end)
-        .map_err(|_| "Invalid end timestamp")?;
-    
+
+    let start_time = DateTime::parse_from_rfc3339(start).map_err(|_| "Invalid start timestamp")?;
+    let end_time = DateTime::parse_from_rfc3339(end).map_err(|_| "Invalid end timestamp")?;
+
     let duration = end_time.signed_duration_since(start_time);
     let total_seconds = duration.num_seconds();
-    
+
     if total_seconds < 60 {
         Ok(format!("{}s", total_seconds))
     } else if total_seconds < 3600 {
@@ -112,9 +110,9 @@ pub fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
 /// Format a timestamp for display
 pub fn format_timestamp(timestamp: &str) -> String {
     use chrono::DateTime;
-    
+
     match DateTime::parse_from_rfc3339(timestamp) {
         Ok(dt) => dt.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
         Err(_) => timestamp.to_string(),
     }
-} 
+}

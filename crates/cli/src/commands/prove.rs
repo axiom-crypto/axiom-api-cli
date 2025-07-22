@@ -120,12 +120,12 @@ impl ProveCmd {
             }
             None => {
                 let args = axiom_sdk::prove::ProveArgs {
-                    program_id: self.prove_args.program_id.clone(),
+                    program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
-                    proof_type: Some(self.prove_args.proof_type.clone()),
+                    proof_type: Some(self.prove_args.proof_type),
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
-                
+
                 if self.prove_args.wait {
                     sdk.wait_for_proof_completion(&proof_id)
                 } else {

@@ -52,7 +52,7 @@ impl VerifyCmd {
                     .ok_or_eyre("Proof file is required. Use --proof to specify.")?;
 
                 let verify_id = sdk.verify_proof(self.config_id.as_deref(), proof)?;
-                
+
                 if self.wait {
                     sdk.wait_for_verify_completion(&verify_id)
                 } else {

@@ -152,7 +152,7 @@ impl BuildCmd {
                     project_id,
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
-                
+
                 if self.build_args.wait {
                     sdk.wait_for_build_completion(&program_id)
                 } else {

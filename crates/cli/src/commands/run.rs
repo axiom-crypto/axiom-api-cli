@@ -57,7 +57,7 @@ impl RunCmd {
                     input: self.run_args.input,
                 };
                 let execution_id = sdk.execute_program(args)?;
-                
+
                 if self.run_args.wait {
                     sdk.wait_for_execution_completion(&execution_id)
                 } else {

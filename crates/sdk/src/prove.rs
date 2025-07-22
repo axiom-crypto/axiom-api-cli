@@ -20,7 +20,12 @@ pub trait ProveSdk {
         output: Option<PathBuf>,
     ) -> Result<()>;
     fn get_proof_logs(&self, proof_id: &str) -> Result<()>;
-    fn save_proof_to_path(&self, proof_id: &str, proof_type: &str, output_path: PathBuf) -> Result<()>;
+    fn save_proof_to_path(
+        &self,
+        proof_id: &str,
+        proof_type: &str,
+        output_path: PathBuf,
+    ) -> Result<()>;
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String>;
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()>;
@@ -81,8 +86,6 @@ impl ProveSdk for AxiomSdk {
     fn get_proof_status(&self, proof_id: &str) -> Result<ProofStatus> {
         let url = format!("{}/proofs/{}", self.config.api_url, proof_id);
 
-
-
         let request = authenticated_get(&self.config, &url)?;
         let body: Value = send_request_json(request, "Failed to check proof status")?;
         let proof_status = serde_json::from_value(body)?;
@@ -97,7 +100,7 @@ impl ProveSdk for AxiomSdk {
     ) -> Result<()> {
         // First get proof status to extract program_uuid
         let proof_status = self.get_proof_status(proof_id)?;
-        
+
         let url = format!(
             "{}/proofs/{}/proof/{}",
             self.config.api_url, proof_id, proof_type
@@ -108,7 +111,10 @@ impl ProveSdk for AxiomSdk {
             Some(path) => path,
             None => {
                 // Create organized directory structure using program_uuid from response
-                let proof_dir = format!("axiom-artifacts/program-{}/proofs/{}", proof_status.program_uuid, proof_id);
+                let proof_dir = format!(
+                    "axiom-artifacts/program-{}/proofs/{}",
+                    proof_status.program_uuid, proof_id
+                );
                 std::fs::create_dir_all(&proof_dir)
                     .context(format!("Failed to create proof directory: {}", proof_dir))?;
                 PathBuf::from(format!("{}/{}-proof.json", proof_dir, proof_type))
@@ -128,7 +134,10 @@ impl ProveSdk for AxiomSdk {
         let url = format!("{}/proofs/{}/logs", self.config.api_url, proof_id);
 
         // Create organized directory structure using program_uuid from response
-        let proof_dir = format!("axiom-artifacts/program-{}/proofs/{}", proof_status.program_uuid, proof_id);
+        let proof_dir = format!(
+            "axiom-artifacts/program-{}/proofs/{}",
+            proof_status.program_uuid, proof_id
+        );
         std::fs::create_dir_all(&proof_dir)
             .context(format!("Failed to create proof directory: {}", proof_dir))?;
         
@@ -140,7 +149,12 @@ impl ProveSdk for AxiomSdk {
         Ok(())
     }
 
-    fn save_proof_to_path(&self, proof_id: &str, proof_type: &str, output_path: PathBuf) -> Result<()> {
+    fn save_proof_to_path(
+        &self,
+        proof_id: &str,
+        proof_type: &str,
+        output_path: PathBuf,
+    ) -> Result<()> {
         let url = format!(
             "{}/proofs/{}/proof/{}",
             self.config.api_url, proof_id, proof_type
@@ -215,7 +229,11 @@ impl ProveSdk for AxiomSdk {
         } else {
             let status = response.status();
             let error_text = response.text()?;
-            Err(eyre::eyre!("Logs download failed ({}): {}", status, error_text))
+            Err(eyre::eyre!(
+                "Logs download failed ({}): {}",
+                status,
+                error_text
+            ))
         }
     }
 
@@ -269,77 +287,97 @@ impl ProveSdk for AxiomSdk {
         Formatter::print_success(&format!("Proof generation initiated ({})", proof_id));
         Ok(proof_id.to_string())
     }
-    
+
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
-        use crate::formatting::{Formatter, calculate_duration};
+        use crate::formatting::{calculate_duration, Formatter};
         use std::time::Duration;
-        
+
         println!();
-        
+
         loop {
             // Get status without printing repetitive messages
             let url = format!("{}/proofs/{}", self.config.api_url, proof_id);
-            let api_key = self.config.api_key.as_ref().ok_or(eyre::eyre!("API key not set"))?;
-            
+            let api_key = self
+                .config
+                .api_key
+                .as_ref()
+                .ok_or(eyre::eyre!("API key not set"))?;
+
             let response = Client::new()
                 .get(url)
                 .header(API_KEY_HEADER, api_key)
                 .send()
                 .context("Failed to send status request")?;
-            
+
             let proof_status: ProofStatus = if response.status().is_success() {
                 let body: Value = response.json()?;
                 serde_json::from_value(body)?
             } else {
-                return Err(eyre::eyre!("Failed to get proof status: {}", response.status()));
+                return Err(eyre::eyre!(
+                    "Failed to get proof status: {}",
+                    response.status()
+                ));
             };
-            
+
             match proof_status.state.as_str() {
                 "Succeeded" => {
                     Formatter::clear_line_and_reset();
                     Formatter::print_success("Proof generation completed successfully!");
-                    
+
                     // Print completion information
                     Formatter::print_section("Proof Summary");
                     Formatter::print_field("Program ID", &proof_status.program_uuid);
                     Formatter::print_field("Proof ID", &proof_status.id);
                     Formatter::print_field("Machine Type", &proof_status.machine_type);
                     Formatter::print_field("Usage", &format!("{} cells", proof_status.cells_used));
-                    
+
                     if let Some(launched_at) = &proof_status.launched_at {
                         if let Some(terminated_at) = &proof_status.terminated_at {
                             Formatter::print_section("Job Stats");
                             Formatter::print_field("Created", &proof_status.created_at);
                             Formatter::print_field("Initiated", launched_at);
                             Formatter::print_field("Finished", terminated_at);
-                            
+
                             if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
                                 Formatter::print_field("Duration", &duration);
                             }
                         }
                     }
-                    
+
                     // Download artifacts automatically
                     Formatter::print_section("Downloading Artifacts");
-                    
+
                     // Download the specific proof type that was generated
                     let proof_type_name = match proof_status.proof_type.as_str() {
                         "stark" => "STARK",
-                        "evm" => "EVM", 
-                        _ => "Unknown"
+                        "evm" => "EVM",
+                        _ => "Unknown",
                     };
                     Formatter::print_info(&format!("Downloading {} proof...", proof_type_name));
-                    
+
                     // Create organized directory structure using program_uuid
-                    let proof_dir = format!("axiom-artifacts/program-{}/proofs/{}", proof_status.program_uuid, proof_status.id);
+                    let proof_dir = format!(
+                        "axiom-artifacts/program-{}/proofs/{}",
+                        proof_status.program_uuid, proof_status.id
+                    );
                     if let Err(e) = std::fs::create_dir_all(&proof_dir) {
                         println!("Warning: Failed to create proof directory: {}", e);
                     } else {
-                        let proof_path = PathBuf::from(format!("{}/{}-proof.json", proof_dir, proof_status.proof_type));
-                        if let Err(e) = self.save_proof_to_path(&proof_status.id, &proof_status.proof_type, proof_path) {
-                            println!("Warning: Failed to download {} proof: {}", proof_type_name, e);
+                        let proof_path = PathBuf::from(format!(
+                            "{}/{}-proof.json",
+                            proof_dir, proof_status.proof_type
+                        ));
+                        if let Err(e) = self.save_proof_to_path(
+                            &proof_status.id,
+                            &proof_status.proof_type,
+                            proof_path,
+                        ) {
+                            println!(
+                                "Warning: Failed to download {} proof: {}",
+                                proof_type_name, e
+                            );
                         }
-                        
+
                         // Download logs
                         Formatter::print_info("Downloading logs...");
                         let logs_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
@@ -347,12 +385,14 @@ impl ProveSdk for AxiomSdk {
                             println!("Warning: Failed to download logs: {}", e);
                         }
                     }
-                    
+
                     return Ok(());
                 }
                 "Failed" => {
                     Formatter::clear_line_and_reset();
-                    let error_msg = proof_status.error_message.unwrap_or_else(|| "Unknown error".to_string());
+                    let error_msg = proof_status
+                        .error_message
+                        .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Proof generation failed: {}", error_msg);
                 }
                 "Queued" => {

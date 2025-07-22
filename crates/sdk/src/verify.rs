@@ -28,8 +28,6 @@ impl VerifySdk for AxiomSdk {
         // Load configuration
         let url = format!("{}/verify/{}", self.config.api_url, verify_id);
 
-
-
         // Make the GET request
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
@@ -60,7 +58,7 @@ impl VerifySdk for AxiomSdk {
     fn verify_proof(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
         use crate::config::ConfigSdk;
         use crate::formatting::Formatter;
-        
+
         // Load configuration
         let config_id = get_config_id(config_id, &self.config)?;
         let url = format!("{}/verify?config_id={}", self.config.api_url, config_id);
@@ -83,7 +81,7 @@ impl VerifySdk for AxiomSdk {
         Formatter::print_field("Proof File", &proof_path.display().to_string());
         Formatter::print_field("Config ID", &config_id);
         Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
-        
+
         println!("\nInitiating verification...");
 
         // Create a multipart form
@@ -119,52 +117,59 @@ impl VerifySdk for AxiomSdk {
             ))
         }
     }
-    
+
     fn wait_for_verify_completion(&self, verify_id: &str) -> Result<()> {
         use crate::formatting::Formatter;
         use std::time::Duration;
-        
+
         loop {
             // Get status without printing repetitive messages
             let url = format!("{}/verify/{}", self.config.api_url, verify_id);
-            let api_key = self.config.api_key.as_ref().ok_or(eyre::eyre!("API key not set"))?;
-            
+            let api_key = self
+                .config
+                .api_key
+                .as_ref()
+                .ok_or(eyre::eyre!("API key not set"))?;
+
             let response = Client::new()
                 .get(url)
                 .header(API_KEY_HEADER, api_key)
                 .send()
                 .context("Failed to send status request")?;
-            
+
             let verify_status: VerifyStatus = if response.status().is_success() {
                 let response_json: Value = response.json()?;
                 serde_json::from_value(response_json)?
             } else {
-                return Err(eyre::eyre!("Failed to get verification status: {}", response.status()));
+                return Err(eyre::eyre!(
+                    "Failed to get verification status: {}",
+                    response.status()
+                ));
             };
-            
+
             match verify_status.result.as_str() {
                 "verified" => {
                     Formatter::clear_line();
                     Formatter::print_success("Verification completed successfully!");
-                    
+
                     // Print completion information
                     Formatter::print_section("Verification Summary");
                     Formatter::print_field("Verification Result", "✓ VERIFIED");
                     Formatter::print_field("Verification ID", &verify_status.id);
                     Formatter::print_field("Completed At", &verify_status.created_at);
-                    
+
                     return Ok(());
                 }
                 "failed" => {
                     Formatter::clear_line();
                     println!("\nVerification failed!");
-                    
+
                     // Print failure information
                     Formatter::print_section("Verification Summary");
                     Formatter::print_field("Verification Result", "✗ FAILED");
                     Formatter::print_field("Verification ID", &verify_status.id);
                     Formatter::print_field("Completed At", &verify_status.created_at);
-                    
+
                     eyre::bail!("Proof verification failed");
                 }
                 "processing" => {
@@ -172,7 +177,10 @@ impl VerifySdk for AxiomSdk {
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    Formatter::print_status(&format!("Verification status: {}...", verify_status.result));
+                    Formatter::print_status(&format!(
+                        "Verification status: {}...",
+                        verify_status.result
+                    ));
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
             }
