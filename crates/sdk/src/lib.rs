@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use dirs::home_dir;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::{Client, RequestBuilder, Response};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub mod build;
 pub mod config;

@@ -1,4 +1,4 @@
-use axiom_sdk::{projects::ProjectSdk, AxiomSdk};
+use axiom_sdk::{AxiomSdk, projects::ProjectSdk};
 use clap::{Args, Subcommand};
 use comfy_table::Table;
 use eyre::Result;

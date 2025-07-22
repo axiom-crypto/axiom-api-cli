@@ -1,4 +1,4 @@
-use console::{style, Term};
+use console::{Term, style};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::io::Write;
 use std::time::Duration;

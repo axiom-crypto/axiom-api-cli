@@ -1,14 +1,14 @@
 use std::{fs, io::copy, path::PathBuf};
 
-use cargo_openvm::input::{is_valid_hex_string, Input};
+use cargo_openvm::input::{Input, is_valid_hex_string};
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::{
-    authenticated_get, authenticated_post, download_file, send_request_json, AxiomSdk,
-    API_KEY_HEADER,
+    API_KEY_HEADER, AxiomSdk, authenticated_get, authenticated_post, download_file,
+    send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -292,7 +292,7 @@ impl ProveSdk for AxiomSdk {
     }
 
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
-        use crate::formatting::{calculate_duration, Formatter};
+        use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
 
         println!();

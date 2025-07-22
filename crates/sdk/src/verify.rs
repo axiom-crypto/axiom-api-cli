@@ -6,7 +6,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{get_config_id, AxiomSdk, API_KEY_HEADER};
+use crate::{API_KEY_HEADER, AxiomSdk, get_config_id};
 
 const VERIFICATION_POLLING_INTERVAL_SECS: u64 = 10;
 

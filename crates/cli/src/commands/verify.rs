@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use axiom_sdk::{verify::VerifySdk, AxiomSdk};
+use axiom_sdk::{AxiomSdk, verify::VerifySdk};
 use clap::{Args, Subcommand};
 use eyre::{OptionExt, Result};
 

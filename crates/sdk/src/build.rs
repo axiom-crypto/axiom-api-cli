@@ -6,7 +6,7 @@ use std::{
 };
 
 use eyre::{Context, OptionExt, Result};
-use flate2::{write::GzEncoder, Compression};
+use flate2::{Compression, write::GzEncoder};
 use openvm_build::cargo_command;
 use reqwest::blocking::Client;
 use scopeguard::defer;
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
 
-use crate::{authenticated_get, download_file, send_request_json, AxiomSdk, API_KEY_HEADER};
+use crate::{API_KEY_HEADER, AxiomSdk, authenticated_get, download_file, send_request_json};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
@@ -282,7 +282,9 @@ impl BuildSdk for AxiomSdk {
             if current_dir.as_path() == metadata.workspace_root.as_std_path() {
                 metadata.workspace_packages()
             } else {
-                eyre::bail!("Could not determine which Cargo package to build. Please run this command from a package directory or the workspace root.");
+                eyre::bail!(
+                    "Could not determine which Cargo package to build. Please run this command from a package directory or the workspace root."
+                );
             }
         } else {
             pkgs_in_current_dir.sort_by_key(|p| p.manifest_path.as_str().len());
@@ -494,7 +496,7 @@ impl BuildSdk for AxiomSdk {
 
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
         use crate::config::ConfigSdk;
-        use crate::formatting::{calculate_duration, Formatter};
+        use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
 
         println!();
