@@ -8,6 +8,8 @@ use serde_json::{json, Value};
 
 use crate::{authenticated_get, authenticated_post, download_file, send_request_json, AxiomSdk, API_KEY_HEADER};
 
+const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
+
 pub trait ProveSdk {
     fn list_proofs(&self, program_id: &str) -> Result<Vec<ProofStatus>>;
     fn get_proof_status(&self, proof_id: &str) -> Result<ProofStatus>;
@@ -15,14 +17,13 @@ pub trait ProveSdk {
         &self,
         proof_id: &str,
         proof_type: &str,
-        program_id: Option<&str>,
         output: Option<PathBuf>,
     ) -> Result<()>;
-    fn get_proof_logs(&self, proof_id: &str, program_id: Option<&str>) -> Result<()>;
+    fn get_proof_logs(&self, proof_id: &str) -> Result<()>;
     fn save_proof_to_path(&self, proof_id: &str, proof_type: &str, output_path: PathBuf) -> Result<()>;
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String>;
-    fn wait_for_proof_completion(&self, proof_id: &str, program_id: Option<&str>) -> Result<()>;
+    fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -41,6 +42,7 @@ pub struct ProofStatus {
     pub created_at: String,
     pub state: String,
     pub proof_type: String,
+    pub program_uuid: String,
     pub error_message: Option<String>,
     pub launched_at: Option<String>,
     pub terminated_at: Option<String>,
@@ -91,9 +93,11 @@ impl ProveSdk for AxiomSdk {
         &self,
         proof_id: &str,
         proof_type: &str,
-        program_id: Option<&str>,
         output: Option<PathBuf>,
     ) -> Result<()> {
+        // First get proof status to extract program_uuid
+        let proof_status = self.get_proof_status(proof_id)?;
+        
         let url = format!(
             "{}/proofs/{}/proof/{}",
             self.config.api_url, proof_id, proof_type
@@ -103,12 +107,8 @@ impl ProveSdk for AxiomSdk {
         let output_path = match output {
             Some(path) => path,
             None => {
-                // Create organized directory structure based on program_id if available
-                let proof_dir = if let Some(prog_id) = program_id {
-                    format!("axiom-artifacts/program-{}/proofs/{}", prog_id, proof_id)
-                } else {
-                    format!("axiom-artifacts/proofs/{}", proof_id)
-                };
+                // Create organized directory structure using program_uuid from response
+                let proof_dir = format!("axiom-artifacts/program-{}/proofs/{}", proof_status.program_uuid, proof_id);
                 std::fs::create_dir_all(&proof_dir)
                     .context(format!("Failed to create proof directory: {}", proof_dir))?;
                 PathBuf::from(format!("{}/{}-proof.json", proof_dir, proof_type))
@@ -121,15 +121,14 @@ impl ProveSdk for AxiomSdk {
         Ok(())
     }
 
-    fn get_proof_logs(&self, proof_id: &str, program_id: Option<&str>) -> Result<()> {
+    fn get_proof_logs(&self, proof_id: &str) -> Result<()> {
+        // First get proof status to extract program_uuid
+        let proof_status = self.get_proof_status(proof_id)?;
+        
         let url = format!("{}/proofs/{}/logs", self.config.api_url, proof_id);
 
-        // Create organized directory structure based on program_id if available
-        let proof_dir = if let Some(prog_id) = program_id {
-            format!("axiom-artifacts/program-{}/proofs/{}", prog_id, proof_id)
-        } else {
-            format!("axiom-artifacts/proofs/{}", proof_id)
-        };
+        // Create organized directory structure using program_uuid from response
+        let proof_dir = format!("axiom-artifacts/program-{}/proofs/{}", proof_status.program_uuid, proof_id);
         std::fs::create_dir_all(&proof_dir)
             .context(format!("Failed to create proof directory: {}", proof_dir))?;
         
@@ -271,7 +270,7 @@ impl ProveSdk for AxiomSdk {
         Ok(proof_id.to_string())
     }
     
-    fn wait_for_proof_completion(&self, proof_id: &str, program_id: Option<&str>) -> Result<()> {
+    fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
         use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
         
@@ -302,9 +301,7 @@ impl ProveSdk for AxiomSdk {
                     
                     // Print completion information
                     Formatter::print_section("Proof Summary");
-                    if let Some(prog_id) = program_id {
-                        Formatter::print_field("Program ID", prog_id);
-                    }
+                    Formatter::print_field("Program ID", &proof_status.program_uuid);
                     Formatter::print_field("Proof ID", &proof_status.id);
                     Formatter::print_field("Machine Type", &proof_status.machine_type);
                     Formatter::print_field("Usage", &format!("{} cells", proof_status.cells_used));
@@ -333,12 +330,8 @@ impl ProveSdk for AxiomSdk {
                     };
                     Formatter::print_info(&format!("Downloading {} proof...", proof_type_name));
                     
-                    // Create organized directory structure
-                    let proof_dir = if let Some(prog_id) = program_id {
-                        format!("axiom-artifacts/program-{}/proofs/{}", prog_id, proof_status.id)
-                    } else {
-                        format!("axiom-artifacts/proofs/{}", proof_status.id)
-                    };
+                    // Create organized directory structure using program_uuid
+                    let proof_dir = format!("axiom-artifacts/program-{}/proofs/{}", proof_status.program_uuid, proof_status.id);
                     if let Err(e) = std::fs::create_dir_all(&proof_dir) {
                         println!("Warning: Failed to create proof directory: {}", e);
                     } else {
@@ -364,27 +357,27 @@ impl ProveSdk for AxiomSdk {
                 }
                 "Queued" => {
                     Formatter::print_status("Proof queued...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 "Executing" => {
                     Formatter::print_status("Executing program...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 "Executed" => {
                     Formatter::print_status("Program executed, preparing proof...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 "AppProving" => {
                     Formatter::print_status("Generating application proof...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 "AppProvingDone" => {
                     Formatter::print_status("Application proof done, finalizing...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 _ => {
                     Formatter::print_status(&format!("Proof status: {}...", proof_status.state));
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
             }
         }

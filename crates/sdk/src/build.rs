@@ -18,6 +18,7 @@ use tar::Builder;
 use crate::{authenticated_get, download_file, send_request_json, AxiomSdk, API_KEY_HEADER};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
+const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
 
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
@@ -617,15 +618,15 @@ impl BuildSdk for AxiomSdk {
                 }
                 "processing" => {
                     Formatter::print_status("Build in progress...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 "not_ready" => {
                     Formatter::print_status("Build queued...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 _ => {
                     Formatter::print_status(&format!("Build status: {}...", build_status.status));
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
             }
         }

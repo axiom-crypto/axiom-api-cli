@@ -8,11 +8,13 @@ use serde_json::{json, Value};
 
 use crate::{AxiomSdk, API_KEY_HEADER};
 
+const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
+
 pub trait RunSdk {
     fn get_execution_status(&self, execution_id: &str) -> Result<ExecutionStatus>;
     fn execute_program(&self, args: RunArgs) -> Result<String>;
-    fn wait_for_execution_completion(&self, execution_id: &str, program_id: &str) -> Result<()>;
-    fn save_execution_results(&self, execution_status: &ExecutionStatus, program_id: &str) -> Option<String>;
+    fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()>;
+    fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String>;
 }
 
 #[derive(Debug, Default)]
@@ -28,6 +30,7 @@ pub struct ExecutionStatus {
     pub id: String,
     pub created_at: String,
     pub status: String,
+    pub program_uuid: String,
     pub error_message: Option<String>,
     pub launched_at: Option<String>,
     pub terminated_at: Option<String>,
@@ -143,7 +146,7 @@ impl RunSdk for AxiomSdk {
         }
     }
     
-    fn wait_for_execution_completion(&self, execution_id: &str, program_id: &str) -> Result<()> {
+    fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()> {
         use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
         
@@ -193,7 +196,7 @@ impl RunSdk for AxiomSdk {
                     }
                     
                     // Save execution results to file
-                    if let Some(results_path) = self.save_execution_results(&execution_status, program_id) {
+                    if let Some(results_path) = self.save_execution_results(&execution_status) {
                         Formatter::print_section("Saving Results");
                         println!("  ✓ {}", results_path);
                     }
@@ -207,23 +210,23 @@ impl RunSdk for AxiomSdk {
                 }
                 "Queued" => {
                     Formatter::print_status("Execution queued...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
                 "InProgress" => {
                     Formatter::print_status("Execution in progress...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
                     Formatter::print_status(&format!("Execution status: {}...", execution_status.status));
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
             }
         }
     }
     
-    fn save_execution_results(&self, execution_status: &ExecutionStatus, program_id: &str) -> Option<String> {
-        // Save execution results under the program folder
-        let run_dir = format!("axiom-artifacts/program-{}/runs/{}", program_id, execution_status.id);
+    fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String> {
+        // Save execution results under the program folder using program_uuid
+        let run_dir = format!("axiom-artifacts/program-{}/runs/{}", execution_status.program_uuid, execution_status.id);
         
         if let Err(_) = std::fs::create_dir_all(&run_dir) {
             return None;
