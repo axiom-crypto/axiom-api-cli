@@ -78,8 +78,7 @@ impl Formatter {
     /// Check if terminal supports colors
     fn supports_colors() -> bool {
         // Simple check for color support
-        std::env::var("NO_COLOR").is_err()
-            && std::env::var("TERM").map_or(false, |term| term != "dumb")
+        std::env::var("NO_COLOR").is_err() && std::env::var("TERM").is_ok_and(|term| term != "dumb")
     }
 }
 
