@@ -155,11 +155,7 @@ impl BuildSdk for AxiomSdk {
 
         // Make the GET request
         let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         let response = client
             .get(url)
@@ -427,11 +423,7 @@ impl BuildSdk for AxiomSdk {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(300)) // 5 minute timeout
             .build()?;
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         // Create a progress tracker
         let progress = Arc::new(Mutex::new((0, metadata.len())));

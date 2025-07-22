@@ -46,11 +46,7 @@ impl RunSdk for AxiomSdk {
 
         // Make the GET request
         let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         let response = client
             .get(url)
@@ -88,11 +84,7 @@ impl RunSdk for AxiomSdk {
         println!("Executing program ID: {}", program_id);
 
         let url = format!("{}/executions", self.config.api_url);
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         // Create the request body based on input
         let body = match &args.input {

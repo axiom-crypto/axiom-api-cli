@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use eyre::{Context, Result};
+use eyre::{Context, OptionExt, Result};
 use openvm_sdk::types::EvmProof;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -29,11 +29,7 @@ impl VerifySdk for AxiomSdk {
 
         // Make the GET request
         let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         let response = client
             .get(url)
@@ -81,11 +77,7 @@ impl VerifySdk for AxiomSdk {
 
         // Make the POST request
         let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         let response = client
             .post(url)

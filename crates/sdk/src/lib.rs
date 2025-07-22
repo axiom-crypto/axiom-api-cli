@@ -169,30 +169,21 @@ pub fn validate_api_key(api_url: &str, api_key: &str) -> Result<()> {
 
 pub fn authenticated_get(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
     let client = Client::new();
-    let api_key = config
-        .api_key
-        .as_ref()
-        .ok_or(eyre::eyre!("API key not set"))?;
+    let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
     Ok(client.get(url).header(API_KEY_HEADER, api_key))
 }
 
 pub fn authenticated_post(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
     let client = Client::new();
-    let api_key = config
-        .api_key
-        .as_ref()
-        .ok_or(eyre::eyre!("API key not set"))?;
+    let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
     Ok(client.post(url).header(API_KEY_HEADER, api_key))
 }
 
 pub fn authenticated_put(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
     let client = Client::new();
-    let api_key = config
-        .api_key
-        .as_ref()
-        .ok_or(eyre::eyre!("API key not set"))?;
+    let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
     Ok(client.put(url).header(API_KEY_HEADER, api_key))
 }
