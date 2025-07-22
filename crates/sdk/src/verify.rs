@@ -8,6 +8,8 @@ use serde_json::Value;
 
 use crate::{get_config_id, AxiomSdk, API_KEY_HEADER};
 
+const VERIFICATION_POLLING_INTERVAL_SECS: u64 = 10;
+
 pub trait VerifySdk {
     fn get_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
     fn verify_proof(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String>;
@@ -175,11 +177,11 @@ impl VerifySdk for AxiomSdk {
                 }
                 "processing" => {
                     Formatter::print_status("Verifying proof...");
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
                     Formatter::print_status(&format!("Verification status: {}...", verify_status.result));
-                    std::thread::sleep(Duration::from_secs(5));
+                    std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
             }
         }

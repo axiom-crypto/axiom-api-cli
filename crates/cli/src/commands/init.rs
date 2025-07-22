@@ -19,7 +19,7 @@ openvm::init!();
 
 "#;
 
-const OPENVM_TOML_TEMPLATE: &str = r#"openvm_version = "v1.2"
+const OPENVM_TOML_TEMPLATE: &str = r#"openvm_version = "v1.3"
 
 [app_vm_config.system.config]
 max_constraint_degree = 3

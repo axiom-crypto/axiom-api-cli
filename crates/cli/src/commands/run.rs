@@ -52,7 +52,6 @@ impl RunCmd {
                 Ok(())
             }
             None => {
-                let program_id = self.run_args.program_id.clone();
                 let args = axiom_sdk::run::RunArgs {
                     program_id: self.run_args.program_id,
                     input: self.run_args.input,
@@ -60,8 +59,7 @@ impl RunCmd {
                 let execution_id = sdk.execute_program(args)?;
                 
                 if self.run_args.wait {
-                    let prog_id = program_id.as_ref().unwrap(); // We know it exists because execute_program would have failed
-                    sdk.wait_for_execution_completion(&execution_id, prog_id)
+                    sdk.wait_for_execution_completion(&execution_id)
                 } else {
                     println!("Execution started successfully! ID: {}", execution_id);
                     println!(

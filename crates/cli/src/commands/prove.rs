@@ -88,8 +88,8 @@ impl ProveCmd {
                 proof_id,
                 proof_type,
                 output,
-            }) => sdk.get_generated_proof(&proof_id, &proof_type, None, output),
-            Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id, None),
+            }) => sdk.get_generated_proof(&proof_id, &proof_type, output),
+            Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
             Some(ProveSubcommand::List { program_id }) => {
                 let proof_status_list = sdk.list_proofs(&program_id)?;
 
@@ -127,7 +127,7 @@ impl ProveCmd {
                 let proof_id = sdk.generate_new_proof(args)?;
                 
                 if self.prove_args.wait {
-                    sdk.wait_for_proof_completion(&proof_id, self.prove_args.program_id.as_deref())
+                    sdk.wait_for_proof_completion(&proof_id)
                 } else {
                     println!(
                         "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
