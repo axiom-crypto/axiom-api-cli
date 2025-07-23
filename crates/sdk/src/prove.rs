@@ -407,14 +407,6 @@ impl ProveSdk for AxiomSdk {
                     Formatter::print_status("Program executed, preparing proof...");
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
-                "AppProving" => {
-                    Formatter::print_status("Generating application proof...");
-                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
-                }
-                "AppProvingDone" => {
-                    Formatter::print_status("Application proof done, finalizing...");
-                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
-                }
                 _ => {
                     Formatter::print_status(&format!("Proof status: {}...", proof_status.state));
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
