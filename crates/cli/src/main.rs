@@ -6,8 +6,8 @@ use dotenvy::dotenv;
 mod commands;
 
 use commands::{
-    BuildCmd, ConfigCmd, DownloadKeysCmd, InitCmd, ProveCmd, RegisterCmd, RunCmd, VerifyCmd,
-    VersionCmd,
+    BuildCmd, ConfigCmd, DownloadKeysCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd,
+    VerifyCmd, VersionCmd,
 };
 
 #[derive(Parser)]
@@ -47,6 +47,8 @@ enum AxiomCommands {
     DownloadKeys(DownloadKeysCmd),
     /// Verify a proof using the Axiom Verifying Service
     Verify(VerifyCmd),
+    /// Manage projects
+    Projects(ProjectsCmd),
     /// Display version information
     Version(VersionCmd),
 }
@@ -66,6 +68,7 @@ async fn main() {
         AxiomCommands::Config(cmd) => cmd.run(),
         AxiomCommands::DownloadKeys(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
+        AxiomCommands::Projects(cmd) => cmd.run(),
         AxiomCommands::Version(cmd) => cmd.run(),
     };
 

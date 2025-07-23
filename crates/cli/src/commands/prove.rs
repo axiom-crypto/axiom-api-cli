@@ -69,7 +69,7 @@ pub struct ProveArgs {
 impl ProveCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config);
+        let sdk = AxiomSdk::new(config.clone());
 
         match self.command {
             Some(ProveSubcommand::Status { proof_id }) => {

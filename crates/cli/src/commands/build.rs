@@ -74,12 +74,16 @@ pub struct BuildArgs {
     /// Comma-separated list of directories to include even if not tracked by git
     #[clap(long, value_name = "DIRS")]
     include_dirs: Option<String>,
+
+    /// The project ID to associate with the build
+    #[arg(long)]
+    project_id: Option<u32>,
 }
 
 impl BuildCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config);
+        let sdk = AxiomSdk::new(config.clone());
 
         match self.command {
             Some(BuildSubcommand::Status { program_id }) => {
@@ -129,6 +133,12 @@ impl BuildCmd {
                     (_, Some(config)) => Some(ConfigSource::ConfigPath(config)),
                     (None, None) => None,
                 };
+
+                let project_id = axiom_sdk::get_project_id(self.build_args.project_id, &config);
+                if let Some(pid) = project_id {
+                    println!("Using project ID: {pid}");
+                }
+
                 let args = axiom_sdk::build::BuildArgs {
                     config_source,
                     bin: self.build_args.bin,
@@ -136,6 +146,7 @@ impl BuildCmd {
                     exclude_files: self.build_args.exclude_files,
                     include_dirs: self.build_args.include_dirs,
                     force_keygen: self.build_args.force_keygen,
+                    project_id,
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
                 println!(

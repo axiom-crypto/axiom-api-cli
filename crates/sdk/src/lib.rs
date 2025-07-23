@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub mod build;
 pub mod config;
+pub mod projects;
 pub mod prove;
 pub mod run;
 pub mod verify;
@@ -27,11 +28,12 @@ impl AxiomSdk {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AxiomConfig {
     pub api_url: String,
     pub api_key: Option<String>,
     pub config_id: Option<String>,
+    pub last_project_id: Option<u32>,
 }
 
 impl AxiomConfig {
@@ -40,6 +42,7 @@ impl AxiomConfig {
             api_url,
             api_key,
             config_id,
+            last_project_id: None,
         }
     }
 }
@@ -50,6 +53,7 @@ impl Default for AxiomConfig {
             api_url: "https://api.axiom.xyz/v1".to_string(),
             api_key: None,
             config_id: Some(DEFAULT_CONFIG_ID.to_string()),
+            last_project_id: None,
         }
     }
 }
@@ -124,6 +128,24 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
     }
 }
 
+pub fn set_project_id(id: u32) -> Result<()> {
+    let mut config = load_config()?;
+    config.last_project_id = Some(id);
+    save_config(&config)
+}
+
+pub fn get_project_id(args_project_id: Option<u32>, config: &AxiomConfig) -> Option<u32> {
+    if let Some(id) = args_project_id {
+        if set_project_id(id).is_ok() {
+            Some(id)
+        } else {
+            args_project_id
+        }
+    } else {
+        config.last_project_id
+    }
+}
+
 pub fn validate_api_key(api_url: &str, api_key: &str) -> Result<()> {
     let client = Client::new();
     let url = format!("{}/validate_api_key", api_url);
@@ -142,5 +164,101 @@ pub fn validate_api_key(api_url: &str, api_key: &str) -> Result<()> {
             "Failed to validate API key: HTTP {}",
             response.status()
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_config_default() {
+        let config = AxiomConfig::default();
+        assert_eq!(config.api_url, "https://api.axiom.xyz/v1");
+        assert!(config.api_key.is_none());
+        assert_eq!(config.config_id, Some(DEFAULT_CONFIG_ID.to_string()));
+        assert!(config.last_project_id.is_none());
+    }
+
+    #[test]
+    fn test_config_new() {
+        let config = AxiomConfig::new(
+            "https://test.api.com".to_string(),
+            Some("test-key".to_string()),
+            Some("test-config".to_string()),
+        );
+        assert_eq!(config.api_url, "https://test.api.com");
+        assert_eq!(config.api_key, Some("test-key".to_string()));
+        assert_eq!(config.config_id, Some("test-config".to_string()));
+        assert!(config.last_project_id.is_none());
+    }
+
+    #[test]
+    fn test_get_project_id_with_args() {
+        let config = AxiomConfig::default();
+
+        // Mock save_config to avoid file system operations
+        let project_id = 123;
+        let result = get_project_id(Some(project_id), &config);
+
+        // Should return the provided project_id
+        assert_eq!(result, Some(project_id));
+    }
+
+    #[test]
+    fn test_get_project_id_from_config() {
+        let config = AxiomConfig {
+            last_project_id: Some(456),
+            ..Default::default()
+        };
+
+        let result = get_project_id(None, &config);
+
+        // Should return the config's project_id
+        assert_eq!(result, Some(456));
+    }
+
+    #[test]
+    fn test_get_project_id_none() {
+        let config = AxiomConfig::default();
+
+        let result = get_project_id(None, &config);
+
+        // Should return None when no project_id available
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_axiom_config_serialization() {
+        let config = AxiomConfig {
+            api_url: "https://test.api.com/v1".to_string(),
+            api_key: Some("test-key".to_string()),
+            config_id: Some("test-config-id".to_string()),
+            last_project_id: Some(123),
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: AxiomConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(config.api_url, deserialized.api_url);
+        assert_eq!(config.api_key, deserialized.api_key);
+        assert_eq!(config.config_id, deserialized.config_id);
+        assert_eq!(config.last_project_id, deserialized.last_project_id);
+    }
+
+    #[test]
+    fn test_axiom_config_serialization_backwards_compatibility() {
+        // Test that old configs without last_project_id still deserialize correctly
+        let json = r#"{
+            "api_url": "https://api.axiom.xyz/v1",
+            "api_key": "test-key",
+            "config_id": "test-config"
+        }"#;
+
+        let config: AxiomConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.api_url, "https://api.axiom.xyz/v1");
+        assert_eq!(config.api_key, Some("test-key".to_string()));
+        assert_eq!(config.config_id, Some("test-config".to_string()));
+        assert!(config.last_project_id.is_none());
     }
 }
