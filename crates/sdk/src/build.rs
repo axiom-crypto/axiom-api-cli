@@ -506,7 +506,6 @@ impl BuildSdk for AxiomSdk {
 
         // Spawn a thread to display progress
         let progress_handle = std::thread::spawn(move || {
-            let start_time = Instant::now();
             let mut last_percent = 0;
 
             loop {
@@ -521,18 +520,7 @@ impl BuildSdk for AxiomSdk {
 
                 // Only update when the percentage changes
                 if percent != last_percent {
-                    // Calculate speed
-                    let elapsed = start_time.elapsed().as_secs_f64();
-                    let speed = if elapsed > 0.0 {
-                        current as f64 / elapsed / 1024.0
-                    } else {
-                        0.0
-                    };
-
-                    Formatter::print_status(&format!(
-                        "Uploading: {}% ({:.2} KB/s)",
-                        percent, speed
-                    ));
+                    Formatter::print_progress("Uploading", current, total);
                     last_percent = percent;
                 }
 
@@ -690,6 +678,7 @@ impl BuildSdk for AxiomSdk {
                     let error_msg = build_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
+                    Formatter::print_error(&format!("Build failed: {}", error_msg));
                     eyre::bail!("Build failed: {}", error_msg);
                 }
                 "processing" => {

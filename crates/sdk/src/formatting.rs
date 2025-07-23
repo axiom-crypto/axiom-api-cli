@@ -1,84 +1,103 @@
-use std::io::{self, Write};
+use console::{style, Term};
+use std::io::Write;
 
-/// Simple terminal formatting utilities
+/// Terminal formatting utilities using the console crate
 pub struct Formatter;
 
 impl Formatter {
     /// Print a header with emphasis
     pub fn print_header(text: &str) {
-        println!("\n{}", Self::bold(text));
+        println!("\n{}", style(text).bold());
     }
 
     /// Print a success message
     pub fn print_success(text: &str) {
-        println!("{} {}", Self::green("✓"), text);
+        println!("{} {}", style("✓").green().bold(), text);
     }
 
     /// Print an info message
     pub fn print_info(text: &str) {
-        println!("{} {}", Self::blue("ℹ"), text);
+        println!("{} {}", style("ℹ").blue().bold(), text);
+    }
+
+    /// Print a warning message
+    pub fn print_warning(text: &str) {
+        println!("{} {}", style("⚠").yellow().bold(), text);
+    }
+
+    /// Print an error message
+    pub fn print_error(text: &str) {
+        println!("{} {}", style("✗").red().bold(), text);
     }
 
     /// Print a section header
     pub fn print_section(title: &str) {
-        println!("\n{}:", Self::bold(title));
+        println!("\n{}:", style(title).bold());
     }
 
     /// Print a key-value pair with proper indentation
     pub fn print_field(key: &str, value: &str) {
-        println!("  {}: {}", key, value);
+        println!("  {}: {}", style(key).dim(), value);
     }
 
     /// Print a status update that overwrites the current line
     pub fn print_status(text: &str) {
-        print!("\r\x1b[K{}", text); // \r moves to start, \x1b[K clears to end of line
-        io::stdout().flush().unwrap();
+        let term = Term::stdout();
+        term.clear_line().ok();
+        print!("\r{}", style(text).dim());
+        std::io::stdout().flush().unwrap();
     }
 
     /// Clear the current line for status updates
     pub fn clear_line() {
-        print!("\r\x1b[K");
-        io::stdout().flush().unwrap();
+        let term = Term::stdout();
+        term.clear_line().ok();
+        print!("\r");
+        std::io::stdout().flush().unwrap();
     }
 
     /// Clear the current line and ensure we're on a new line for fresh output
     pub fn clear_line_and_reset() {
-        print!("\r\x1b[K");
-        println!(); // Move to new line
-        io::stdout().flush().unwrap();
+        let term = Term::stdout();
+        term.clear_line().ok();
+        println!();
+        std::io::stdout().flush().unwrap();
     }
 
-    /// Apply bold formatting if terminal supports it
-    fn bold(text: &str) -> String {
-        if Self::supports_colors() {
-            format!("\x1b[1m{}\x1b[0m", text)
+    /// Print a progress indicator with percentage
+    pub fn print_progress(message: &str, current: u64, total: u64) {
+        let percentage = if total > 0 {
+            (current * 100) / total
         } else {
-            text.to_string()
-        }
+            0
+        };
+
+        let bar_width = 20;
+        let filled = (percentage * bar_width) / 100;
+        let empty = bar_width - filled;
+
+        let bar = format!(
+            "[{}{}]",
+            "█".repeat(filled as usize),
+            "░".repeat(empty as usize)
+        );
+
+        Self::print_status(&format!(
+            "{} {} {}%",
+            message,
+            style(bar).cyan(),
+            style(percentage).bold()
+        ));
     }
 
-    /// Apply green color if terminal supports it
-    fn green(text: &str) -> String {
-        if Self::supports_colors() {
-            format!("\x1b[32m{}\x1b[0m", text)
-        } else {
-            text.to_string()
-        }
-    }
-
-    /// Apply blue color if terminal supports it
-    fn blue(text: &str) -> String {
-        if Self::supports_colors() {
-            format!("\x1b[34m{}\x1b[0m", text)
-        } else {
-            text.to_string()
-        }
-    }
-
-    /// Check if terminal supports colors
-    fn supports_colors() -> bool {
-        // Simple check for color support
-        std::env::var("NO_COLOR").is_err() && std::env::var("TERM").is_ok_and(|term| term != "dumb")
+    /// Print a table-like structure with aligned columns
+    pub fn print_table_row(col1: &str, col2: &str, col1_width: usize) {
+        println!(
+            "  {:<width$} {}",
+            style(col1).dim(),
+            col2,
+            width = col1_width
+        );
     }
 }
 
@@ -113,5 +132,26 @@ pub fn format_timestamp(timestamp: &str) -> String {
     match DateTime::parse_from_rfc3339(timestamp) {
         Ok(dt) => dt.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
         Err(_) => timestamp.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_duration_calculation() {
+        let start = "2023-01-01T12:00:00Z";
+        let end = "2023-01-01T12:01:30Z";
+
+        let result = calculate_duration(start, end).unwrap();
+        assert_eq!(result, "1m 30s");
+    }
+
+    #[test]
+    fn test_timestamp_formatting() {
+        let timestamp = "2023-01-01T12:00:00Z";
+        let formatted = format_timestamp(timestamp);
+        assert_eq!(formatted, "2023-01-01 12:00:00 UTC");
     }
 }
