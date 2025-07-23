@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
 
-use crate::{AxiomSdk, API_KEY_HEADER};
+use crate::{authenticated_get, download_file, send_request_json, AxiomSdk, API_KEY_HEADER};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 
@@ -109,19 +109,10 @@ impl Drop for TarFile {
 
 impl BuildSdk for AxiomSdk {
     fn list_programs(&self) -> Result<Vec<BuildStatus>> {
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
         let url = format!("{}/programs", self.config.api_url);
 
-        let response = Client::new()
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
-            .send()?;
-
-        let body: Value = response.json()?;
+        let request = authenticated_get(&self.config, &url)?;
+        let body: Value = send_request_json(request, "Failed to list programs")?;
 
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
@@ -148,35 +139,10 @@ impl BuildSdk for AxiomSdk {
 
         println!("Checking build status for program ID: {program_id}");
 
-        // Make the GET request
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
-            .send()
-            .context("Failed to send status request")?;
-
-        // Check if the request was successful
-        if response.status().is_success() {
-            let body: Value = response.json()?;
-            let build_status = serde_json::from_value(body)?;
-            Ok(build_status)
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "Status request failed with status: {}",
-                response.status()
-            ))
-        }
+        let request = authenticated_get(&self.config, &url)?;
+        let body: Value = send_request_json(request, "Failed to get build status")?;
+        let build_status = serde_json::from_value(body)?;
+        Ok(build_status)
     }
 
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()> {
@@ -189,11 +155,7 @@ impl BuildSdk for AxiomSdk {
 
         // Make the GET request
         let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         let response = client
             .get(url)
@@ -237,44 +199,9 @@ impl BuildSdk for AxiomSdk {
     fn download_build_logs(&self, program_id: &str) -> Result<()> {
         let url = format!("{}/programs/{}/logs", self.config.api_url, program_id);
 
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = Client::new()
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
-            .send()?;
-
-        // Check if the request was successful
-        if response.status().is_success() {
-            // Create output filename based on program ID
-            let filename = format!("program_{program_id}_logs.txt");
-
-            // Write the response body to a file
-            let mut file = File::create(&filename)
-                .context(format!("Failed to create log file: {filename}"))?;
-
-            let content = response.bytes().context("Failed to read response body")?;
-
-            std::io::copy(&mut content.as_ref(), &mut file)
-                .context("Failed to write logs to file")?;
-
-            println!("Logs downloaded successfully to: {filename}");
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            eyre::bail!("Client error ({}): {}", status, error_text);
-        } else {
-            eyre::bail!(
-                "Logs download request failed with status: {}",
-                response.status()
-            );
-        }
-
-        Ok(())
+        let filename = std::path::PathBuf::from(format!("program_{program_id}_logs.txt"));
+        let request = authenticated_get(&self.config, &url)?;
+        download_file(request, &filename, "Failed to download build logs")
     }
 
     fn register_new_program(
@@ -496,11 +423,7 @@ impl BuildSdk for AxiomSdk {
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(300)) // 5 minute timeout
             .build()?;
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         // Create a progress tracker
         let progress = Arc::new(Mutex::new((0, metadata.len())));

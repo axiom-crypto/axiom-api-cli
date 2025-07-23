@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use dirs::home_dir;
 use eyre::{Context, OptionExt, Result};
-use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
+use reqwest::blocking::{Client, RequestBuilder, Response};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub mod build;
 pub mod config;
@@ -162,6 +162,111 @@ pub fn validate_api_key(api_url: &str, api_key: &str) -> Result<()> {
         // Server error or other issues
         Err(eyre::eyre!(
             "Failed to validate API key: HTTP {}",
+            response.status()
+        ))
+    }
+}
+
+pub fn authenticated_get(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
+    let client = Client::new();
+    let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
+
+    Ok(client.get(url).header(API_KEY_HEADER, api_key))
+}
+
+pub fn authenticated_post(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
+    let client = Client::new();
+    let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
+
+    Ok(client.post(url).header(API_KEY_HEADER, api_key))
+}
+
+pub fn authenticated_put(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
+    let client = Client::new();
+    let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
+
+    Ok(client.put(url).header(API_KEY_HEADER, api_key))
+}
+
+pub fn send_request_json<T: DeserializeOwned>(
+    request_builder: RequestBuilder,
+    error_context: &str,
+) -> Result<T> {
+    let response = request_builder
+        .send()
+        .with_context(|| error_context.to_string())?;
+
+    handle_json_response(response)
+}
+
+pub fn send_request(request_builder: RequestBuilder, error_context: &str) -> Result<()> {
+    let response = request_builder
+        .send()
+        .with_context(|| error_context.to_string())?;
+
+    handle_response(response)
+}
+
+fn handle_json_response<T: DeserializeOwned>(response: Response) -> Result<T> {
+    if response.status().is_success() {
+        let result: T = response.json()?;
+        Ok(result)
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+    } else {
+        Err(eyre::eyre!(
+            "Request failed with status: {}",
+            response.status()
+        ))
+    }
+}
+
+fn handle_response(response: Response) -> Result<()> {
+    if response.status().is_success() {
+        Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+    } else {
+        Err(eyre::eyre!(
+            "Request failed with status: {}",
+            response.status()
+        ))
+    }
+}
+
+pub fn download_file(
+    request_builder: RequestBuilder,
+    output_path: &std::path::Path,
+    error_context: &str,
+) -> Result<()> {
+    let response = request_builder
+        .send()
+        .with_context(|| error_context.to_string())?;
+
+    if response.status().is_success() {
+        let mut file = std::fs::File::create(output_path).context(format!(
+            "Failed to create output file: {}",
+            output_path.display()
+        ))?;
+
+        let content = response.bytes().context("Failed to read response body")?;
+
+        std::io::copy(&mut content.as_ref(), &mut file)
+            .context("Failed to write response to file")?;
+
+        println!("Successfully downloaded to: {}", output_path.display());
+        Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+    } else {
+        Err(eyre::eyre!(
+            "Download request failed with status: {}",
             response.status()
         ))
     }

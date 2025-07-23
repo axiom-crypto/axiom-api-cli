@@ -1,8 +1,10 @@
-use eyre::{Context, Result};
-use reqwest::blocking::Client;
+use eyre::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{AxiomSdk, API_KEY_HEADER};
+use crate::{
+    authenticated_get, authenticated_post, authenticated_put, send_request, send_request_json,
+    AxiomSdk,
+};
 
 pub trait ProjectSdk {
     fn list_projects(
@@ -84,96 +86,24 @@ impl ProjectSdk for AxiomSdk {
             self.config.api_url, page, page_size
         );
 
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = client
-            .get(&url)
-            .header(API_KEY_HEADER, api_key)
-            .send()
-            .context("Failed to send list projects request")?;
-
-        if response.status().is_success() {
-            let projects: ProjectListResponse = response.json()?;
-            Ok(projects)
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "List projects request failed with status: {}",
-                response.status()
-            ))
-        }
+        let request = authenticated_get(&self.config, &url)?;
+        send_request_json(request, "Failed to list projects")
     }
 
     fn create_project(&self, name: &str) -> Result<ProjectCreateResponse> {
         let url = format!("{}/projects", self.config.api_url);
 
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = client
-            .post(&url)
-            .header(API_KEY_HEADER, api_key)
+        let request = authenticated_post(&self.config, &url)?
             .header("Content-Type", "application/json")
-            .json(&name)
-            .send()
-            .context("Failed to send create project request")?;
-
-        if response.status().is_success() {
-            let result: ProjectCreateResponse = response.json()?;
-            Ok(result)
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "Create project request failed with status: {}",
-                response.status()
-            ))
-        }
+            .json(&name);
+        send_request_json(request, "Failed to create project")
     }
 
     fn get_project(&self, project_id: u32) -> Result<ProjectResponse> {
         let url = format!("{}/projects/{}", self.config.api_url, project_id);
 
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = client
-            .get(&url)
-            .header(API_KEY_HEADER, api_key)
-            .send()
-            .context("Failed to send get project request")?;
-
-        if response.status().is_success() {
-            let project: ProjectResponse = response.json()?;
-            Ok(project)
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "Get project request failed with status: {}",
-                response.status()
-            ))
-        }
+        let request = authenticated_get(&self.config, &url)?;
+        send_request_json(request, "Failed to get project")
     }
 
     fn list_project_programs(
@@ -189,66 +119,18 @@ impl ProjectSdk for AxiomSdk {
             self.config.api_url, project_id, page, page_size
         );
 
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = client
-            .get(&url)
-            .header(API_KEY_HEADER, api_key)
-            .send()
-            .context("Failed to send list project programs request")?;
-
-        if response.status().is_success() {
-            let programs: ProgramListResponse = response.json()?;
-            Ok(programs)
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "List project programs request failed with status: {}",
-                response.status()
-            ))
-        }
+        let request = authenticated_get(&self.config, &url)?;
+        send_request_json(request, "Failed to list project programs")
     }
 
     fn move_program_to_project(&self, program_id: &str, project_id: u32) -> Result<()> {
         let url = format!("{}/programs/{}", self.config.api_url, program_id);
-
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
         let request_body = MoveProgramRequest { project_id };
 
-        let response = client
-            .put(&url)
-            .header(API_KEY_HEADER, api_key)
+        let request = authenticated_put(&self.config, &url)?
             .header("Content-Type", "application/json")
-            .json(&request_body)
-            .send()
-            .context("Failed to send move program request")?;
-
-        if response.status().is_success() {
-            Ok(())
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
-            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
-        } else {
-            Err(eyre::eyre!(
-                "Move program request failed with status: {}",
-                response.status()
-            ))
-        }
+            .json(&request_body);
+        send_request(request, "Failed to move program to project")
     }
 }
 

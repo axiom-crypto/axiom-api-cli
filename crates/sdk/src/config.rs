@@ -4,7 +4,7 @@ use std::{
     path::PathBuf,
 };
 
-use eyre::{Context, Result};
+use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -74,11 +74,7 @@ impl ConfigSdk for AxiomSdk {
 
         // Make the GET request
         let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         let response = client
             .get(&url)
@@ -114,11 +110,7 @@ impl ConfigSdk for AxiomSdk {
 
         // Make the GET request
         let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         let response = client
             .get(&url)
@@ -185,10 +177,7 @@ fn download_artifact(
 
     // Make the GET request
     let client = Client::new();
-    let api_key = config
-        .api_key
-        .as_ref()
-        .ok_or(eyre::eyre!("API key not set"))?;
+    let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
     let response = client
         .get(&url)
