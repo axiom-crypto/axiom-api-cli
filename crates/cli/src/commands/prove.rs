@@ -64,6 +64,10 @@ pub struct ProveArgs {
     /// The type of proof to generate (stark or evm)
     #[clap(long = "type", value_parser = ["stark", "evm"], default_value = "stark")]
     proof_type: String,
+
+    /// Wait for the proof to complete and download artifacts
+    #[clap(long)]
+    wait: bool,
 }
 
 impl ProveCmd {
@@ -121,10 +125,15 @@ impl ProveCmd {
                     proof_type: Some(self.prove_args.proof_type),
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
-                println!(
-                    "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
-                );
-                Ok(())
+
+                if self.prove_args.wait {
+                    sdk.wait_for_proof_completion(&proof_id)
+                } else {
+                    println!(
+                        "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
+                    );
+                    Ok(())
+                }
             }
         }
     }

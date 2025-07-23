@@ -31,6 +31,10 @@ pub struct RunArgs {
     /// Input data for the execution (file path or hex string)
     #[clap(long, value_parser, help = "Input to OpenVM program")]
     input: Option<Input>,
+
+    /// Wait for the execution to complete
+    #[clap(long)]
+    wait: bool,
 }
 
 impl RunCmd {
@@ -53,12 +57,17 @@ impl RunCmd {
                     input: self.run_args.input,
                 };
                 let execution_id = sdk.execute_program(args)?;
-                println!("Execution started successfully! ID: {}", execution_id);
-                println!(
-                    "To check the execution status, run: cargo axiom run status --execution-id {}",
-                    execution_id
-                );
-                Ok(())
+
+                if self.run_args.wait {
+                    sdk.wait_for_execution_completion(&execution_id)
+                } else {
+                    println!("Execution started successfully! ID: {}", execution_id);
+                    println!(
+                        "To check the execution status, run: cargo axiom run status --execution-id {}",
+                        execution_id
+                    );
+                    Ok(())
+                }
             }
         }
     }

@@ -1,9 +1,8 @@
 use std::{
     fs::File,
-    io::{self, Read, Write},
+    io::{self, Read},
     path::Path,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
 };
 
 use eyre::{Context, OptionExt, Result};
@@ -18,6 +17,7 @@ use tar::Builder;
 use crate::{authenticated_get, download_file, send_request_json, AxiomSdk, API_KEY_HEADER};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
+const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
 
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
@@ -31,6 +31,7 @@ pub trait BuildSdk {
         program_dir: impl AsRef<Path>,
         args: BuildArgs,
     ) -> Result<String>;
+    fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -80,15 +81,15 @@ pub enum ConfigSource {
 
 struct ProgressReader<R> {
     inner: R,
-    progress: Arc<Mutex<(u64, u64)>>, // (bytes_read, total_bytes)
+    progress: Arc<Mutex<indicatif::ProgressBar>>,
 }
 
 impl<R: Read> Read for ProgressReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let n = self.inner.read(buf)?;
         if n > 0 {
-            let mut progress = self.progress.lock().unwrap();
-            progress.0 += n as u64;
+            let pb = self.progress.lock().unwrap();
+            pb.inc(n as u64);
         }
         Ok(n)
     }
@@ -137,8 +138,6 @@ impl BuildSdk for AxiomSdk {
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus> {
         let url = format!("{}/programs/{}", self.config.api_url, program_id);
 
-        println!("Checking build status for program ID: {program_id}");
-
         let request = authenticated_get(&self.config, &url)?;
         let body: Value = send_request_json(request, "Failed to get build status")?;
         let build_status = serde_json::from_value(body)?;
@@ -150,8 +149,6 @@ impl BuildSdk for AxiomSdk {
             "{}/programs/{}/download/{}",
             self.config.api_url, program_id, program_type
         );
-
-        println!("Downloading {program_type} for program ID: {program_id}");
 
         // Make the GET request
         let client = Client::new();
@@ -165,13 +162,18 @@ impl BuildSdk for AxiomSdk {
 
         // Check if the request was successful
         if response.status().is_success() {
-            // Create output filename based on program ID and artifact type
+            // Create organized directory structure
+            let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
+            std::fs::create_dir_all(&build_dir)
+                .context(format!("Failed to create build directory: {}", build_dir))?;
+
+            // Create output filename based on artifact type
             let ext = if program_type == "source" {
                 "tar.gz".to_string()
             } else {
                 program_type.to_string()
             };
-            let filename = format!("program_{program_id}.{ext}");
+            let filename = format!("{}/{}.{}", build_dir, program_type, ext);
 
             // Write the response body to a file
             let mut file = File::create(&filename)
@@ -182,7 +184,7 @@ impl BuildSdk for AxiomSdk {
             std::io::copy(&mut content.as_ref(), &mut file)
                 .context("Failed to write artifact to file")?;
 
-            println!("Artifact downloaded successfully to: {filename}");
+            println!("  ✓ {}", filename);
             Ok(())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -199,9 +201,17 @@ impl BuildSdk for AxiomSdk {
     fn download_build_logs(&self, program_id: &str) -> Result<()> {
         let url = format!("{}/programs/{}/logs", self.config.api_url, program_id);
 
-        let filename = std::path::PathBuf::from(format!("program_{program_id}_logs.txt"));
+        // Create organized directory structure
+        let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
+        std::fs::create_dir_all(&build_dir)
+            .context(format!("Failed to create build directory: {}", build_dir))?;
+
+        // Create output filename in the build directory
+        let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
         let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &filename, "Failed to download build logs")
+        download_file(request, &filename, "Failed to download build logs")?;
+        println!("  ✓ {}", filename.display());
+        Ok(())
     }
 
     fn register_new_program(
@@ -251,10 +261,6 @@ impl BuildSdk for AxiomSdk {
             .to_string_lossy()
             .to_string();
 
-        if !program_path.is_empty() {
-            println!("Using program path: {program_path}");
-        }
-
         let cargo_workspace_root = find_cargo_workspace_root(program_dir.as_ref())
             .context("Failed to find cargo workspace root")?;
         // Calculate the relative path from git root to cargo workspace root
@@ -263,10 +269,6 @@ impl BuildSdk for AxiomSdk {
             .context("Failed to determine relative path from git root to cargo workspace root")?
             .to_string_lossy()
             .to_string();
-
-        if !cargo_root_path.is_empty() {
-            println!("Using cargo workspace root: {cargo_root_path}");
-        }
 
         // Check for bin flag
         let current_dir = program_dir.as_ref().to_path_buf();
@@ -336,7 +338,6 @@ impl BuildSdk for AxiomSdk {
         } else {
             None
         };
-        println!("bin_to_build: {bin_to_build:?}");
 
         // Parse exclude patterns
         let exclude_patterns = args
@@ -360,7 +361,8 @@ impl BuildSdk for AxiomSdk {
             .unwrap_or_default();
 
         // Create tar archive of the current directory
-        println!("Creating archive of the project...");
+        println!();
+        Formatter::print_info("Creating project archive...");
         let tar_file = create_tar_archive(
             program_dir.as_ref(),
             args.keep_tarball.unwrap_or(false),
@@ -411,12 +413,15 @@ impl BuildSdk for AxiomSdk {
             url.push_str(&format!("&commit_sha={sha}"));
         }
 
+        use crate::formatting::Formatter;
+        Formatter::print_header("Building Program");
+
         if let Some(id) = &config_id {
-            println!("Sending build request for config ID: {id}");
+            Formatter::print_field("Config ID", id);
         } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
-            println!("Sending build request with config file: {path}");
+            Formatter::print_field("Config File", &path);
         } else {
-            println!("Sending build request with default config");
+            Formatter::print_field("Config", "Default");
         }
 
         // Make the POST request with multipart form data
@@ -425,46 +430,9 @@ impl BuildSdk for AxiomSdk {
             .build()?;
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        // Create a progress tracker
-        let progress = Arc::new(Mutex::new((0, metadata.len())));
-        let progress_clone = Arc::clone(&progress);
-
-        // Spawn a thread to display progress
-        let progress_handle = std::thread::spawn(move || {
-            let start_time = Instant::now();
-            let mut last_percent = 0;
-
-            loop {
-                std::thread::sleep(Duration::from_millis(100));
-                let (current, total) = *progress_clone.lock().unwrap();
-
-                if total == 0 {
-                    break;
-                }
-
-                let percent = ((current as f64 / total as f64) * 100.0) as u8;
-
-                // Only update when the percentage changes
-                if percent != last_percent {
-                    // Calculate speed
-                    let elapsed = start_time.elapsed().as_secs_f64();
-                    let speed = if elapsed > 0.0 {
-                        current as f64 / elapsed / 1024.0
-                    } else {
-                        0.0
-                    };
-
-                    print!("\rUploading: {percent}% ({speed:.2} KB/s)");
-                    io::stdout().flush().unwrap();
-                    last_percent = percent;
-                }
-
-                if current >= total {
-                    println!("\rUpload complete!                ");
-                    break;
-                }
-            }
-        });
+        // Create progress bar for upload
+        let pb = Formatter::create_upload_progress(metadata.len());
+        let progress = Arc::new(Mutex::new(pb));
 
         // Open the file with progress tracking
         let file = File::open(tar_path).context("Failed to open tar file")?;
@@ -502,14 +470,17 @@ impl BuildSdk for AxiomSdk {
             .multipart(form)
             .send()?;
 
-        // Wait for the progress thread to finish
-        progress_handle.join().unwrap();
+        // Finish the progress bar
+        progress
+            .lock()
+            .unwrap()
+            .finish_with_message("✓ Upload complete!");
 
         // Check if the request was successful
         if response.status().is_success() {
             let body = response.json::<serde_json::Value>().unwrap();
             let program_id = body["id"].as_str().unwrap();
-            println!("Build request sent successfully: {program_id}");
+            Formatter::print_success(&format!("Build initiated ({})", program_id));
             Ok(program_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -520,6 +491,113 @@ impl BuildSdk for AxiomSdk {
                 "Build request failed with status: {}",
                 response.status()
             ))
+        }
+    }
+
+    fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
+        use crate::config::ConfigSdk;
+        use crate::formatting::{calculate_duration, Formatter};
+        use std::time::Duration;
+
+        println!();
+        let spinner = Formatter::create_spinner("Checking build status...");
+
+        loop {
+            // Get status without printing repetitive messages
+            let url = format!("{}/programs/{}", self.config.api_url, program_id);
+            let api_key = self
+                .config
+                .api_key
+                .as_ref()
+                .ok_or(eyre::eyre!("API key not set"))?;
+
+            let response = Client::new()
+                .get(url)
+                .header(API_KEY_HEADER, api_key)
+                .send()
+                .context("Failed to send status request")?;
+
+            let build_status: BuildStatus = if response.status().is_success() {
+                let body: Value = response.json()?;
+                serde_json::from_value(body)?
+            } else {
+                return Err(eyre::eyre!(
+                    "Failed to get build status: {}",
+                    response.status()
+                ));
+            };
+
+            match build_status.status.as_str() {
+                "ready" => {
+                    spinner.finish_with_message("✓ Build completed successfully!");
+
+                    // Get OpenVM version from config
+                    let config_metadata =
+                        self.get_vm_config_metadata(Some(&build_status.config_uuid))?;
+
+                    // Print completion information
+                    Formatter::print_section("Build Summary");
+                    Formatter::print_field("Program ID", &build_status.id);
+                    Formatter::print_field("Program Hash", &build_status.program_hash);
+                    Formatter::print_field("Config ID", &build_status.config_uuid);
+                    Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
+
+                    if let Some(launched_at) = &build_status.launched_at {
+                        if let Some(terminated_at) = &build_status.terminated_at {
+                            Formatter::print_section("Build Stats");
+                            Formatter::print_field("Created", &build_status.created_at);
+                            Formatter::print_field("Initiated", launched_at);
+                            Formatter::print_field("Finished", terminated_at);
+
+                            if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
+                                Formatter::print_field("Duration", &duration);
+                            }
+                        }
+                    }
+
+                    // Download artifacts automatically
+                    Formatter::print_section("Downloading Artifacts");
+
+                    // Download ELF
+                    Formatter::print_info("Downloading ELF...");
+                    if let Err(e) = self.download_program(&build_status.id, "elf") {
+                        println!("Warning: Failed to download ELF: {}", e);
+                    }
+
+                    // Download EXE
+                    Formatter::print_info("Downloading EXE...");
+                    if let Err(e) = self.download_program(&build_status.id, "exe") {
+                        println!("Warning: Failed to download EXE: {}", e);
+                    }
+
+                    // Download logs
+                    Formatter::print_info("Downloading logs...");
+                    if let Err(e) = self.download_build_logs(&build_status.id) {
+                        println!("Warning: Failed to download logs: {}", e);
+                    }
+
+                    return Ok(());
+                }
+                "error" | "failed" => {
+                    let error_msg = build_status
+                        .error_message
+                        .unwrap_or_else(|| "Unknown error".to_string());
+                    spinner.finish_with_message(format!("✗ Build failed: {}", error_msg));
+                    eyre::bail!("Build failed: {}", error_msg);
+                }
+                "processing" => {
+                    spinner.set_message("Build in progress...");
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
+                }
+                "not_ready" => {
+                    spinner.set_message("Build queued...");
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
+                }
+                _ => {
+                    spinner.set_message(format!("Build status: {}...", build_status.status));
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
+                }
+            }
         }
     }
 }
@@ -651,10 +729,7 @@ fn create_tar_archive(
     // Pre-fetch dependencies to pull the private dependencies in the axiom_cargo_home (set it as CARGO_HOME) directory
     let cargo_workspace_root = find_cargo_workspace_root(program_dir.as_ref())
         .context("Failed to find cargo workspace root")?;
-    println!(
-        "found cargo workspace root: {}",
-        cargo_workspace_root.display()
-    );
+
     std::env::set_current_dir(&cargo_workspace_root)?;
     let axiom_cargo_home = cargo_workspace_root.join(AXIOM_CARGO_HOME);
     std::fs::create_dir_all(&axiom_cargo_home)?;
@@ -666,7 +741,6 @@ fn create_tar_archive(
 
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
     // Fetch 1: target = x86 linux which is the cloud machine
-    println!("Fetching dependencies to {AXIOM_CARGO_HOME}...");
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
         .arg("fetch")
@@ -680,7 +754,6 @@ fn create_tar_archive(
 
     // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
     // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
-    println!("Fetching dependencies to {AXIOM_CARGO_HOME}...");
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
         .arg("fetch")

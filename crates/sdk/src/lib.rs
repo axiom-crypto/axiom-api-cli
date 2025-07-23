@@ -7,6 +7,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub mod build;
 pub mod config;
+pub mod formatting;
 pub mod projects;
 pub mod prove;
 pub mod run;
