@@ -205,7 +205,7 @@ impl BuildSdk for AxiomSdk {
         let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
         std::fs::create_dir_all(&build_dir)
             .context(format!("Failed to create build directory: {}", build_dir))?;
-        
+
         // Create output filename in the build directory
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
         let request = authenticated_get(&self.config, &url)?;

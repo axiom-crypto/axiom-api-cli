@@ -6,7 +6,10 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::{authenticated_get, authenticated_post, download_file, send_request_json, AxiomSdk, API_KEY_HEADER};
+use crate::{
+    authenticated_get, authenticated_post, download_file, send_request_json, AxiomSdk,
+    API_KEY_HEADER,
+};
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -130,7 +133,7 @@ impl ProveSdk for AxiomSdk {
     fn get_proof_logs(&self, proof_id: &str) -> Result<()> {
         // First get proof status to extract program_uuid
         let proof_status = self.get_proof_status(proof_id)?;
-        
+
         let url = format!("{}/proofs/{}/logs", self.config.api_url, proof_id);
 
         // Create organized directory structure using program_uuid from response
@@ -140,7 +143,7 @@ impl ProveSdk for AxiomSdk {
         );
         std::fs::create_dir_all(&proof_dir)
             .context(format!("Failed to create proof directory: {}", proof_dir))?;
-        
+
         // Create file path in the proof directory
         let output_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
         let request = authenticated_get(&self.config, &url)?;
@@ -283,7 +286,7 @@ impl ProveSdk for AxiomSdk {
 
         let response_json: Value = send_request_json(request, "Failed to generate proof")?;
         let proof_id = response_json["id"].as_str().unwrap();
-        
+
         Formatter::print_success(&format!("Proof generation initiated ({})", proof_id));
         Ok(proof_id.to_string())
     }
