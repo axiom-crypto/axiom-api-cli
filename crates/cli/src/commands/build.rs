@@ -51,13 +51,9 @@ pub struct BuildArgs {
     #[clap(long, value_name = "ID", conflicts_with = "config")]
     config_id: Option<String>,
 
-    /// Path to a local configuration file
+    /// Path to an OpenVM TOML configuration file
     #[clap(long, value_name = "PATH")]
     config: Option<String>,
-
-    /// Internal Only: Force creating the config and triggering keygen.
-    #[clap(long)]
-    force_keygen: bool,
 
     /// The binary to build, if there are multiple binaries in the project
     #[clap(long, value_name = "BIN")]
@@ -148,7 +144,6 @@ impl BuildCmd {
                     keep_tarball: self.build_args.keep_tarball,
                     exclude_files: self.build_args.exclude_files,
                     include_dirs: self.build_args.include_dirs,
-                    force_keygen: self.build_args.force_keygen,
                     project_id,
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;

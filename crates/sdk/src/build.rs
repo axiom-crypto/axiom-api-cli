@@ -55,7 +55,7 @@ pub struct BuildStatus {
 
 #[derive(Debug)]
 pub struct BuildArgs {
-    /// The configuration ID to use for the build
+    /// The configuration source to use for the build
     pub config_source: Option<ConfigSource>,
     /// The binary to build, if there are multiple binaries in the project
     pub bin: Option<String>,
@@ -65,8 +65,6 @@ pub struct BuildArgs {
     pub exclude_files: Option<String>,
     /// Comma-separated list of directories to include even if not tracked by git
     pub include_dirs: Option<String>,
-    /// Internal Only: Force creating the config and triggering keygen.
-    pub force_keygen: bool,
     /// The project ID to associate with the build
     pub project_id: Option<u32>,
 }
@@ -75,10 +73,9 @@ pub struct BuildArgs {
 pub enum ConfigSource {
     /// The configuration ID to use for the build
     ConfigId(String),
-    /// Path to a local configuration file
+    /// Path to an OpenVM TOML configuration file
     ConfigPath(String),
 }
-
 struct ProgressReader<R> {
     inner: R,
     progress: Arc<Mutex<indicatif::ProgressBar>>,
@@ -240,7 +237,7 @@ impl BuildSdk for AxiomSdk {
         let config_id = match &args.config_source {
             // If config id was provided, use it
             Some(ConfigSource::ConfigId(id)) => Some(id.to_string()),
-            // If config path was provided, do nothing
+            // If config path was provided, do nothing (we'll upload the file separately)
             Some(ConfigSource::ConfigPath(_)) => None,
             // If no config source was provided, use the config id from the
             // config file (which could be None)
@@ -406,9 +403,6 @@ impl BuildSdk for AxiomSdk {
         if let Some(bin) = bin_to_build {
             url.push_str(&format!("&bin_name={bin}"));
         }
-        if args.force_keygen {
-            url.push_str("&force_keygen=true");
-        }
         if let Ok(sha) = get_git_commit_sha(&git_root) {
             url.push_str(&format!("&commit_sha={sha}"));
         }
@@ -448,10 +442,14 @@ impl BuildSdk for AxiomSdk {
 
         let mut form = reqwest::blocking::multipart::Form::new().part("program", part);
 
+        // Add config file if provided
         if let Some(ConfigSource::ConfigPath(config_path_str)) = args.config_source {
             let config_path = Path::new(&config_path_str);
             let config_file_content = std::fs::read(config_path).with_context(|| {
-                format!("Failed to read config file at: {}", config_path.display())
+                format!(
+                    "Failed to read OpenVM config file at: {}",
+                    config_path.display()
+                )
             })?;
             let file_name = config_path
                 .file_name()
