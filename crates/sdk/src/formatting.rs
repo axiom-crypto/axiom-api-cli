@@ -1,5 +1,7 @@
 use console::{style, Term};
+use indicatif::{ProgressBar, ProgressStyle};
 use std::io::Write;
+use std::time::Duration;
 
 /// Terminal formatting utilities using the console crate
 pub struct Formatter;
@@ -64,30 +66,31 @@ impl Formatter {
         std::io::stdout().flush().unwrap();
     }
 
-    /// Print a progress indicator with percentage
-    pub fn print_progress(message: &str, current: u64, total: u64) {
-        let percentage = if total > 0 {
-            (current * 100) / total
-        } else {
-            0
-        };
-
-        let bar_width = 20;
-        let filled = (percentage * bar_width) / 100;
-        let empty = bar_width - filled;
-
-        let bar = format!(
-            "[{}{}]",
-            "█".repeat(filled as usize),
-            "░".repeat(empty as usize)
+    /// Create a progress bar for file uploads/downloads
+    pub fn create_upload_progress(total_bytes: u64) -> ProgressBar {
+        let pb = ProgressBar::new(total_bytes);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                .expect("Invalid progress template")
+                .progress_chars("█▉▊▋▌▍▎▏  "),
         );
+        pb.set_message("Uploading");
+        pb
+    }
 
-        Self::print_status(&format!(
-            "{} {} {}%",
-            message,
-            style(bar).cyan(),
-            style(percentage).bold()
-        ));
+    /// Create a spinner for polling operations (build/prove/run/verify)
+    pub fn create_spinner(message: &str) -> ProgressBar {
+        let pb = ProgressBar::new_spinner();
+        pb.set_style(
+            ProgressStyle::default_spinner()
+                .tick_strings(&["⣾", "⣽", "⣻", "⢿", "⡿", "⣟", "⣯", "⣷"])
+                .template("{spinner:.cyan} {msg} [{elapsed}]")
+                .expect("Invalid spinner template"),
+        );
+        pb.set_message(message.to_string());
+        pb.enable_steady_tick(Duration::from_millis(80));
+        pb
     }
 
     /// Print a table-like structure with aligned columns

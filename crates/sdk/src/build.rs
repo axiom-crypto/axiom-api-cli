@@ -3,7 +3,6 @@ use std::{
     io::{self, Read},
     path::Path,
     sync::{Arc, Mutex},
-    time::{Duration, Instant},
 };
 
 use eyre::{Context, OptionExt, Result};
@@ -80,15 +79,15 @@ pub enum ConfigSource {
 
 struct ProgressReader<R> {
     inner: R,
-    progress: Arc<Mutex<(u64, u64)>>, // (bytes_read, total_bytes)
+    progress: Arc<Mutex<indicatif::ProgressBar>>,
 }
 
 impl<R: Read> Read for ProgressReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let n = self.inner.read(buf)?;
         if n > 0 {
-            let mut progress = self.progress.lock().unwrap();
-            progress.0 += n as u64;
+            let pb = self.progress.lock().unwrap();
+            pb.inc(n as u64);
         }
         Ok(n)
     }
@@ -500,37 +499,9 @@ impl BuildSdk for AxiomSdk {
             .as_ref()
             .ok_or(eyre::eyre!("API key not set"))?;
 
-        // Create a progress tracker
-        let progress = Arc::new(Mutex::new((0, metadata.len())));
-        let progress_clone = Arc::clone(&progress);
-
-        // Spawn a thread to display progress
-        let progress_handle = std::thread::spawn(move || {
-            let mut last_percent = 0;
-
-            loop {
-                std::thread::sleep(Duration::from_millis(100));
-                let (current, total) = *progress_clone.lock().unwrap();
-
-                if total == 0 {
-                    break;
-                }
-
-                let percent = ((current as f64 / total as f64) * 100.0) as u8;
-
-                // Only update when the percentage changes
-                if percent != last_percent {
-                    Formatter::print_progress("Uploading", current, total);
-                    last_percent = percent;
-                }
-
-                if current >= total {
-                    Formatter::clear_line_and_reset();
-                    Formatter::print_success("Upload complete!");
-                    break;
-                }
-            }
-        });
+        // Create progress bar for upload
+        let pb = Formatter::create_upload_progress(metadata.len());
+        let progress = Arc::new(Mutex::new(pb));
 
         // Open the file with progress tracking
         let file = File::open(tar_path).context("Failed to open tar file")?;
@@ -568,8 +539,11 @@ impl BuildSdk for AxiomSdk {
             .multipart(form)
             .send()?;
 
-        // Wait for the progress thread to finish
-        progress_handle.join().unwrap();
+        // Finish the progress bar
+        progress
+            .lock()
+            .unwrap()
+            .finish_with_message("✓ Upload complete!");
 
         // Check if the request was successful
         if response.status().is_success() {
@@ -595,6 +569,7 @@ impl BuildSdk for AxiomSdk {
         use std::time::Duration;
 
         println!();
+        let spinner = Formatter::create_spinner("Checking build status...");
 
         loop {
             // Get status without printing repetitive messages
@@ -623,8 +598,7 @@ impl BuildSdk for AxiomSdk {
 
             match build_status.status.as_str() {
                 "ready" => {
-                    Formatter::clear_line_and_reset();
-                    Formatter::print_success("Build completed successfully!");
+                    spinner.finish_with_message("✓ Build completed successfully!");
 
                     // Get OpenVM version from config
                     let config_metadata =
@@ -674,23 +648,22 @@ impl BuildSdk for AxiomSdk {
                     return Ok(());
                 }
                 "error" | "failed" => {
-                    Formatter::clear_line_and_reset();
                     let error_msg = build_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
-                    Formatter::print_error(&format!("Build failed: {}", error_msg));
+                    spinner.finish_with_message(format!("✗ Build failed: {}", error_msg));
                     eyre::bail!("Build failed: {}", error_msg);
                 }
                 "processing" => {
-                    Formatter::print_status("Build in progress...");
+                    spinner.set_message("Build in progress...");
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 "not_ready" => {
-                    Formatter::print_status("Build queued...");
+                    spinner.set_message("Build queued...");
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    Formatter::print_status(&format!("Build status: {}...", build_status.status));
+                    spinner.set_message(format!("Build status: {}...", build_status.status));
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
             }
