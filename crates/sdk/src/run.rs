@@ -4,9 +4,9 @@ use cargo_openvm::input::Input;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
-use crate::{AxiomSdk, API_KEY_HEADER};
+use crate::{API_KEY_HEADER, AxiomSdk};
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -155,7 +155,7 @@ impl RunSdk for AxiomSdk {
     }
 
     fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()> {
-        use crate::formatting::{calculate_duration, Formatter};
+        use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
 
         println!();

@@ -2,8 +2,8 @@ use eyre::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    authenticated_get, authenticated_post, authenticated_put, send_request, send_request_json,
-    AxiomSdk,
+    AxiomSdk, authenticated_get, authenticated_post, authenticated_put, send_request,
+    send_request_json,
 };
 
 pub trait ProjectSdk {

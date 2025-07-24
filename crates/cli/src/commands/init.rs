@@ -1,7 +1,7 @@
 use std::{fs, path::Path, process::Command};
 
 use clap::Parser;
-use eyre::{bail, Result};
+use eyre::{Result, bail};
 use toml_edit::{DocumentMut, Item, Table, Value};
 
 const MAIN_RS_PREPEND: &str = r#"#[allow(unused_imports)]
