@@ -54,7 +54,7 @@ impl ConfigCmd {
             }
             Some(ConfigSubcommand::Status { config_id }) => {
                 let vm_config_metadata = sdk.get_vm_config_metadata(config_id.as_deref())?;
-                println!("Config status: {vm_config_metadata:?}");
+                Self::print_config_status(&vm_config_metadata);
                 Ok(())
             }
             Some(ConfigSubcommand::Download {
@@ -70,5 +70,18 @@ impl ConfigCmd {
             }
             None => Err(eyre::eyre!("A subcommand is required for config")),
         }
+    }
+
+    fn print_config_status(metadata: &axiom_sdk::config::VmConfigMetadata) {
+        use axiom_sdk::formatting::Formatter;
+
+        Formatter::print_section("Config Status");
+        Formatter::print_field("ID", &metadata.id);
+        Formatter::print_field("Status", &metadata.status);
+        Formatter::print_field("OpenVM Version", &metadata.openvm_version);
+        Formatter::print_field("STARK Backend Version", &metadata.stark_backend_version);
+        Formatter::print_field("Active", &metadata.active.to_string());
+        Formatter::print_field("Created At", &metadata.created_at);
+        Formatter::print_field("App VM Commit", &metadata.app_vm_commit);
     }
 }

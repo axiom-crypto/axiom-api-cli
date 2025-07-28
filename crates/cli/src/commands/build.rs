@@ -87,10 +87,7 @@ impl BuildCmd {
         match self.command {
             Some(BuildSubcommand::Status { program_id }) => {
                 let build_status = sdk.get_build_status(&program_id)?;
-                println!(
-                    "Build status: {}",
-                    serde_json::to_string_pretty(&build_status).unwrap()
-                );
+                Self::print_build_status(&build_status);
                 Ok(())
             }
             Some(BuildSubcommand::List) => {
@@ -158,5 +155,35 @@ impl BuildCmd {
                 }
             }
         }
+    }
+
+    fn print_build_status(status: &axiom_sdk::build::BuildStatus) {
+        use axiom_sdk::formatting::Formatter;
+
+        Formatter::print_section("Build Status");
+        Formatter::print_field("ID", &status.id);
+        Formatter::print_field("Name", &status.name);
+        Formatter::print_field("Status", &status.status);
+        Formatter::print_field("Program Hash", &status.program_hash);
+        Formatter::print_field("Config ID", &status.config_uuid);
+        Formatter::print_field("Created By", &status.created_by);
+        Formatter::print_field("Created At", &status.created_at);
+        Formatter::print_field("Last Active", &status.last_active_at);
+
+        if let Some(launched_at) = &status.launched_at {
+            Formatter::print_field("Launched At", launched_at);
+        }
+
+        if let Some(terminated_at) = &status.terminated_at {
+            Formatter::print_field("Terminated At", terminated_at);
+        }
+
+        if let Some(error_message) = &status.error_message {
+            Formatter::print_field("Error", error_message);
+        }
+
+        Formatter::print_section("Statistics");
+        Formatter::print_field("Cells Used", &status.cells_used.to_string());
+        Formatter::print_field("Proofs Run", &status.proofs_run.to_string());
     }
 }

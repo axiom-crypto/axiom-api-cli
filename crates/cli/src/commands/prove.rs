@@ -78,10 +78,7 @@ impl ProveCmd {
         match self.command {
             Some(ProveSubcommand::Status { proof_id }) => {
                 let proof_status = sdk.get_proof_status(&proof_id)?;
-                println!(
-                    "Proof status: {}",
-                    serde_json::to_string_pretty(&proof_status).unwrap()
-                );
+                Self::print_proof_status(&proof_status);
                 Ok(())
             }
             Some(ProveSubcommand::Download {
@@ -136,5 +133,33 @@ impl ProveCmd {
                 }
             }
         }
+    }
+
+    fn print_proof_status(status: &axiom_sdk::prove::ProofStatus) {
+        use axiom_sdk::formatting::Formatter;
+
+        Formatter::print_section("Proof Status");
+        Formatter::print_field("ID", &status.id);
+        Formatter::print_field("State", &status.state);
+        Formatter::print_field("Proof Type", &status.proof_type);
+        Formatter::print_field("Program ID", &status.program_uuid);
+        Formatter::print_field("Machine Type", &status.machine_type);
+        Formatter::print_field("Created By", &status.created_by);
+        Formatter::print_field("Created At", &status.created_at);
+
+        if let Some(launched_at) = &status.launched_at {
+            Formatter::print_field("Launched At", launched_at);
+        }
+
+        if let Some(terminated_at) = &status.terminated_at {
+            Formatter::print_field("Terminated At", terminated_at);
+        }
+
+        if let Some(error_message) = &status.error_message {
+            Formatter::print_field("Error", error_message);
+        }
+
+        Formatter::print_section("Statistics");
+        Formatter::print_field("Cells Used", &status.cells_used.to_string());
     }
 }

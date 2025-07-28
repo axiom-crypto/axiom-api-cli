@@ -40,10 +40,7 @@ impl VerifyCmd {
         match self.command {
             Some(VerifySubcommand::Status { verify_id }) => {
                 let verify_status = sdk.get_verification_result(&verify_id)?;
-                println!(
-                    "Verification status: {}",
-                    serde_json::to_string_pretty(&verify_status).unwrap()
-                );
+                Self::print_verify_status(&verify_status);
                 Ok(())
             }
             None => {
@@ -63,5 +60,14 @@ impl VerifyCmd {
                 }
             }
         }
+    }
+
+    fn print_verify_status(status: &axiom_sdk::verify::VerifyStatus) {
+        use axiom_sdk::formatting::Formatter;
+
+        Formatter::print_section("Verification Status");
+        Formatter::print_field("ID", &status.id);
+        Formatter::print_field("Result", &status.result);
+        Formatter::print_field("Created At", &status.created_at);
     }
 }
