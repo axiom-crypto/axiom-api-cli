@@ -13,6 +13,7 @@ use scopeguard::defer;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
+use toml::Value as TomlValue;
 
 use crate::{API_KEY_HEADER, AxiomSdk, authenticated_get, download_file, send_request_json};
 
@@ -221,15 +222,28 @@ impl BuildSdk for AxiomSdk {
             eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
         }
 
+        let root_dir = find_cargo_workspace_root(program_dir.as_ref()).unwrap();
+        let toolchain_file = root_dir.join("rust-toolchain.toml");
+        let toolchain_content = std::fs::read_to_string(toolchain_file)?;
+        let toml: TomlValue = toml::from_str(&toolchain_content)?;
+        let expected_version_str = toml["toolchain"]["channel"].as_str().unwrap();
+
+        let expected_version: Vec<u64> = expected_version_str
+            .split('.')
+            .map(|s| s.parse().unwrap())
+            .collect();
         // Check toolchain version using rustc_version crate
         let toolchain_version = rustc_version::version_meta()
             .context("Failed to get toolchain version")?
             .semver;
-
-        if toolchain_version.major != 1 || toolchain_version.minor != 85 {
+        if toolchain_version.major != expected_version[0]
+            || toolchain_version.minor != expected_version[1]
+        {
             eyre::bail!(
-                "Unsupported toolchain version, expected 1.85, found: {}, Use `rustup default 1.85` to install as your default.",
-                toolchain_version.to_string()
+                "Unsupported toolchain version, expected {}, found: {}, Use `rustup default {}` to install as your default.",
+                expected_version_str,
+                toolchain_version.to_string(),
+                expected_version_str
             );
         }
 

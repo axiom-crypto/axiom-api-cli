@@ -27,3 +27,4 @@ scopeguard = "1.2"
 chrono = { version = "0.4", features = ["serde"] }
 console = "0.16.0"
 indicatif = "0.18"
+toml = "0.8.15"
