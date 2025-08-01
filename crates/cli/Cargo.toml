@@ -17,7 +17,7 @@ clap = { version = "4.4", features = ["derive"] }
 tokio = { version = "1", features = ["full"] }
 eyre = "0.6.12"
 dotenvy = "0.15.7"
-toml_edit = "0.23.2"
+toml_edit = { workspace = true }
 
 [build-dependencies]
 cargo_metadata = { workspace = true }
