@@ -54,7 +54,8 @@ impl VerifyCmd {
                     sdk.wait_for_verify_completion(&verify_id)
                 } else {
                     println!(
-                        "To check the verification status, run: cargo axiom verify status --verify-id {verify_id}"
+                        "To check the verification status, run: cargo axiom verify status --verify-id {verify_id}",
+                        verify_id
                     );
                     Ok(())
                 }
