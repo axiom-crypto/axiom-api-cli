@@ -20,7 +20,6 @@ impl Formatter {
         println!("{} {}", style("ℹ").blue().bold(), text);
     }
 
-
     /// Print a section header
     pub fn print_section(title: &str) {
         println!("\n{}:", style(title).bold());
@@ -54,7 +53,6 @@ impl Formatter {
         println!();
         std::io::stdout().flush().unwrap();
     }
-
 }
 
 /// Parse ISO 8601 timestamp and calculate duration
@@ -81,7 +79,6 @@ pub fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,5 +91,4 @@ mod tests {
         let result = calculate_duration(start, end).unwrap();
         assert_eq!(result, "1m 30s");
     }
-
 }
