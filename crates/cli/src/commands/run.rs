@@ -49,14 +49,98 @@ impl RunCmd {
                 Ok(())
             }
             None => {
+                use crate::formatting::{Formatter, calculate_duration};
+
+                Formatter::print_header("Executing Program");
+                if let Some(ref program_id) = self.run_args.program_id {
+                    Formatter::print_field("Program ID", program_id);
+                }
+
                 let args = axiom_sdk::run::RunArgs {
                     program_id: self.run_args.program_id,
                     input: self.run_args.input,
                 };
                 let execution_id = sdk.execute_program(args)?;
+                Formatter::print_success(&format!("Execution initiated ({})", execution_id));
 
                 if self.run_args.wait {
-                    sdk.wait_for_execution_completion(&execution_id)
+                    println!();
+
+                    loop {
+                        let execution_status = sdk.get_execution_status(&execution_id)?;
+
+                        match execution_status.status.as_str() {
+                            "Succeeded" => {
+                                Formatter::clear_line_and_reset();
+                                Formatter::print_success("Execution completed successfully!");
+
+                                // Print completion information
+                                Formatter::print_section("Execution Summary");
+                                Formatter::print_field("Execution ID", &execution_status.id);
+                                if let Some(total_cycle) = execution_status.total_cycle {
+                                    Formatter::print_field("Total Cycles", &total_cycle.to_string());
+                                }
+                                if let Some(total_tick) = execution_status.total_tick {
+                                    Formatter::print_field("Total Ticks", &total_tick.to_string());
+                                }
+
+                                // Format public values more nicely
+                                if let Some(public_values) = &execution_status.public_values {
+                                    if !public_values.is_null() {
+                                        Formatter::print_section("Public Values");
+                                        if let Ok(formatted) = serde_json::to_string_pretty(public_values) {
+                                            for line in formatted.lines() {
+                                                println!("  {}", line);
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if let Some(launched_at) = &execution_status.launched_at {
+                                    if let Some(terminated_at) = &execution_status.terminated_at {
+                                        Formatter::print_section("Execution Stats");
+                                        Formatter::print_field("Created", &execution_status.created_at);
+                                        Formatter::print_field("Initiated", launched_at);
+                                        Formatter::print_field("Finished", terminated_at);
+
+                                        if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
+                                            Formatter::print_field("Duration", &duration);
+                                        }
+                                    }
+                                }
+
+                                // Save execution results to file
+                                if let Some(results_path) = sdk.save_execution_results(&execution_status) {
+                                    Formatter::print_section("Saving Results");
+                                    println!("  ✓ {}", results_path);
+                                }
+
+                                return Ok(());
+                            }
+                            "Failed" => {
+                                Formatter::clear_line_and_reset();
+                                let error_msg = execution_status
+                                    .error_message
+                                    .unwrap_or_else(|| "Unknown error".to_string());
+                                eyre::bail!("Execution failed: {}", error_msg);
+                            }
+                            "Queued" => {
+                                Formatter::print_status("Execution queued...");
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                            "InProgress" => {
+                                Formatter::print_status("Execution in progress...");
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                            _ => {
+                                Formatter::print_status(&format!(
+                                    "Execution status: {}...",
+                                    execution_status.status
+                                ));
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                        }
+                    }
                 } else {
                     println!("Execution started successfully! ID: {}", execution_id);
                     println!(
@@ -70,7 +154,7 @@ impl RunCmd {
     }
 
     fn print_execution_status(status: &axiom_sdk::run::ExecutionStatus) {
-        use axiom_sdk::formatting::Formatter;
+        use crate::formatting::Formatter;
 
         Formatter::print_section("Execution Status");
         Formatter::print_field("ID", &status.id);

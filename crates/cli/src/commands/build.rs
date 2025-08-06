@@ -93,6 +93,11 @@ impl BuildCmd {
             Some(BuildSubcommand::List) => {
                 let build_status_list = sdk.list_programs()?;
 
+                if build_status_list.is_empty() {
+                    println!("No programs found");
+                    return Ok(());
+                }
+
                 // Create a new table
                 let mut table = comfy_table::Table::new();
                 table.set_header(["ID", "Status", "Created At"]);
@@ -123,8 +128,11 @@ impl BuildCmd {
             }) => sdk.download_program(&program_id, &program_type),
             Some(BuildSubcommand::Logs { program_id }) => sdk.download_build_logs(&program_id),
             None => {
+                use crate::formatting::{Formatter, calculate_duration};
+                use axiom_sdk::config::ConfigSdk;
+
                 let program_dir = std::env::current_dir()?;
-                let config_source = match (self.build_args.config_id, self.build_args.config) {
+                let config_source = match (self.build_args.config_id.clone(), self.build_args.config.clone()) {
                     (Some(config_id), _) => Some(ConfigSource::ConfigId(config_id)),
                     (_, Some(config)) => Some(ConfigSource::ConfigPath(config)),
                     (None, None) => None,
@@ -135,6 +143,18 @@ impl BuildCmd {
                     println!("Using project ID: {pid}");
                 }
 
+                Formatter::print_header("Building Program");
+                if let Some(ConfigSource::ConfigId(ref id)) = config_source {
+                    Formatter::print_field("Config ID", id);
+                } else if let Some(ConfigSource::ConfigPath(ref path)) = config_source {
+                    Formatter::print_field("Config File", path);
+                } else {
+                    Formatter::print_field("Config", "Default");
+                }
+
+                println!();
+                Formatter::print_info("Creating project archive...");
+
                 let args = axiom_sdk::build::BuildArgs {
                     config_source,
                     bin: self.build_args.bin,
@@ -144,9 +164,87 @@ impl BuildCmd {
                     project_id,
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
+                Formatter::print_success(&format!("Build initiated ({})", program_id));
 
                 if self.build_args.wait {
-                    sdk.wait_for_build_completion(&program_id)
+    
+                    println!();
+                    Formatter::print_info("Checking build status...");
+
+                    loop {
+                        let build_status = sdk.get_build_status(&program_id)?;
+
+                        match build_status.status.as_str() {
+                            "Succeeded" => {
+                                Formatter::print_success("Build completed successfully!");
+
+                                // Get config metadata for additional information
+                                let config_metadata = sdk.get_vm_config_metadata(Some(&build_status.config_uuid))?;
+
+                                // Print completion information
+                                Formatter::print_section("Build Summary");
+                                Formatter::print_field("Program ID", &build_status.id);
+                                Formatter::print_field("Program Hash", &build_status.program_hash);
+                                Formatter::print_field("Config ID", &build_status.config_uuid);
+                                Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
+                                Formatter::print_field("Usage", &format!("{} cells", build_status.cells_used));
+
+                                if let Some(launched_at) = &build_status.launched_at {
+                                    if let Some(terminated_at) = &build_status.terminated_at {
+                                        Formatter::print_section("Build Stats");
+                                        Formatter::print_field("Created", &build_status.created_at);
+                                        Formatter::print_field("Initiated", launched_at);
+                                        Formatter::print_field("Finished", terminated_at);
+
+                                        if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
+                                            Formatter::print_field("Duration", &duration);
+                                        }
+                                    }
+                                }
+
+                                // Download artifacts automatically
+                                Formatter::print_section("Downloading Artifacts");
+
+                                // Download EXE
+                                Formatter::print_info("Downloading EXE...");
+                                if let Err(e) = sdk.download_program(&build_status.id, "exe") {
+                                    println!("Warning: Failed to download EXE: {}", e);
+                                }
+
+                                // Download ELF
+                                Formatter::print_info("Downloading ELF...");
+                                if let Err(e) = sdk.download_program(&build_status.id, "elf") {
+                                    println!("Warning: Failed to download ELF: {}", e);
+                                }
+
+                                // Download logs
+                                Formatter::print_info("Downloading logs...");
+                                if let Err(e) = sdk.download_build_logs(&build_status.id) {
+                                    println!("Warning: Failed to download logs: {}", e);
+                                }
+
+                                return Ok(());
+                            }
+                            "Failed" => {
+                                let error_msg = build_status
+                                    .error_message
+                                    .unwrap_or_else(|| "Unknown error".to_string());
+                                eyre::bail!("Build failed: {}", error_msg);
+                            }
+                            "Queued" => {
+                                Formatter::print_status("Build queued...");
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                            "InProgress" => {
+                                Formatter::print_status("Build in progress...");
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                            _ => {
+                                Formatter::print_status(&format!("Build status: {}...", build_status.status));
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                        }
+                    }
                 } else {
                     println!(
                         "To check the build status, run: cargo axiom build status --program-id {program_id}"
@@ -158,7 +256,7 @@ impl BuildCmd {
     }
 
     fn print_build_status(status: &axiom_sdk::build::BuildStatus) {
-        use axiom_sdk::formatting::Formatter;
+        use crate::formatting::Formatter;
 
         Formatter::print_section("Build Status");
         Formatter::print_field("ID", &status.id);

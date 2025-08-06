@@ -90,6 +90,11 @@ impl ProveCmd {
             Some(ProveSubcommand::List { program_id }) => {
                 let proof_status_list = sdk.list_proofs(&program_id)?;
 
+                if proof_status_list.is_empty() {
+                    println!("No proofs found for program ID: {program_id}");
+                    return Ok(());
+                }
+
                 // Create a new table
                 let mut table = comfy_table::Table::new();
                 table.set_header(["ID", "State", "Proof type", "Created At"]);
@@ -116,15 +121,101 @@ impl ProveCmd {
                 Ok(())
             }
             None => {
+                use crate::formatting::{Formatter, calculate_duration};
+
                 let args = axiom_sdk::prove::ProveArgs {
-                    program_id: self.prove_args.program_id,
+                    program_id: self.prove_args.program_id.clone(),
                     input: self.prove_args.input,
-                    proof_type: Some(self.prove_args.proof_type),
+                    proof_type: Some(self.prove_args.proof_type.clone()),
                 };
+
+                Formatter::print_header(&format!("Generating {} proof", self.prove_args.proof_type.to_uppercase()));
+                if let Some(ref program_id) = args.program_id {
+                    Formatter::print_field("Program ID", program_id);
+                }
+
                 let proof_id = sdk.generate_new_proof(args)?;
+                Formatter::print_success(&format!("Proof generation initiated ({})", proof_id));
 
                 if self.prove_args.wait {
-                    sdk.wait_for_proof_completion(&proof_id)
+                    println!();
+                    
+                    loop {
+                        let proof_status = sdk.get_proof_status(&proof_id)?;
+                        
+                        match proof_status.state.as_str() {
+                            "Succeeded" => {
+                                Formatter::clear_line_and_reset();
+                                Formatter::print_success("Proof generation completed successfully!");
+
+                                // Print completion information
+                                Formatter::print_section("Proof Summary");
+                                Formatter::print_field("Program ID", &proof_status.program_uuid);
+                                Formatter::print_field("Proof ID", &proof_status.id);
+                                Formatter::print_field("Machine Type", &proof_status.machine_type);
+                                Formatter::print_field("Usage", &format!("{} cells", proof_status.cells_used));
+
+                                if let Some(launched_at) = &proof_status.launched_at {
+                                    if let Some(terminated_at) = &proof_status.terminated_at {
+                                        Formatter::print_section("Job Stats");
+                                        Formatter::print_field("Created", &proof_status.created_at);
+                                        Formatter::print_field("Initiated", launched_at);
+                                        Formatter::print_field("Finished", terminated_at);
+
+                                        if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
+                                            Formatter::print_field("Duration", &duration);
+                                        }
+                                    }
+                                }
+
+                                // Download artifacts automatically
+                                Formatter::print_section("Downloading Artifacts");
+
+                                // Download the specific proof type that was generated
+                                let proof_type_name = match proof_status.proof_type.as_str() {
+                                    "stark" => "STARK",
+                                    "evm" => "EVM",
+                                    _ => "Unknown",
+                                };
+                                Formatter::print_info(&format!("Downloading {} proof...", proof_type_name));
+
+                                if let Err(e) = sdk.get_generated_proof(&proof_status.id, &proof_status.proof_type, None) {
+                                    println!("Warning: Failed to download {} proof: {}", proof_type_name, e);
+                                }
+
+                                // Download logs
+                                Formatter::print_info("Downloading logs...");
+                                if let Err(e) = sdk.get_proof_logs(&proof_status.id) {
+                                    println!("Warning: Failed to download logs: {}", e);
+                                }
+
+                                return Ok(());
+                            }
+                            "Failed" => {
+                                Formatter::clear_line_and_reset();
+                                let error_msg = proof_status
+                                    .error_message
+                                    .unwrap_or_else(|| "Unknown error".to_string());
+                                eyre::bail!("Proof generation failed: {}", error_msg);
+                            }
+                            "Queued" => {
+                                Formatter::print_status("Proof queued...");
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                            "Executing" => {
+                                Formatter::print_status("Executing program...");
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                            "Executed" => {
+                                Formatter::print_status("Program executed, preparing proof...");
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                            _ => {
+                                Formatter::print_status(&format!("Proof status: {}...", proof_status.state));
+                                std::thread::sleep(std::time::Duration::from_secs(10));
+                            }
+                        }
+                    }
                 } else {
                     println!(
                         "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
@@ -136,7 +227,7 @@ impl ProveCmd {
     }
 
     fn print_proof_status(status: &axiom_sdk::prove::ProofStatus) {
-        use axiom_sdk::formatting::Formatter;
+        use crate::formatting::Formatter;
 
         Formatter::print_section("Proof Status");
         Formatter::print_field("ID", &status.id);
