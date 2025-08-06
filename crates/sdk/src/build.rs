@@ -1,8 +1,7 @@
 use std::{
     fs::File,
-    io::{self, Read},
+    io::Read,
     path::Path,
-    sync::{Arc, Mutex},
 };
 
 use eyre::{Context, OptionExt, Result};
@@ -76,21 +75,6 @@ pub enum ConfigSource {
     /// Path to an OpenVM TOML configuration file
     ConfigPath(String),
 }
-struct ProgressReader<R> {
-    inner: R,
-    progress: Arc<Mutex<indicatif::ProgressBar>>,
-}
-
-impl<R: Read> Read for ProgressReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let n = self.inner.read(buf)?;
-        if n > 0 {
-            let pb = self.progress.lock().unwrap();
-            pb.inc(n as u64);
-        }
-        Ok(n)
-    }
-}
 
 struct TarFile {
     path: String,
@@ -115,7 +99,6 @@ impl BuildSdk for AxiomSdk {
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
             if items.is_empty() {
-                println!("No programs found");
                 return Ok(vec![]);
             }
 
@@ -181,7 +164,6 @@ impl BuildSdk for AxiomSdk {
             std::io::copy(&mut content.as_ref(), &mut file)
                 .context("Failed to write artifact to file")?;
 
-            println!("  ✓ {}", filename);
             Ok(())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -207,7 +189,6 @@ impl BuildSdk for AxiomSdk {
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &filename, "Failed to download build logs")?;
-        println!("  ✓ {}", filename.display());
         Ok(())
     }
 
@@ -360,8 +341,6 @@ impl BuildSdk for AxiomSdk {
             .unwrap_or_default();
 
         // Create tar archive of the current directory
-        println!();
-        Formatter::print_info("Creating project archive...");
         let tar_file = create_tar_archive(
             program_dir.as_ref(),
             args.keep_tarball.unwrap_or(false),
@@ -409,16 +388,6 @@ impl BuildSdk for AxiomSdk {
             url.push_str(&format!("&commit_sha={sha}"));
         }
 
-        use crate::formatting::Formatter;
-        Formatter::print_header("Building Program");
-
-        if let Some(id) = &config_id {
-            Formatter::print_field("Config ID", id);
-        } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
-            Formatter::print_field("Config File", &path);
-        } else {
-            Formatter::print_field("Config", "Default");
-        }
 
         // Make the POST request with multipart form data
         let client = Client::builder()
@@ -426,19 +395,11 @@ impl BuildSdk for AxiomSdk {
             .build()?;
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        // Create progress bar for upload
-        let pb = Formatter::create_upload_progress(metadata.len());
-        let progress = Arc::new(Mutex::new(pb));
-
-        // Open the file with progress tracking
+        // Open the file
         let file = File::open(tar_path).context("Failed to open tar file")?;
-        let progress_reader = ProgressReader {
-            inner: file,
-            progress: Arc::clone(&progress),
-        };
 
-        // Create the form with the progress-tracking reader
-        let part = reqwest::blocking::multipart::Part::reader(progress_reader)
+        // Create the form
+        let part = reqwest::blocking::multipart::Part::reader(file)
             .file_name("program.tar.gz")
             .mime_str("application/gzip")?;
 
@@ -470,17 +431,10 @@ impl BuildSdk for AxiomSdk {
             .multipart(form)
             .send()?;
 
-        // Finish the progress bar
-        progress
-            .lock()
-            .unwrap()
-            .finish_with_message("✓ Upload complete!");
-
         // Check if the request was successful
         if response.status().is_success() {
             let body = response.json::<serde_json::Value>().unwrap();
             let program_id = body["id"].as_str().unwrap();
-            Formatter::print_success(&format!("Build initiated ({})", program_id));
             Ok(program_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -495,12 +449,7 @@ impl BuildSdk for AxiomSdk {
     }
 
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
-        use crate::config::ConfigSdk;
-        use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
-
-        println!();
-        let spinner = Formatter::create_spinner("Checking build status...");
 
         loop {
             // Get status without printing repetitive messages
@@ -529,72 +478,21 @@ impl BuildSdk for AxiomSdk {
 
             match build_status.status.as_str() {
                 "ready" => {
-                    spinner.finish_with_message("✓ Build completed successfully!");
-
-                    // Get OpenVM version from config
-                    let config_metadata =
-                        self.get_vm_config_metadata(Some(&build_status.config_uuid))?;
-
-                    // Print completion information
-                    Formatter::print_section("Build Summary");
-                    Formatter::print_field("Program ID", &build_status.id);
-                    Formatter::print_field("Program Hash", &build_status.program_hash);
-                    Formatter::print_field("Config ID", &build_status.config_uuid);
-                    Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
-
-                    if let Some(launched_at) = &build_status.launched_at {
-                        if let Some(terminated_at) = &build_status.terminated_at {
-                            Formatter::print_section("Build Stats");
-                            Formatter::print_field("Created", &build_status.created_at);
-                            Formatter::print_field("Initiated", launched_at);
-                            Formatter::print_field("Finished", terminated_at);
-
-                            if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
-                                Formatter::print_field("Duration", &duration);
-                            }
-                        }
-                    }
-
-                    // Download artifacts automatically
-                    Formatter::print_section("Downloading Artifacts");
-
-                    // Download ELF
-                    Formatter::print_info("Downloading ELF...");
-                    if let Err(e) = self.download_program(&build_status.id, "elf") {
-                        println!("Warning: Failed to download ELF: {}", e);
-                    }
-
-                    // Download EXE
-                    Formatter::print_info("Downloading EXE...");
-                    if let Err(e) = self.download_program(&build_status.id, "exe") {
-                        println!("Warning: Failed to download EXE: {}", e);
-                    }
-
-                    // Download logs
-                    Formatter::print_info("Downloading logs...");
-                    if let Err(e) = self.download_build_logs(&build_status.id) {
-                        println!("Warning: Failed to download logs: {}", e);
-                    }
-
                     return Ok(());
                 }
                 "error" | "failed" => {
                     let error_msg = build_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
-                    spinner.finish_with_message(format!("✗ Build failed: {}", error_msg));
                     eyre::bail!("Build failed: {}", error_msg);
                 }
                 "processing" => {
-                    spinner.set_message("Build in progress...");
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 "not_ready" => {
-                    spinner.set_message("Build queued...");
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    spinner.set_message(format!("Build status: {}...", build_status.status));
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
             }

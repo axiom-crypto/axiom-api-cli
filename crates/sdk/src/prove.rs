@@ -69,7 +69,6 @@ impl ProveSdk for AxiomSdk {
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
             if items.is_empty() {
-                println!("No proofs found for program ID: {program_id}");
                 return Ok(vec![]);
             }
 
@@ -126,7 +125,6 @@ impl ProveSdk for AxiomSdk {
 
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &output_path, "Failed to download proof")?;
-        println!("  ✓ {}", output_path.display());
         Ok(())
     }
 
@@ -148,7 +146,6 @@ impl ProveSdk for AxiomSdk {
         let output_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &output_path, "Failed to download proof logs")?;
-        println!("  ✓ {}", output_path.display());
         Ok(())
     }
 
@@ -189,7 +186,6 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
-            println!("  ✓ {}", output_path.display());
             Ok(())
         } else {
             let status = response.status();
@@ -227,7 +223,6 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
-            println!("  ✓ {}", output_path.display());
             Ok(())
         } else {
             let status = response.status();
@@ -247,10 +242,6 @@ impl ProveSdk for AxiomSdk {
             .ok_or_eyre("Program ID is required. Use --program-id to specify.")?;
 
         let proof_type = args.proof_type.unwrap_or_else(|| "stark".to_string());
-
-        use crate::formatting::Formatter;
-        Formatter::print_header(&format!("Generating {} proof", proof_type.to_uppercase()));
-        Formatter::print_field("Program ID", &program_id);
 
         let url = format!(
             "{}/proofs?program_id={program_id}&proof_type={proof_type}",
@@ -287,15 +278,11 @@ impl ProveSdk for AxiomSdk {
         let response_json: Value = send_request_json(request, "Failed to generate proof")?;
         let proof_id = response_json["id"].as_str().unwrap();
 
-        Formatter::print_success(&format!("Proof generation initiated ({})", proof_id));
         Ok(proof_id.to_string())
     }
 
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
-        use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
-
-        println!();
 
         loop {
             // Get status without printing repetitive messages
@@ -324,94 +311,15 @@ impl ProveSdk for AxiomSdk {
 
             match proof_status.state.as_str() {
                 "Succeeded" => {
-                    Formatter::clear_line_and_reset();
-                    Formatter::print_success("Proof generation completed successfully!");
-
-                    // Print completion information
-                    Formatter::print_section("Proof Summary");
-                    Formatter::print_field("Program ID", &proof_status.program_uuid);
-                    Formatter::print_field("Proof ID", &proof_status.id);
-                    Formatter::print_field("Machine Type", &proof_status.machine_type);
-                    Formatter::print_field("Usage", &format!("{} cells", proof_status.cells_used));
-
-                    if let Some(launched_at) = &proof_status.launched_at {
-                        if let Some(terminated_at) = &proof_status.terminated_at {
-                            Formatter::print_section("Job Stats");
-                            Formatter::print_field("Created", &proof_status.created_at);
-                            Formatter::print_field("Initiated", launched_at);
-                            Formatter::print_field("Finished", terminated_at);
-
-                            if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
-                                Formatter::print_field("Duration", &duration);
-                            }
-                        }
-                    }
-
-                    // Download artifacts automatically
-                    Formatter::print_section("Downloading Artifacts");
-
-                    // Download the specific proof type that was generated
-                    let proof_type_name = match proof_status.proof_type.as_str() {
-                        "stark" => "STARK",
-                        "evm" => "EVM",
-                        _ => "Unknown",
-                    };
-                    Formatter::print_info(&format!("Downloading {} proof...", proof_type_name));
-
-                    // Create organized directory structure using program_uuid
-                    let proof_dir = format!(
-                        "axiom-artifacts/program-{}/proofs/{}",
-                        proof_status.program_uuid, proof_status.id
-                    );
-                    if let Err(e) = std::fs::create_dir_all(&proof_dir) {
-                        println!("Warning: Failed to create proof directory: {}", e);
-                    } else {
-                        let proof_path = PathBuf::from(format!(
-                            "{}/{}-proof.json",
-                            proof_dir, proof_status.proof_type
-                        ));
-                        if let Err(e) = self.save_proof_to_path(
-                            &proof_status.id,
-                            &proof_status.proof_type,
-                            proof_path,
-                        ) {
-                            println!(
-                                "Warning: Failed to download {} proof: {}",
-                                proof_type_name, e
-                            );
-                        }
-
-                        // Download logs
-                        Formatter::print_info("Downloading logs...");
-                        let logs_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
-                        if let Err(e) = self.save_proof_logs_to_path(&proof_status.id, logs_path) {
-                            println!("Warning: Failed to download logs: {}", e);
-                        }
-                    }
-
                     return Ok(());
                 }
                 "Failed" => {
-                    Formatter::clear_line_and_reset();
                     let error_msg = proof_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Proof generation failed: {}", error_msg);
                 }
-                "Queued" => {
-                    Formatter::print_status("Proof queued...");
-                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
-                }
-                "Executing" => {
-                    Formatter::print_status("Executing program...");
-                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
-                }
-                "Executed" => {
-                    Formatter::print_status("Program executed, preparing proof...");
-                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
-                }
-                _ => {
-                    Formatter::print_status(&format!("Proof status: {}...", proof_status.state));
+                "Queued" | "Executing" | "Executed" | _ => {
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
             }
