@@ -165,7 +165,10 @@ impl RunSdk for AxiomSdk {
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Execution failed: {}", error_msg);
                 }
-                "Queued" | "InProgress" | _ => {
+                "Queued" | "InProgress" => {
+                    std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
+                }
+                _ => {
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
             }

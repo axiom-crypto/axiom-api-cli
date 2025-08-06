@@ -137,7 +137,10 @@ impl VerifySdk for AxiomSdk {
                 "failed" => {
                     eyre::bail!("Proof verification failed");
                 }
-                "processing" | _ => {
+                "processing" => {
+                    std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
+                }
+                _ => {
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
             }

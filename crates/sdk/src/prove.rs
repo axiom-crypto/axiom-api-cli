@@ -319,7 +319,10 @@ impl ProveSdk for AxiomSdk {
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Proof generation failed: {}", error_msg);
                 }
-                "Queued" | "Executing" | "Executed" | _ => {
+                "Queued" | "Executing" | "Executed" => {
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
+                }
+                _ => {
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
             }
