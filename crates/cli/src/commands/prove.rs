@@ -129,7 +129,10 @@ impl ProveCmd {
                     proof_type: Some(self.prove_args.proof_type.clone()),
                 };
 
-                Formatter::print_header(&format!("Generating {} proof", self.prove_args.proof_type.to_uppercase()));
+                Formatter::print_header(&format!(
+                    "Generating {} proof",
+                    self.prove_args.proof_type.to_uppercase()
+                ));
                 if let Some(ref program_id) = args.program_id {
                     Formatter::print_field("Program ID", program_id);
                 }
@@ -139,21 +142,26 @@ impl ProveCmd {
 
                 if self.prove_args.wait {
                     println!();
-                    
+
                     loop {
                         let proof_status = sdk.get_proof_status(&proof_id)?;
-                        
+
                         match proof_status.state.as_str() {
                             "Succeeded" => {
                                 Formatter::clear_line_and_reset();
-                                Formatter::print_success("Proof generation completed successfully!");
+                                Formatter::print_success(
+                                    "Proof generation completed successfully!",
+                                );
 
                                 // Print completion information
                                 Formatter::print_section("Proof Summary");
                                 Formatter::print_field("Program ID", &proof_status.program_uuid);
                                 Formatter::print_field("Proof ID", &proof_status.id);
                                 Formatter::print_field("Machine Type", &proof_status.machine_type);
-                                Formatter::print_field("Usage", &format!("{} cells", proof_status.cells_used));
+                                Formatter::print_field(
+                                    "Usage",
+                                    &format!("{} cells", proof_status.cells_used),
+                                );
 
                                 if let Some(launched_at) = &proof_status.launched_at {
                                     if let Some(terminated_at) = &proof_status.terminated_at {
@@ -162,7 +170,9 @@ impl ProveCmd {
                                         Formatter::print_field("Initiated", launched_at);
                                         Formatter::print_field("Finished", terminated_at);
 
-                                        if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
+                                        if let Ok(duration) =
+                                            calculate_duration(launched_at, terminated_at)
+                                        {
                                             Formatter::print_field("Duration", &duration);
                                         }
                                     }
@@ -177,10 +187,20 @@ impl ProveCmd {
                                     "evm" => "EVM",
                                     _ => "Unknown",
                                 };
-                                Formatter::print_info(&format!("Downloading {} proof...", proof_type_name));
+                                Formatter::print_info(&format!(
+                                    "Downloading {} proof...",
+                                    proof_type_name
+                                ));
 
-                                if let Err(e) = sdk.get_generated_proof(&proof_status.id, &proof_status.proof_type, None) {
-                                    println!("Warning: Failed to download {} proof: {}", proof_type_name, e);
+                                if let Err(e) = sdk.get_generated_proof(
+                                    &proof_status.id,
+                                    &proof_status.proof_type,
+                                    None,
+                                ) {
+                                    println!(
+                                        "Warning: Failed to download {} proof: {}",
+                                        proof_type_name, e
+                                    );
                                 }
 
                                 // Download logs
@@ -211,7 +231,10 @@ impl ProveCmd {
                                 std::thread::sleep(std::time::Duration::from_secs(10));
                             }
                             _ => {
-                                Formatter::print_status(&format!("Proof status: {}...", proof_status.state));
+                                Formatter::print_status(&format!(
+                                    "Proof status: {}...",
+                                    proof_status.state
+                                ));
                                 std::thread::sleep(std::time::Duration::from_secs(10));
                             }
                         }

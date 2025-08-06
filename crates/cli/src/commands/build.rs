@@ -132,7 +132,10 @@ impl BuildCmd {
                 use axiom_sdk::config::ConfigSdk;
 
                 let program_dir = std::env::current_dir()?;
-                let config_source = match (self.build_args.config_id.clone(), self.build_args.config.clone()) {
+                let config_source = match (
+                    self.build_args.config_id.clone(),
+                    self.build_args.config.clone(),
+                ) {
                     (Some(config_id), _) => Some(ConfigSource::ConfigId(config_id)),
                     (_, Some(config)) => Some(ConfigSource::ConfigPath(config)),
                     (None, None) => None,
@@ -167,7 +170,6 @@ impl BuildCmd {
                 Formatter::print_success(&format!("Build initiated ({})", program_id));
 
                 if self.build_args.wait {
-    
                     println!();
                     Formatter::print_info("Checking build status...");
 
@@ -179,15 +181,22 @@ impl BuildCmd {
                                 Formatter::print_success("Build completed successfully!");
 
                                 // Get config metadata for additional information
-                                let config_metadata = sdk.get_vm_config_metadata(Some(&build_status.config_uuid))?;
+                                let config_metadata =
+                                    sdk.get_vm_config_metadata(Some(&build_status.config_uuid))?;
 
                                 // Print completion information
                                 Formatter::print_section("Build Summary");
                                 Formatter::print_field("Program ID", &build_status.id);
                                 Formatter::print_field("Program Hash", &build_status.program_hash);
                                 Formatter::print_field("Config ID", &build_status.config_uuid);
-                                Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
-                                Formatter::print_field("Usage", &format!("{} cells", build_status.cells_used));
+                                Formatter::print_field(
+                                    "OpenVM Version",
+                                    &config_metadata.openvm_version,
+                                );
+                                Formatter::print_field(
+                                    "Usage",
+                                    &format!("{} cells", build_status.cells_used),
+                                );
 
                                 if let Some(launched_at) = &build_status.launched_at {
                                     if let Some(terminated_at) = &build_status.terminated_at {
@@ -196,7 +205,9 @@ impl BuildCmd {
                                         Formatter::print_field("Initiated", launched_at);
                                         Formatter::print_field("Finished", terminated_at);
 
-                                        if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
+                                        if let Ok(duration) =
+                                            calculate_duration(launched_at, terminated_at)
+                                        {
                                             Formatter::print_field("Duration", &duration);
                                         }
                                     }
@@ -240,7 +251,10 @@ impl BuildCmd {
                                 std::thread::sleep(std::time::Duration::from_secs(10));
                             }
                             _ => {
-                                Formatter::print_status(&format!("Build status: {}...", build_status.status));
+                                Formatter::print_status(&format!(
+                                    "Build status: {}...",
+                                    build_status.status
+                                ));
                                 std::thread::sleep(std::time::Duration::from_secs(10));
                             }
                         }

@@ -78,7 +78,10 @@ impl RunCmd {
                                 Formatter::print_section("Execution Summary");
                                 Formatter::print_field("Execution ID", &execution_status.id);
                                 if let Some(total_cycle) = execution_status.total_cycle {
-                                    Formatter::print_field("Total Cycles", &total_cycle.to_string());
+                                    Formatter::print_field(
+                                        "Total Cycles",
+                                        &total_cycle.to_string(),
+                                    );
                                 }
                                 if let Some(total_tick) = execution_status.total_tick {
                                     Formatter::print_field("Total Ticks", &total_tick.to_string());
@@ -88,7 +91,9 @@ impl RunCmd {
                                 if let Some(public_values) = &execution_status.public_values {
                                     if !public_values.is_null() {
                                         Formatter::print_section("Public Values");
-                                        if let Ok(formatted) = serde_json::to_string_pretty(public_values) {
+                                        if let Ok(formatted) =
+                                            serde_json::to_string_pretty(public_values)
+                                        {
                                             for line in formatted.lines() {
                                                 println!("  {}", line);
                                             }
@@ -99,18 +104,25 @@ impl RunCmd {
                                 if let Some(launched_at) = &execution_status.launched_at {
                                     if let Some(terminated_at) = &execution_status.terminated_at {
                                         Formatter::print_section("Execution Stats");
-                                        Formatter::print_field("Created", &execution_status.created_at);
+                                        Formatter::print_field(
+                                            "Created",
+                                            &execution_status.created_at,
+                                        );
                                         Formatter::print_field("Initiated", launched_at);
                                         Formatter::print_field("Finished", terminated_at);
 
-                                        if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
+                                        if let Ok(duration) =
+                                            calculate_duration(launched_at, terminated_at)
+                                        {
                                             Formatter::print_field("Duration", &duration);
                                         }
                                     }
                                 }
 
                                 // Save execution results to file
-                                if let Some(results_path) = sdk.save_execution_results(&execution_status) {
+                                if let Some(results_path) =
+                                    sdk.save_execution_results(&execution_status)
+                                {
                                     Formatter::print_section("Saving Results");
                                     println!("  ✓ {}", results_path);
                                 }

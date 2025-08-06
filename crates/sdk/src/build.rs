@@ -1,8 +1,4 @@
-use std::{
-    fs::File,
-    io::Read,
-    path::Path,
-};
+use std::{fs::File, io::Read, path::Path};
 
 use eyre::{Context, OptionExt, Result};
 use flate2::{Compression, write::GzEncoder};
@@ -387,7 +383,6 @@ impl BuildSdk for AxiomSdk {
         if let Ok(sha) = get_git_commit_sha(&git_root) {
             url.push_str(&format!("&commit_sha={sha}"));
         }
-
 
         // Make the POST request with multipart form data
         let client = Client::builder()

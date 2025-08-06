@@ -56,7 +56,6 @@ impl VerifySdk for AxiomSdk {
     }
 
     fn verify_proof(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
-
         // Load configuration
         let config_id = get_config_id(config_id, &self.config)?;
         let url = format!("{}/verify?config_id={}", self.config.api_url, config_id);
