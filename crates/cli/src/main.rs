@@ -4,6 +4,7 @@ use clap::{Args, Parser, Subcommand};
 use dotenvy::dotenv;
 
 mod commands;
+mod formatting;
 
 use commands::{
     BuildCmd, ConfigCmd, DownloadKeysCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd,

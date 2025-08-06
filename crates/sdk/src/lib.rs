@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub mod build;
 pub mod config;
-pub mod formatting;
 pub mod projects;
 pub mod prove;
 pub mod run;
@@ -122,7 +121,6 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
         set_config_id(id)?;
         Ok(id.to_string())
     } else if let Some(id) = &config.config_id {
-        println!("using cached config ID: {id}");
         Ok(id.clone())
     } else {
         Err(eyre::eyre!("No config ID provided"))
@@ -259,7 +257,6 @@ pub fn download_file(
         std::io::copy(&mut content.as_ref(), &mut file)
             .context("Failed to write response to file")?;
 
-        println!("Successfully downloaded to: {}", output_path.display());
         Ok(())
     } else if response.status().is_client_error() {
         let status = response.status();
