@@ -143,7 +143,6 @@ impl ProveCmd {
         Formatter::print_field("State", &status.state);
         Formatter::print_field("Proof Type", &status.proof_type);
         Formatter::print_field("Program ID", &status.program_uuid);
-        Formatter::print_field("Machine Type", &status.machine_type);
         Formatter::print_field("Created By", &status.created_by);
         Formatter::print_field("Created At", &status.created_at);
 
