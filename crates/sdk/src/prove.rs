@@ -56,7 +56,6 @@ pub struct ProofStatus {
     pub terminated_at: Option<String>,
     pub created_by: String,
     pub cells_used: u64,
-    pub machine_type: String,
 }
 
 impl ProveSdk for AxiomSdk {
@@ -331,7 +330,6 @@ impl ProveSdk for AxiomSdk {
                     Formatter::print_section("Proof Summary");
                     Formatter::print_field("Program ID", &proof_status.program_uuid);
                     Formatter::print_field("Proof ID", &proof_status.id);
-                    Formatter::print_field("Machine Type", &proof_status.machine_type);
                     Formatter::print_field("Usage", &format!("{} cells", proof_status.cells_used));
 
                     if let Some(launched_at) = &proof_status.launched_at {

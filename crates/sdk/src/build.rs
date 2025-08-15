@@ -50,7 +50,6 @@ pub struct BuildStatus {
     pub openvm_config: String,
     pub cells_used: u64,
     pub proofs_run: u64,
-    pub is_favorite: bool,
 }
 
 #[derive(Debug)]
