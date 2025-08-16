@@ -146,8 +146,10 @@ impl BuildSdk for AxiomSdk {
             self.config.api_url, program_id, program_type
         );
 
-        // Make the GET request
-        let client = Client::new();
+        // Make the GET request with longer timeout for large files
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(600)) // 10 minute timeout for large downloads
+            .build()?;
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         let response = client
@@ -156,8 +158,9 @@ impl BuildSdk for AxiomSdk {
             .send()
             .context("Failed to download artifact")?;
 
-        // Check if the request was successful
-        if response.status().is_success() {
+        let status = response.status();
+
+        if status.is_success() {
             // Create organized directory structure
             let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
             std::fs::create_dir_all(&build_dir)
@@ -169,27 +172,38 @@ impl BuildSdk for AxiomSdk {
             } else {
                 program_type.to_string()
             };
-            let filename = format!("{}/{}.{}", build_dir, program_type, ext);
+            let filename = format!("{}/program.{}", build_dir, ext);
 
-            // Write the response body to a file
+            // Write the response body to a file using streaming
             let mut file = File::create(&filename)
                 .context(format!("Failed to create output file: {filename}"))?;
 
-            let content = response.bytes().context("Failed to read response body")?;
-
-            std::io::copy(&mut content.as_ref(), &mut file)
-                .context("Failed to write artifact to file")?;
+            // Stream the response directly to the file instead of loading into memory
+            let mut response = response;
+            std::io::copy(&mut response, &mut file).with_context(|| {
+                format!(
+                    "Failed to stream response body to file for program_type '{}', program_id '{}'",
+                    program_type, program_id
+                )
+            })?;
 
             println!("  ✓ {}", filename);
             Ok(())
-        } else if response.status().is_client_error() {
-            let status = response.status();
-            let error_text = response.text()?;
+        } else if status.is_client_error() {
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unable to read error response".to_string());
+            println!("Client error response: {}", error_text);
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unable to read error response".to_string());
+            println!("Server error response: {}", error_text);
             Err(eyre::eyre!(
-                "Download request failed with status: {}",
-                response.status()
+                "Download request failed with status: {} - {}",
+                status,
+                error_text
             ))
         }
     }
