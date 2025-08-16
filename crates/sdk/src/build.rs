@@ -180,7 +180,7 @@ impl BuildSdk for AxiomSdk {
 
             // Stream the response directly to the file instead of loading into memory
             let mut response = response;
-            let bytes_copied = std::io::copy(&mut response, &mut file).with_context(|| {
+            std::io::copy(&mut response, &mut file).with_context(|| {
                 format!(
                     "Failed to stream response body to file for program_type '{}', program_id '{}'",
                     program_type, program_id
