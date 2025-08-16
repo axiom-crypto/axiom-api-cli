@@ -159,19 +159,8 @@ impl BuildSdk for AxiomSdk {
             .context("Failed to download artifact")?;
 
         let status = response.status();
-        println!("Response status: {}", status);
 
-        // Check if the request was successful
         if status.is_success() {
-            // Check content headers for debugging
-            let headers = response.headers();
-            if let Some(content_type) = headers.get("content-type") {
-                println!("Content-Type: {:?}", content_type);
-            }
-            if let Some(content_length) = headers.get("content-length") {
-                println!("Content-Length: {:?}", content_length);
-            }
-
             // Create organized directory structure
             let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
             std::fs::create_dir_all(&build_dir)
