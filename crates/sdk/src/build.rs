@@ -187,8 +187,6 @@ impl BuildSdk for AxiomSdk {
                 )
             })?;
 
-            println!("Downloaded {} bytes", bytes_copied);
-
             println!("  ✓ {}", filename);
             Ok(())
         } else if status.is_client_error() {
