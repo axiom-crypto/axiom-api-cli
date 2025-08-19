@@ -5,22 +5,22 @@
 1. Install the Axiom CLI:
 
    ```
-   cargo install --locked --git https://github.com/axiom-crypto/axiom-api-cli.git --tag v0.3.0 cargo-axiom
+   cargo +1.86 install --locked --git https://github.com/axiom-crypto/axiom-api-cli.git --tag v0.4.0 cargo-axiom
    ```
 
    Or from source:
 
    ```bash
-   git clone https://github.com/axiom-crypto/axiom-api-cli
+   git clone https://github.com/axiom-crypto/axiom-api-cli --tag v0.4.0
    cd axiom-api-cli/crates/cli
-   cargo install --locked --force --path .
+   cargo +1.86 install --locked --force --path .
    ```
 
 2. Initialize with your API key:
    ```bash
-   cargo axiom init --api-key <API_KEY>
+   cargo axiom register --api-key <API_KEY>
    ```
-   Alternatively, set the `AXIOM_API_KEY` environment variable in a `.env` file and then run `cargo axiom init` at the directory of the `.env` file.
+   Alternatively, set the `AXIOM_API_KEY` environment variable in a `.env` file and then run `cargo axiom register` at the directory of the `.env` file.
    See `.env.example` for an example.
 
 ## Building Programs
