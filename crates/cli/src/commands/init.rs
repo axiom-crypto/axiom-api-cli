@@ -18,7 +18,13 @@ openvm::init!();
 
 "#;
 
-const OPENVM_TOML_TEMPLATE: &str = r#"openvm_version = "v1.3"
+const OPENVM_TOML_TEMPLATE: &str = r#"
+openvm_version = "v1.4"
+[app_fri_params.fri_params]
+log_blowup = 1
+log_final_poly_len = 0
+num_queries = 100
+proof_of_work_bits = 16
 
 [app_vm_config.system.config]
 max_constraint_degree = 3
@@ -27,18 +33,59 @@ num_public_values = 32
 profiling = false
 
 [app_vm_config.system.config.memory_config]
-as_height = 3
-as_offset = 1
+addr_space_height = 3
 pointer_max_bits = 29
 clk_max_bits = 29
 decomp = 17
 max_access_adapter_n = 32
-access_capacity = 16777216
+timestamp_max_bits = 29
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+min_block_size = 1
+layout = "Null"
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 128
+min_block_size = 4
+layout = "U8"
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 536870912
+min_block_size = 4
+layout = "U8"
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 32
+min_block_size = 4
+layout = "U8"
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+min_block_size = 1
+layout = { Native = { size = 4 } }
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+min_block_size = 1
+layout = { Native = { size = 4 } }
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+min_block_size = 1
+layout = { Native = { size = 4 } }
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+min_block_size = 1
+layout = { Native = { size = 4 } }
+
+[[app_vm_config.system.config.memory_config.addr_spaces]]
+num_cells = 0
+min_block_size = 1
+layout = { Native = { size = 4 } }
 
 [app_vm_config.rv32i]
-
-[app_vm_config.rv32m]
-range_tuple_checker_sizes = [256, 8192]
 
 [app_vm_config.io]
 
@@ -46,35 +93,39 @@ range_tuple_checker_sizes = [256, 8192]
 
 [app_vm_config.sha256]
 
+[app_vm_config.rv32m]
+range_tuple_checker_sizes = [256, 8192]
+
 [app_vm_config.bigint]
 range_tuple_checker_sizes = [256, 8192]
 
 [app_vm_config.modular]
 supported_moduli = [
-    # bn254 (alt bn128)
-    "21888242871839275222246405745257275088696311157297823662689037894645226208583", # coordinate field
-    "21888242871839275222246405745257275088548364400416034343698204186575808495617", # scalar field
-    # secp256k1
-    "115792089237316195423570985008687907853269984665640564039457584007908834671663", # coordinate field
-    "115792089237316195423570985008687907852837564279074904382605163141518161494337", # scalar field
-    # secp256r1 (p256)
-    "115792089210356248762697446949407573530086143415290314195533631308867097853951", # coordinate field
-    "115792089210356248762697446949407573529996955224135760342422259061068512044369", # scalar field
-    # bls12_381
-    "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", # coordinate field
-    "52435875175126190479447740508185965837690552500527637822603658699938581184513",                                       # scalar field
+    "21888242871839275222246405745257275088696311157297823662689037894645226208583",
+    "21888242871839275222246405745257275088548364400416034343698204186575808495617",
+    "115792089237316195423570985008687907853269984665640564039457584007908834671663",
+    "115792089237316195423570985008687907852837564279074904382605163141518161494337",
+    "115792089210356248762697446949407573530086143415290314195533631308867097853951",
+    "115792089210356248762697446949407573529996955224135760342422259061068512044369",
+    "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
+    "52435875175126190479447740508185965837690552500527637822603658699938581184513",
 ]
 
 [app_vm_config.fp2]
 supported_moduli = [
-    ["Bn254Fp2", "21888242871839275222246405745257275088696311157297823662689037894645226208583"],
-    ["Bls12_381Fp2", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787"],
+    [
+        "Bn254Fp2",
+        "21888242871839275222246405745257275088696311157297823662689037894645226208583",
+    ],
+    [
+        "Bls12_381Fp2",
+        "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787",
+    ],
 ]
 
 [app_vm_config.pairing]
 supported_curves = ["Bn254", "Bls12_381"]
 
-# bn254 (alt bn128)
 [[app_vm_config.ecc.supported_curves]]
 struct_name = "Bn254G1Affine"
 modulus = "21888242871839275222246405745257275088696311157297823662689037894645226208583"
@@ -89,7 +140,6 @@ scalar = "1157920892373161954235709850086879078528375642790749043826051631415181
 a = "0"
 b = "7"
 
-# secp256r1 (p256)
 [[app_vm_config.ecc.supported_curves]]
 struct_name = "P256Point"
 modulus = "115792089210356248762697446949407573530086143415290314195533631308867097853951"
@@ -97,19 +147,49 @@ scalar = "1157920892103562487626974469494075735299969552241357603424222590610685
 a = "115792089210356248762697446949407573530086143415290314195533631308867097853948"
 b = "41058363725152142129326129780047268409114441015993725554835256314039467401291"
 
-# bls12_381
 [[app_vm_config.ecc.supported_curves]]
 struct_name = "Bls12_381G1Affine"
 modulus = "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787"
 scalar = "52435875175126190479447740508185965837690552500527637822603658699938581184513"
 a = "0"
 b = "4"
-"#;
 
-const OPENVM_INIT_TEMPLATE: &str = r#"// This file is automatically generated by cargo openvm. Do not rename or edit.
-openvm_algebra_guest::moduli_macros::moduli_init! { "21888242871839275222246405745257275088696311157297823662689037894645226208583", "21888242871839275222246405745257275088548364400416034343698204186575808495617", "115792089237316195423570985008687907853269984665640564039457584007908834671663", "115792089237316195423570985008687907852837564279074904382605163141518161494337", "115792089210356248762697446949407573530086143415290314195533631308867097853951", "115792089210356248762697446949407573529996955224135760342422259061068512044369", "4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787", "52435875175126190479447740508185965837690552500527637822603658699938581184513" }
-openvm_algebra_guest::complex_macros::complex_init! { Bn254Fp2 { mod_idx = 0 }, Bls12_381Fp2 { mod_idx = 6 } }
-openvm_ecc_guest::sw_macros::sw_init! { Bn254G1Affine, Secp256k1Point, P256Point, Bls12_381G1Affine }
+[leaf_fri_params.fri_params]
+log_blowup = 1
+log_final_poly_len = 0
+num_queries = 100
+proof_of_work_bits = 16
+
+[compiler_options]
+word_size = 8
+enable_cycle_tracker = false
+
+[agg_config]
+max_num_user_public_values = 32
+profiling = false
+root_max_constraint_degree = 9
+
+[agg_config.leaf_fri_params]
+log_blowup = 1
+log_final_poly_len = 0
+num_queries = 100
+proof_of_work_bits = 16
+
+[agg_config.internal_fri_params]
+log_blowup = 2
+log_final_poly_len = 0
+num_queries = 44
+proof_of_work_bits = 16
+
+[agg_config.root_fri_params]
+log_blowup = 3
+log_final_poly_len = 0
+num_queries = 30
+proof_of_work_bits = 16
+
+[agg_config.compiler_options]
+word_size = 8
+enable_cycle_tracker = false
 "#;
 
 #[derive(Debug, Parser)]
@@ -283,10 +363,6 @@ pub fn execute(args: InitArgs) -> Result<()> {
     // Create or replace openvm.toml file
     let openvm_toml_path = project_dir.join("openvm.toml");
     fs::write(&openvm_toml_path, OPENVM_TOML_TEMPLATE)?;
-
-    // Create openvm_init.rs file
-    let openvm_init_path = project_dir.join("openvm_init.rs");
-    fs::write(&openvm_init_path, OPENVM_INIT_TEMPLATE)?;
 
     Ok(())
 }
