@@ -364,5 +364,15 @@ pub fn execute(args: InitArgs) -> Result<()> {
     let openvm_toml_path = project_dir.join("openvm.toml");
     fs::write(&openvm_toml_path, OPENVM_TOML_TEMPLATE)?;
 
+    // Attempt to stage and commit initialized files. Ignore failures (e.g., not a git repo or nothing to commit).
+    let _ = Command::new("git")
+        .current_dir(&project_dir)
+        .args(["add", "."])
+        .status();
+    let _ = Command::new("git")
+        .current_dir(&project_dir)
+        .args(["commit", "-m", "initial commit"])
+        .status();
+
     Ok(())
 }
