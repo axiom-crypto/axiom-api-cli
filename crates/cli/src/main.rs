@@ -53,8 +53,7 @@ enum AxiomCommands {
     Version(VersionCmd),
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     dotenv().ok();
 
     let Cargo::Axiom(args) = Cargo::parse();
