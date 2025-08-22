@@ -27,7 +27,6 @@ pub struct VmConfigMetadata {
     pub stark_backend_version: String,
     pub status: String,
     pub active: bool,
-    #[serde(rename = "app_vm_config")]
     pub app_vm_commit: String,
 }
 
