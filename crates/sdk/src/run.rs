@@ -155,8 +155,9 @@ impl RunSdk for AxiomSdk {
     }
 
     fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()> {
-        use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
+
+        use crate::formatting::{Formatter, calculate_duration};
 
         println!();
 

@@ -29,13 +29,13 @@ enum ProjectsSubcommand {
     Show {
         /// Project ID to show details for
         #[arg(long)]
-        project_id: u32,
+        project_id: String,
     },
     /// List programs in a project
     Programs {
         /// Project ID to list programs for
         #[arg(long)]
-        project_id: u32,
+        project_id: String,
         /// Page number (default: 1)
         #[arg(long, default_value = "1")]
         page: u32,
@@ -50,7 +50,7 @@ enum ProjectsSubcommand {
         program_id: String,
         /// Target project ID to move program to
         #[arg(long)]
-        to_project: u32,
+        to_project: String,
     },
 }
 
@@ -81,7 +81,7 @@ impl ProjectsCmd {
                 for project in response.items {
                     let last_active = project.last_active_at.as_deref().unwrap_or("-").to_string();
                     table.add_row([
-                        project.id.to_string(),
+                        project.id,
                         project.name,
                         project.program_count.to_string(),
                         project.total_proofs_run.to_string(),
@@ -103,18 +103,15 @@ impl ProjectsCmd {
             ProjectsSubcommand::Create { name } => {
                 let response = sdk.create_project(&name)?;
 
-                // Parse the ID from the response
-                let project_id: u32 = response.id.parse()?;
-
                 // Save this as the current project
-                axiom_sdk::set_project_id(project_id)?;
+                axiom_sdk::set_project_id(&response.id)?;
 
-                println!("✓ Created project '{}' with ID: {}", name, project_id);
-                println!("✓ Saved project ID {} for future use", project_id);
+                println!("✓ Created project '{}' with ID: {}", name, response.id);
+                println!("✓ Saved project ID {} for future use", response.id);
                 Ok(())
             }
             ProjectsSubcommand::Show { project_id } => {
-                let project = sdk.get_project(project_id)?;
+                let project = sdk.get_project(&project_id)?;
 
                 println!("Project Details:");
                 println!("  ID: {}", project.id);
@@ -138,7 +135,7 @@ impl ProjectsCmd {
                 page_size,
             } => {
                 let response =
-                    sdk.list_project_programs(project_id, Some(page), Some(page_size))?;
+                    sdk.list_project_programs(&project_id, Some(page), Some(page_size))?;
 
                 if response.items.is_empty() {
                     println!("No programs found in project {}", project_id);
@@ -167,7 +164,7 @@ impl ProjectsCmd {
                 program_id,
                 to_project,
             } => {
-                sdk.move_program_to_project(&program_id, to_project)?;
+                sdk.move_program_to_project(&program_id, &to_project)?;
                 println!(
                     "✓ Successfully moved program {} to project {}",
                     program_id, to_project

@@ -13,19 +13,19 @@ pub trait ProjectSdk {
         page_size: Option<u32>,
     ) -> Result<ProjectListResponse>;
     fn create_project(&self, name: &str) -> Result<ProjectCreateResponse>;
-    fn get_project(&self, project_id: u32) -> Result<ProjectResponse>;
+    fn get_project(&self, project_id: &str) -> Result<ProjectResponse>;
     fn list_project_programs(
         &self,
-        project_id: u32,
+        project_id: &str,
         page: Option<u32>,
         page_size: Option<u32>,
     ) -> Result<ProgramListResponse>;
-    fn move_program_to_project(&self, program_id: &str, project_id: u32) -> Result<()>;
+    fn move_program_to_project(&self, program_id: &str, project_id: &str) -> Result<()>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectResponse {
-    pub id: u32,
+    pub id: String,
     pub name: String,
     pub created_at: String,
     pub created_by: String,
@@ -49,7 +49,7 @@ pub struct ProjectCreateResponse {
 pub struct ProgramResponse {
     pub id: String,
     pub name: Option<String>,
-    pub project_id: u32,
+    pub project_id: String,
     pub project_name: String,
     pub created_at: String,
 }
@@ -70,7 +70,7 @@ pub struct PaginationInfo {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct MoveProgramRequest {
-    pub project_id: u32,
+    pub project_id: String,
 }
 
 impl ProjectSdk for AxiomSdk {
@@ -99,7 +99,7 @@ impl ProjectSdk for AxiomSdk {
         send_request_json(request, "Failed to create project")
     }
 
-    fn get_project(&self, project_id: u32) -> Result<ProjectResponse> {
+    fn get_project(&self, project_id: &str) -> Result<ProjectResponse> {
         let url = format!("{}/projects/{}", self.config.api_url, project_id);
 
         let request = authenticated_get(&self.config, &url)?;
@@ -108,7 +108,7 @@ impl ProjectSdk for AxiomSdk {
 
     fn list_project_programs(
         &self,
-        project_id: u32,
+        project_id: &str,
         page: Option<u32>,
         page_size: Option<u32>,
     ) -> Result<ProgramListResponse> {
@@ -123,9 +123,11 @@ impl ProjectSdk for AxiomSdk {
         send_request_json(request, "Failed to list project programs")
     }
 
-    fn move_program_to_project(&self, program_id: &str, project_id: u32) -> Result<()> {
+    fn move_program_to_project(&self, program_id: &str, project_id: &str) -> Result<()> {
         let url = format!("{}/programs/{}", self.config.api_url, program_id);
-        let request_body = MoveProgramRequest { project_id };
+        let request_body = MoveProgramRequest {
+            project_id: project_id.to_string(),
+        };
 
         let request = authenticated_put(&self.config, &url)?
             .header("Content-Type", "application/json")
@@ -142,7 +144,7 @@ mod tests {
     #[test]
     fn test_project_response_serialization() {
         let project = ProjectResponse {
-            id: 123,
+            id: "123e4567-e89b-12d3-a456-426614174000".to_string(),
             name: "Test Project".to_string(),
             created_at: "2025-01-01T00:00:00Z".to_string(),
             created_by: "test@example.com".to_string(),
@@ -161,9 +163,11 @@ mod tests {
 
     #[test]
     fn test_move_program_request_serialization() {
-        let request = MoveProgramRequest { project_id: 456 };
+        let request = MoveProgramRequest {
+            project_id: "456".to_string(),
+        };
         let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("\"project_id\":456"));
+        assert!(json.contains("\"project_id\":\"456\""));
     }
 
     #[test]

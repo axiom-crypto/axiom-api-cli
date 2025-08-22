@@ -73,7 +73,7 @@ pub struct BuildArgs {
 
     /// The project ID to associate with the build
     #[arg(long)]
-    project_id: Option<u32>,
+    project_id: Option<String>,
     /// Wait for the build to complete and download artifacts
     #[clap(long)]
     wait: bool,
@@ -130,8 +130,9 @@ impl BuildCmd {
                     (None, None) => None,
                 };
 
-                let project_id = axiom_sdk::get_project_id(self.build_args.project_id, &config);
-                if let Some(pid) = project_id {
+                let project_id =
+                    axiom_sdk::get_project_id(self.build_args.project_id.as_deref(), &config);
+                if let Some(pid) = &project_id {
                     println!("Using project ID: {pid}");
                 }
 
