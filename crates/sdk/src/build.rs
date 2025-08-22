@@ -234,34 +234,6 @@ impl BuildSdk for AxiomSdk {
             eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
         }
 
-        // Check toolchain version against rust-toolchain.toml
-        let toolchain_file_content = include_str!("../../../rust-toolchain.toml");
-        let doc = toolchain_file_content
-            .parse::<toml_edit::Document<_>>()
-            .context("Failed to parse rust-toolchain.toml")?;
-        let required_version_str = doc["toolchain"]["channel"]
-            .as_str()
-            .ok_or_eyre("Could not find 'toolchain.channel' in rust-toolchain.toml")?;
-
-        let current_version = rustc_version::version_meta()
-            .context("Failed to get toolchain version")?
-            .semver;
-
-        let required_version = rustc_version::Version::parse(required_version_str)
-            .context("Failed to parse toolchain version from rust-toolchain.toml")?;
-
-        if current_version.major != required_version.major
-            || current_version.minor != required_version.minor
-        {
-            eyre::bail!(
-                "Unsupported toolchain version, expected {}.{}, found: {}. Use `rustup default {}` to install as your default.",
-                required_version.major,
-                required_version.minor,
-                current_version,
-                required_version_str
-            );
-        }
-
         // Use config id if it was provided
         let config_id = match &args.config_source {
             // If config id was provided, use it
