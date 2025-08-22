@@ -768,10 +768,20 @@ fn create_tar_archive(
         std::fs::remove_dir_all(&axiom_cargo_home).ok();
     }
 
+    // Get the required rust version from rust-toolchain.toml
+    let toolchain_file_content = include_str!("../../../rust-toolchain.toml");
+    let doc = toolchain_file_content
+        .parse::<toml_edit::Document<_>>()
+        .context("Failed to parse rust-toolchain.toml")?;
+    let required_version_str = doc["toolchain"]["channel"]
+        .as_str()
+        .ok_or_eyre("Could not find 'toolchain.channel' in rust-toolchain.toml")?;
+
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
     // Fetch 1: target = x86 linux which is the cloud machine
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
+        .arg(format!("+{}", required_version_str))
         .arg("fetch")
         .arg("--target")
         .arg("x86_64-unknown-linux-gnu")
@@ -785,6 +795,7 @@ fn create_tar_archive(
     // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
+        .arg(format!("+{}", required_version_str))
         .arg("fetch")
         .status()
         .context("Failed to run 'cargo fetch'")?;
