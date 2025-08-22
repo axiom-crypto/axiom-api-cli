@@ -14,7 +14,6 @@ comfy-table = { workspace = true }
 serde_json = { workspace = true }
 
 clap = { version = "4.4", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
 eyre = "0.6.12"
 dotenvy = "0.15.7"
 toml_edit = { workspace = true }

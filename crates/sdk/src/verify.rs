@@ -10,10 +10,44 @@ use crate::{API_KEY_HEADER, AxiomSdk, get_config_id};
 
 const VERIFICATION_POLLING_INTERVAL_SECS: u64 = 10;
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProofType {
+    Evm,
+    Stark,
+}
+
+impl std::fmt::Display for ProofType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProofType::Evm => write!(f, "evm"),
+            ProofType::Stark => write!(f, "stark"),
+        }
+    }
+}
+
+impl std::str::FromStr for ProofType {
+    type Err = eyre::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "evm" => Ok(ProofType::Evm),
+            "stark" => Ok(ProofType::Stark),
+            _ => Err(eyre::eyre!(
+                "Invalid proof type: {}. Must be 'evm' or 'stark'",
+                s
+            )),
+        }
+    }
+}
+
 pub trait VerifySdk {
-    fn get_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
-    fn verify_proof(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String>;
-    fn wait_for_verify_completion(&self, verify_id: &str) -> Result<()>;
+    fn get_evm_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
+    fn get_stark_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
+    fn verify_evm(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String>;
+    fn verify_stark(&self, program_id: &str, proof_path: PathBuf) -> Result<String>;
+    fn wait_for_evm_verify_completion(&self, verify_id: &str) -> Result<()>;
+    fn wait_for_stark_verify_completion(&self, verify_id: &str) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,10 +58,81 @@ pub struct VerifyStatus {
 }
 
 impl VerifySdk for AxiomSdk {
-    fn get_verification_result(&self, verify_id: &str) -> Result<VerifyStatus> {
-        // Load configuration
+    fn get_evm_verification_result(&self, verify_id: &str) -> Result<VerifyStatus> {
         let url = format!("{}/verify/{}", self.config.api_url, verify_id);
+        self.get_verification_status(&url)
+    }
 
+    fn get_stark_verification_result(&self, verify_id: &str) -> Result<VerifyStatus> {
+        let url = format!("{}/verify/stark/{}", self.config.api_url, verify_id);
+        self.get_verification_status(&url)
+    }
+
+    fn verify_evm(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
+        use crate::config::ConfigSdk;
+        use crate::formatting::Formatter;
+
+        // Check if the proof file exists
+        if !proof_path.exists() {
+            eyre::bail!("Proof file does not exist: {:?}", proof_path);
+        }
+
+        // For EVM proofs, we need a config_id
+        let config_id = get_config_id(config_id, &self.config)?;
+
+        // Parse and validate the EVM proof file
+        let proof_content = std::fs::read_to_string(&proof_path)?;
+        let proof_content = proof_content.replace("0x", "");
+        let _proof: EvmProof = serde_json::from_str(&proof_content)
+            .map_err(|e| eyre::eyre!("Invalid evm proof file: {}", e))?;
+
+        // Get config metadata for additional information
+        let config_metadata = self.get_vm_config_metadata(Some(&config_id))?;
+
+        // Print information about what we're verifying
+        Formatter::print_header("EVM Proof Verification");
+        Formatter::print_field("Proof File", &proof_path.display().to_string());
+        Formatter::print_field("Config ID", &config_id);
+        Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
+
+        let url = format!("{}/verify?config_id={}", self.config.api_url, config_id);
+        self.submit_verification_request(&url, &proof_path)
+    }
+
+    fn verify_stark(&self, program_id: &str, proof_path: PathBuf) -> Result<String> {
+        use crate::formatting::Formatter;
+
+        // Check if the proof file exists
+        if !proof_path.exists() {
+            eyre::bail!("Proof file does not exist: {:?}", proof_path);
+        }
+
+        // Print information about what we're verifying
+        Formatter::print_header("STARK Proof Verification");
+        Formatter::print_field("Proof File", &proof_path.display().to_string());
+        Formatter::print_field("Program ID", program_id);
+
+        let url = format!(
+            "{}/verify/stark?program_id={}",
+            self.config.api_url, program_id
+        );
+        self.submit_verification_request(&url, &proof_path)
+    }
+
+    fn wait_for_evm_verify_completion(&self, verify_id: &str) -> Result<()> {
+        self.wait_for_verification_completion("EVM", || self.get_evm_verification_result(verify_id))
+    }
+
+    fn wait_for_stark_verify_completion(&self, verify_id: &str) -> Result<()> {
+        self.wait_for_verification_completion("STARK", || {
+            self.get_stark_verification_result(verify_id)
+        })
+    }
+}
+
+impl AxiomSdk {
+    /// Common helper function to get verification status from any URL
+    fn get_verification_status(&self, url: &str) -> Result<VerifyStatus> {
         // Make the GET request
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
@@ -55,39 +160,28 @@ impl VerifySdk for AxiomSdk {
         }
     }
 
-    fn verify_proof(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
-        use crate::config::ConfigSdk;
+    /// Common helper function to submit verification requests
+    fn submit_verification_request(
+        &self,
+        url: &str,
+        proof_path: &std::path::Path,
+    ) -> Result<String> {
         use crate::formatting::Formatter;
-
-        // Load configuration
-        let config_id = get_config_id(config_id, &self.config)?;
-        let url = format!("{}/verify?config_id={}", self.config.api_url, config_id);
-
-        // Check if the proof file exists
-        if !proof_path.exists() {
-            eyre::bail!("Proof file does not exist: {:?}", proof_path);
-        }
-
-        // Parse and validate the proof file
-        let proof_content = std::fs::read_to_string(&proof_path)?;
-        let _proof: EvmProof = serde_json::from_str(&proof_content)
-            .map_err(|e| eyre::eyre!("Invalid evm proof file: {}", e))?;
-
-        // Get config metadata for additional information
-        let config_metadata = self.get_vm_config_metadata(Some(&config_id))?;
-
-        // Print information about what we're verifying
-        Formatter::print_header("Proof Verification");
-        Formatter::print_field("Proof File", &proof_path.display().to_string());
-        Formatter::print_field("Config ID", &config_id);
-        Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
 
         println!("\nInitiating verification...");
 
-        // Create a multipart form
-        let form = reqwest::blocking::multipart::Form::new()
-            .file("proof", &proof_path)
+        // Read and process the proof file content to remove 0x prefixes
+        let proof_content = std::fs::read_to_string(proof_path)
             .context(format!("Failed to read proof file: {proof_path:?}"))?;
+        let processed_content = proof_content.replace("0x", "");
+
+        // Create a multipart form with the processed content as a file
+        let form = reqwest::blocking::multipart::Form::new().part(
+            "proof",
+            reqwest::blocking::multipart::Part::text(processed_content)
+                .file_name("proof.json")
+                .mime_str("application/json")?,
+        );
 
         // Make the POST request
         let client = Client::new();
@@ -118,34 +212,16 @@ impl VerifySdk for AxiomSdk {
         }
     }
 
-    fn wait_for_verify_completion(&self, verify_id: &str) -> Result<()> {
+    /// Common helper function for waiting for verification completion
+    fn wait_for_verification_completion<F>(&self, proof_type: &str, get_status: F) -> Result<()>
+    where
+        F: Fn() -> Result<VerifyStatus>,
+    {
         use crate::formatting::Formatter;
         use std::time::Duration;
 
         loop {
-            // Get status without printing repetitive messages
-            let url = format!("{}/verify/{}", self.config.api_url, verify_id);
-            let api_key = self
-                .config
-                .api_key
-                .as_ref()
-                .ok_or(eyre::eyre!("API key not set"))?;
-
-            let response = Client::new()
-                .get(url)
-                .header(API_KEY_HEADER, api_key)
-                .send()
-                .context("Failed to send status request")?;
-
-            let verify_status: VerifyStatus = if response.status().is_success() {
-                let response_json: Value = response.json()?;
-                serde_json::from_value(response_json)?
-            } else {
-                return Err(eyre::eyre!(
-                    "Failed to get verification status: {}",
-                    response.status()
-                ));
-            };
+            let verify_status = get_status()?;
 
             match verify_status.result.as_str() {
                 "verified" => {
@@ -156,6 +232,7 @@ impl VerifySdk for AxiomSdk {
                     Formatter::print_section("Verification Summary");
                     Formatter::print_field("Verification Result", "✓ VERIFIED");
                     Formatter::print_field("Verification ID", &verify_status.id);
+                    Formatter::print_field("Proof Type", proof_type);
                     Formatter::print_field("Completed At", &verify_status.created_at);
 
                     return Ok(());
@@ -168,6 +245,7 @@ impl VerifySdk for AxiomSdk {
                     Formatter::print_section("Verification Summary");
                     Formatter::print_field("Verification Result", "✗ FAILED");
                     Formatter::print_field("Verification ID", &verify_status.id);
+                    Formatter::print_field("Proof Type", proof_type);
                     Formatter::print_field("Completed At", &verify_status.created_at);
 
                     eyre::bail!("Proof verification failed");
