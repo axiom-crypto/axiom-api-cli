@@ -234,34 +234,6 @@ impl BuildSdk for AxiomSdk {
             eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
         }
 
-        // Check toolchain version against rust-toolchain.toml
-        let toolchain_file_content = include_str!("../../../rust-toolchain.toml");
-        let doc = toolchain_file_content
-            .parse::<toml_edit::Document<_>>()
-            .context("Failed to parse rust-toolchain.toml")?;
-        let required_version_str = doc["toolchain"]["channel"]
-            .as_str()
-            .ok_or_eyre("Could not find 'toolchain.channel' in rust-toolchain.toml")?;
-
-        let current_version = rustc_version::version_meta()
-            .context("Failed to get toolchain version")?
-            .semver;
-
-        let required_version = rustc_version::Version::parse(required_version_str)
-            .context("Failed to parse toolchain version from rust-toolchain.toml")?;
-
-        if current_version.major != required_version.major
-            || current_version.minor != required_version.minor
-        {
-            eyre::bail!(
-                "Unsupported toolchain version, expected {}.{}, found: {}. Use `rustup default {}` to install as your default.",
-                required_version.major,
-                required_version.minor,
-                current_version,
-                required_version_str
-            );
-        }
-
         // Use config id if it was provided
         let config_id = match &args.config_source {
             // If config id was provided, use it
@@ -768,10 +740,20 @@ fn create_tar_archive(
         std::fs::remove_dir_all(&axiom_cargo_home).ok();
     }
 
+    // Get the required rust version from rust-toolchain.toml
+    let toolchain_file_content = include_str!("../../../rust-toolchain.toml");
+    let doc = toolchain_file_content
+        .parse::<toml_edit::Document<_>>()
+        .context("Failed to parse rust-toolchain.toml")?;
+    let required_version_str = doc["toolchain"]["channel"]
+        .as_str()
+        .ok_or_eyre("Could not find 'toolchain.channel' in rust-toolchain.toml")?;
+
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
     // Fetch 1: target = x86 linux which is the cloud machine
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
+        .arg(format!("+{}", required_version_str))
         .arg("fetch")
         .arg("--target")
         .arg("x86_64-unknown-linux-gnu")
@@ -785,6 +767,7 @@ fn create_tar_archive(
     // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
     let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
+        .arg(format!("+{}", required_version_str))
         .arg("fetch")
         .status()
         .context("Failed to run 'cargo fetch'")?;
