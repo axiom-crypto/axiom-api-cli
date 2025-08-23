@@ -98,10 +98,20 @@ impl ConfigSdk for AxiomSdk {
     fn get_proving_keys(&self, config_id: Option<&str>, key_type: &str) -> Result<PkDownloader> {
         // Load configuration
         let config_id = get_config_id(config_id, &self.config)?;
-        let url = format!(
-            "{}/configs/{}/pk/{}",
-            self.config.api_url, config_id, key_type
-        );
+        let (key_type, p_or_v) = key_type.split_once('_').unwrap();
+        let url = if p_or_v == "pk" {
+            format!(
+                "{}/configs/{}/pk/{}",
+                self.config.api_url, config_id, key_type
+            )
+        } else if p_or_v == "vk" {
+            format!(
+                "{}/configs/{}/vk/{}",
+                self.config.api_url, config_id, key_type,
+            )
+        } else {
+            return Err(eyre::eyre!("Invalid key type: {}", key_type));
+        };
 
         println!("Getting {key_type} proving key for config ID: {config_id}");
 

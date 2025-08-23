@@ -12,12 +12,12 @@ pub struct DownloadKeysCmd {
 
     /// The type of key to download
     #[clap(long = "type", value_parser = [
-        "app_vm",
-        "leaf_vm",
-        "internal_vm",
-        "root_verifier",
-        "halo2_outer",
-        "halo2_wrapper",
+        "app_pk",
+        "agg_pk",
+        "halo2_pk",
+        "app_vk",
+        "agg_vk",
+        "halo2_vk",
     ])]
     key_type: String,
 
