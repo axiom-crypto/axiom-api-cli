@@ -34,7 +34,7 @@ pub struct AxiomConfig {
     pub api_url: String,
     pub api_key: Option<String>,
     pub config_id: Option<String>,
-    pub last_project_id: Option<u32>,
+    pub last_project_id: Option<String>,
 }
 
 impl AxiomConfig {
@@ -129,21 +129,19 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
     }
 }
 
-pub fn set_project_id(id: u32) -> Result<()> {
+pub fn set_project_id(id: &str) -> Result<()> {
     let mut config = load_config()?;
-    config.last_project_id = Some(id);
+    config.last_project_id = Some(id.to_string());
     save_config(&config)
 }
 
-pub fn get_project_id(args_project_id: Option<u32>, config: &AxiomConfig) -> Option<u32> {
+pub fn get_project_id(args_project_id: Option<&str>, config: &AxiomConfig) -> Option<String> {
     if let Some(id) = args_project_id {
-        if set_project_id(id).is_ok() {
-            Some(id)
-        } else {
-            args_project_id
-        }
+        // Try to save it, but return the ID regardless
+        let _ = set_project_id(id);
+        Some(id.to_string())
     } else {
-        config.last_project_id
+        config.last_project_id.clone()
     }
 }
 
@@ -304,24 +302,27 @@ mod tests {
         let config = AxiomConfig::default();
 
         // Mock save_config to avoid file system operations
-        let project_id = 123;
+        let project_id = "123e4567-e89b-12d3-a456-426614174000";
         let result = get_project_id(Some(project_id), &config);
 
         // Should return the provided project_id
-        assert_eq!(result, Some(project_id));
+        assert_eq!(result, Some(project_id.to_string()));
     }
 
     #[test]
     fn test_get_project_id_from_config() {
         let config = AxiomConfig {
-            last_project_id: Some(456),
+            last_project_id: Some("456e4567-e89b-12d3-a456-426614174001".to_string()),
             ..Default::default()
         };
 
         let result = get_project_id(None, &config);
 
         // Should return the config's project_id
-        assert_eq!(result, Some(456));
+        assert_eq!(
+            result,
+            Some("456e4567-e89b-12d3-a456-426614174001".to_string())
+        );
     }
 
     #[test]
@@ -340,7 +341,7 @@ mod tests {
             api_url: "https://test.api.com/v1".to_string(),
             api_key: Some("test-key".to_string()),
             config_id: Some("test-config-id".to_string()),
-            last_project_id: Some(123),
+            last_project_id: Some("123e4567-e89b-12d3-a456-426614174002".to_string()),
         };
 
         let json = serde_json::to_string(&config).unwrap();

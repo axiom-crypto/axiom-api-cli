@@ -69,8 +69,7 @@ impl VerifySdk for AxiomSdk {
     }
 
     fn verify_evm(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
-        use crate::config::ConfigSdk;
-        use crate::formatting::Formatter;
+        use crate::{config::ConfigSdk, formatting::Formatter};
 
         // Check if the proof file exists
         if !proof_path.exists() {
@@ -217,8 +216,9 @@ impl AxiomSdk {
     where
         F: Fn() -> Result<VerifyStatus>,
     {
-        use crate::formatting::Formatter;
         use std::time::Duration;
+
+        use crate::formatting::Formatter;
 
         loop {
             let verify_status = get_status()?;

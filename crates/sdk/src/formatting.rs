@@ -1,7 +1,7 @@
+use std::{io::Write, time::Duration};
+
 use console::{Term, style};
 use indicatif::{ProgressBar, ProgressStyle};
-use std::io::Write;
-use std::time::Duration;
 
 /// Terminal formatting utilities using the console crate
 pub struct Formatter;

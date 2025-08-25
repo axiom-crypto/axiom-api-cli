@@ -65,7 +65,7 @@ pub struct BuildArgs {
     /// Comma-separated list of directories to include even if not tracked by git
     pub include_dirs: Option<String>,
     /// The project ID to associate with the build
-    pub project_id: Option<u32>,
+    pub project_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -496,9 +496,12 @@ impl BuildSdk for AxiomSdk {
     }
 
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
-        use crate::config::ConfigSdk;
-        use crate::formatting::{Formatter, calculate_duration};
         use std::time::Duration;
+
+        use crate::{
+            config::ConfigSdk,
+            formatting::{Formatter, calculate_duration},
+        };
 
         println!();
         let spinner = Formatter::create_spinner("Checking build status...");
