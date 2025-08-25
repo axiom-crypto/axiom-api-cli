@@ -375,7 +375,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
     let _ = Command::new("cargo")
         .current_dir(&project_dir)
         .arg(format!("+{}", required_version_str))
-        .arg("fetch")
+        .arg("generate-lockfile")
         .status();
 
     // Attempt to stage and commit initialized files. Ignore failures (e.g., not a git repo or nothing to commit).
