@@ -1,7 +1,7 @@
 use std::{fs, path::Path, process::Command};
 
 use clap::Parser;
-use eyre::{Result, bail};
+use eyre::{OptionExt, Result, WrapErr, bail};
 use toml_edit::{DocumentMut, Item, Table, Value};
 
 const MAIN_RS_PREPEND: &str = r#"#[allow(unused_imports)]
@@ -363,6 +363,20 @@ pub fn execute(args: InitArgs) -> Result<()> {
     // Create or replace openvm.toml file
     let openvm_toml_path = project_dir.join("openvm.toml");
     fs::write(&openvm_toml_path, OPENVM_TOML_TEMPLATE)?;
+
+    // Run `cargo fetch` so that `Cargo.lock` will be created
+    let toolchain_file_content = include_str!("../../../../rust-toolchain.toml");
+    let doc = toolchain_file_content
+        .parse::<toml_edit::Document<_>>()
+        .context("Failed to parse rust-toolchain.toml")?;
+    let required_version_str = doc["toolchain"]["channel"]
+        .as_str()
+        .ok_or_eyre("Could not find 'toolchain.channel' in rust-toolchain.toml")?;
+    let _ = Command::new("cargo")
+        .current_dir(&project_dir)
+        .arg(format!("+{}", required_version_str))
+        .arg("generate-lockfile")
+        .status();
 
     // Attempt to stage and commit initialized files. Ignore failures (e.g., not a git repo or nothing to commit).
     let _ = Command::new("git")
