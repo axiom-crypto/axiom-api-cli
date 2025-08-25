@@ -371,7 +371,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
         .status();
     let _ = Command::new("git")
         .current_dir(&project_dir)
-        .args(["commit", "-m", "initial commit"])
+        .args(["commit", "-q", "-m", "initial commit"])
         .status();
 
     Ok(())
