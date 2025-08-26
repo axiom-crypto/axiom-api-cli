@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use dirs::home_dir;
 use eyre::{Context, OptionExt, Result};
@@ -15,6 +16,7 @@ pub mod verify;
 
 pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 pub const CLI_VERSION_HEADER: &str = "Axiom-CLI-Version";
+static CLI_VERSION: OnceLock<String> = OnceLock::new();
 
 pub const DEFAULT_CONFIG_ID: &str = "3c866d43-f693-4eba-9e0f-473f60858b73";
 pub const STAGING_DEFAULT_CONFIG_ID: &str = "0d20f5cc-f3f1-4e20-b90b-2f1c5b5bf75d";
@@ -170,13 +172,14 @@ pub fn validate_api_key(api_url: &str, api_key: &str) -> Result<()> {
 }
 
 pub fn add_cli_version_header(builder: RequestBuilder) -> RequestBuilder {
-    if let Ok(version) = std::env::var("AXIOM_CLI_VERSION") {
-        return builder.header(CLI_VERSION_HEADER, version);
-    }
-    if let Some(version) = option_env!("AXIOM_CLI_VERSION") {
+    if let Some(version) = CLI_VERSION.get() {
         return builder.header(CLI_VERSION_HEADER, version);
     }
     builder
+}
+
+pub fn set_cli_version(version: &str) {
+    let _ = CLI_VERSION.set(version.to_string());
 }
 
 pub fn authenticated_get(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
