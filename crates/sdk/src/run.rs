@@ -4,7 +4,10 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header};
+use crate::{
+    API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header,
+    calculate_duration,
+};
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -154,7 +157,9 @@ impl AxiomSdk {
 
         if response.status().is_success() {
             let response_json: Value = response.json()?;
-            let execution_id = response_json["id"].as_str().unwrap();
+            let execution_id = response_json["id"]
+                .as_str()
+                .ok_or_eyre("Missing 'id' field in execution response")?;
             callback.on_success(&format!("Execution initiated ({})", execution_id));
             Ok(execution_id.to_string())
         } else if response.status().is_client_error() {
@@ -287,28 +292,5 @@ impl AxiomSdk {
         }
 
         None
-    }
-}
-
-fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
-    use chrono::DateTime;
-
-    let start_time = DateTime::parse_from_rfc3339(start).map_err(|_| "Invalid start timestamp")?;
-    let end_time = DateTime::parse_from_rfc3339(end).map_err(|_| "Invalid end timestamp")?;
-
-    let duration = end_time.signed_duration_since(start_time);
-    let total_seconds = duration.num_seconds();
-
-    if total_seconds < 60 {
-        Ok(format!("{}s", total_seconds))
-    } else if total_seconds < 3600 {
-        let minutes = total_seconds / 60;
-        let seconds = total_seconds % 60;
-        Ok(format!("{}m {}s", minutes, seconds))
-    } else {
-        let hours = total_seconds / 3600;
-        let minutes = (total_seconds % 3600) / 60;
-        let seconds = total_seconds % 60;
-        Ok(format!("{}h {}m {}s", hours, minutes, seconds))
     }
 }

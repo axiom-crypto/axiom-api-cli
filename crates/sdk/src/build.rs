@@ -14,9 +14,6 @@ use crate::{
 };
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
-#[allow(dead_code)]
-const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
-
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
 pub trait BuildSdk {
@@ -73,16 +70,6 @@ pub enum ConfigSource {
     /// Path to an OpenVM TOML configuration file
     ConfigPath(String),
 }
-struct ProgressReader<R> {
-    inner: R,
-}
-
-impl<R: Read> Read for ProgressReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.read(buf)
-    }
-}
-
 struct TarFile {
     path: String,
     keep: bool,
@@ -480,12 +467,11 @@ impl AxiomSdk {
         // Start progress tracking for upload
         callback.on_progress_start("Uploading", Some(metadata.len()));
 
-        // Open the file with progress tracking
+        // Open the file
         let file = File::open(tar_path).context("Failed to open tar file")?;
-        let progress_reader = ProgressReader { inner: file };
 
-        // Create the form with the progress-tracking reader
-        let part = reqwest::blocking::multipart::Part::reader(progress_reader)
+        // Create the form with the file reader
+        let part = reqwest::blocking::multipart::Part::reader(file)
             .file_name("program.tar.gz")
             .mime_str("application/gzip")?;
 
@@ -524,8 +510,12 @@ impl AxiomSdk {
 
         // Check if the request was successful
         if response.status().is_success() {
-            let body = response.json::<serde_json::Value>().unwrap();
-            let program_id = body["id"].as_str().unwrap();
+            let body = response
+                .json::<serde_json::Value>()
+                .context("Failed to parse build response as JSON")?;
+            let program_id = body["id"]
+                .as_str()
+                .ok_or_eyre("Missing 'id' field in build response")?;
             callback.on_success(&format!("Build initiated ({})", program_id));
             Ok(program_id.to_string())
         } else if response.status().is_client_error() {
@@ -539,11 +529,6 @@ impl AxiomSdk {
             ))
         }
     }
-}
-
-#[allow(dead_code)]
-fn is_rust_project(program_dir: impl AsRef<Path>) -> bool {
-    program_dir.as_ref().join("Cargo.toml").exists()
 }
 
 fn find_git_root(program_dir: impl AsRef<Path>) -> Result<std::path::PathBuf> {
@@ -646,30 +631,6 @@ fn cargo_command(cmd: &str, args: &[&str]) -> std::process::Command {
         command.arg(arg);
     }
     command
-}
-
-#[allow(dead_code)]
-fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
-    use chrono::DateTime;
-
-    let start_time = DateTime::parse_from_rfc3339(start).map_err(|_| "Invalid start timestamp")?;
-    let end_time = DateTime::parse_from_rfc3339(end).map_err(|_| "Invalid end timestamp")?;
-
-    let duration = end_time.signed_duration_since(start_time);
-    let total_seconds = duration.num_seconds();
-
-    if total_seconds < 60 {
-        Ok(format!("{}s", total_seconds))
-    } else if total_seconds < 3600 {
-        let minutes = total_seconds / 60;
-        let seconds = total_seconds % 60;
-        Ok(format!("{}m {}s", minutes, seconds))
-    } else {
-        let hours = total_seconds / 3600;
-        let minutes = (total_seconds % 3600) / 60;
-        let seconds = total_seconds % 60;
-        Ok(format!("{}h {}m {}s", hours, minutes, seconds))
-    }
 }
 
 fn create_tar_archive(

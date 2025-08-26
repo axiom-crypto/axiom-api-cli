@@ -1,16 +1,16 @@
 use crate::formatting::Formatter;
 use axiom_sdk::ProgressCallback;
 use indicatif::ProgressBar;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 pub struct CliProgressCallback {
-    progress_bar: Arc<Mutex<Option<ProgressBar>>>,
+    progress_bar: Mutex<Option<ProgressBar>>,
 }
 
 impl CliProgressCallback {
     pub fn new() -> Self {
         Self {
-            progress_bar: Arc::new(Mutex::new(None)),
+            progress_bar: Mutex::new(None),
         }
     }
 }

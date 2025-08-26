@@ -234,7 +234,9 @@ impl AxiomSdk {
         // Handle the response
         if response.status().is_success() {
             let response_json: Value = response.json()?;
-            let verify_id = response_json["id"].as_str().unwrap();
+            let verify_id = response_json["id"]
+                .as_str()
+                .ok_or_eyre("Missing 'id' field in verification response")?;
             callback.on_success(&format!("Verification request sent: {verify_id}"));
             Ok(verify_id.to_string())
         } else if response.status().is_client_error() {

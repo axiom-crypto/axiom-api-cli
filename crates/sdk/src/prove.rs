@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::{
     API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header,
-    authenticated_get, download_file, send_request_json,
+    authenticated_get, calculate_duration, download_file, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -299,7 +299,10 @@ impl AxiomSdk {
 
         if response.status().is_success() {
             let response_json: serde_json::Value = response.json()?;
-            let proof_id = response_json["id"].as_str().unwrap().to_string();
+            let proof_id = response_json["id"]
+                .as_str()
+                .ok_or_eyre("Missing 'id' field in proof response")?
+                .to_string();
 
             callback.on_success(&format!("Proof generation initiated ({})", proof_id));
 
@@ -456,26 +459,4 @@ fn validate_input_json(json: &serde_json::Value) -> Result<()> {
                 })
         })?;
     Ok(())
-}
-fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
-    use chrono::DateTime;
-
-    let start_time = DateTime::parse_from_rfc3339(start).map_err(|_| "Invalid start timestamp")?;
-    let end_time = DateTime::parse_from_rfc3339(end).map_err(|_| "Invalid end timestamp")?;
-
-    let duration = end_time.signed_duration_since(start_time);
-    let total_seconds = duration.num_seconds();
-
-    if total_seconds < 60 {
-        Ok(format!("{}s", total_seconds))
-    } else if total_seconds < 3600 {
-        let minutes = total_seconds / 60;
-        let seconds = total_seconds % 60;
-        Ok(format!("{}m {}s", minutes, seconds))
-    } else {
-        let hours = total_seconds / 3600;
-        let minutes = (total_seconds % 3600) / 60;
-        let seconds = total_seconds % 60;
-        Ok(format!("{}h {}m {}s", hours, minutes, seconds))
-    }
 }
