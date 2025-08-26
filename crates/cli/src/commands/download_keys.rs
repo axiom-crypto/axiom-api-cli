@@ -17,7 +17,6 @@ pub struct DownloadKeysCmd {
         "halo2_pk",
         "app_vk",
         "agg_vk",
-        "halo2_vk",
     ])]
     key_type: String,
 
