@@ -52,11 +52,9 @@ impl ConfigCmd {
                 output,
             }) => {
                 if evm_verifier {
-                    let callback = crate::progress::CliProgressCallback::new();
-                    sdk.get_evm_verifier(config_id.as_deref(), output, Some(&callback))
+                    sdk.get_evm_verifier(config_id.as_deref(), output)
                 } else {
-                    let callback = crate::progress::CliProgressCallback::new();
-                    sdk.download_config(config_id.as_deref(), output, Some(&callback))
+                    sdk.download_config(config_id.as_deref(), output)
                 }
             }
             None => Err(eyre::eyre!("A subcommand is required for config")),

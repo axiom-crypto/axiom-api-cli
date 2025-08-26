@@ -10,35 +10,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    API_KEY_HEADER, AxiomConfig, AxiomSdk, ProgressCallback, add_cli_version_header, get_config_id,
+    API_KEY_HEADER, AxiomConfig, AxiomSdk, add_cli_version_header, get_config_id,
 };
 
 pub trait ConfigSdk {
     fn get_vm_config_metadata(&self, config_id: Option<&str>) -> Result<VmConfigMetadata>;
-    fn get_proving_keys(
-        &self,
-        config_id: Option<&str>,
-        key_type: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<PkDownloader>;
-    fn get_evm_verifier(
-        &self,
-        config_id: Option<&str>,
-        output: Option<PathBuf>,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()>;
-    fn get_vm_commitment(
-        &self,
-        config_id: Option<&str>,
-        output: Option<PathBuf>,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()>;
-    fn download_config(
-        &self,
-        config_id: Option<&str>,
-        output: Option<PathBuf>,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()>;
+    fn get_proving_keys(&self, config_id: Option<&str>, key_type: &str) -> Result<PkDownloader>;
+    fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
+    fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
+    fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -58,11 +38,7 @@ pub struct PkDownloader {
 }
 
 impl PkDownloader {
-    pub fn download_pk(
-        &self,
-        output_path: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()> {
+    pub fn download_pk(&self, output_path: &str) -> Result<()> {
         std::fs::create_dir_all(output_path)?;
 
         let client = Client::new();
@@ -73,9 +49,6 @@ impl PkDownloader {
             .context("Failed to download proving keys")?;
 
         if response.status().is_success() {
-            if let Some(cb) = callback {
-                cb.on_success("Proving keys downloaded successfully");
-            }
             let mut file = File::create(output_path)?;
             file.write_all(&response.bytes()?)?;
             Ok(())
@@ -121,12 +94,7 @@ impl ConfigSdk for AxiomSdk {
         }
     }
 
-    fn get_proving_keys(
-        &self,
-        config_id: Option<&str>,
-        key_type: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<PkDownloader> {
+    fn get_proving_keys(&self, config_id: Option<&str>, key_type: &str) -> Result<PkDownloader> {
         // Load configuration
         let config_id = get_config_id(config_id, &self.config)?;
         let (key_type, p_or_v) = key_type.split_once('_').unwrap();
@@ -143,12 +111,6 @@ impl ConfigSdk for AxiomSdk {
         } else {
             return Err(eyre::eyre!("Invalid key type: {}", key_type));
         };
-
-        if let Some(cb) = callback {
-            cb.on_info(&format!(
-                "Getting {key_type} proving key for config ID: {config_id}"
-            ));
-        }
 
         // Make the GET request
         let client = Client::new();
@@ -176,31 +138,16 @@ impl ConfigSdk for AxiomSdk {
         }
     }
 
-    fn get_evm_verifier(
-        &self,
-        config_id: Option<&str>,
-        output: Option<PathBuf>,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()> {
-        download_artifact(&self.config, config_id, "evm_verifier", output, callback)
+    fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+        download_artifact(&self.config, config_id, "evm_verifier", output)
     }
 
-    fn get_vm_commitment(
-        &self,
-        config_id: Option<&str>,
-        output: Option<PathBuf>,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()> {
-        download_artifact(&self.config, config_id, "app_vm_commit", output, callback)
+    fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+        download_artifact(&self.config, config_id, "app_vm_commit", output)
     }
 
-    fn download_config(
-        &self,
-        config_id: Option<&str>,
-        output: Option<PathBuf>,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()> {
-        download_artifact(&self.config, config_id, "config", output, callback)
+    fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+        download_artifact(&self.config, config_id, "config", output)
     }
 }
 
@@ -209,17 +156,10 @@ fn download_artifact(
     config_id: Option<&str>,
     artifact_type: &str,
     output: Option<PathBuf>,
-    callback: Option<&dyn ProgressCallback>,
 ) -> Result<()> {
     // Load configuration
     let config_id = get_config_id(config_id, config)?;
     let url = format!("{}/configs/{}/{}", config.api_url, config_id, artifact_type);
-
-    if let Some(cb) = callback {
-        cb.on_info(&format!(
-            "Downloading {artifact_type} for config ID: {config_id}"
-        ));
-    }
 
     // Determine output path
     let output_path = match output {
@@ -258,9 +198,6 @@ fn download_artifact(
         copy(&mut response.bytes()?.as_ref(), &mut file)
             .context("Failed to write response to file")?;
 
-        if let Some(cb) = callback {
-            cb.on_success(&format!("Successfully downloaded to {output_path:?}"));
-        }
         Ok(())
     } else if response.status().is_client_error() {
         let status = response.status();

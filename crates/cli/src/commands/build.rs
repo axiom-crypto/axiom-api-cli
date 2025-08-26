@@ -1,4 +1,4 @@
-use crate::{formatting::Formatter, progress::CliProgressCallback};
+use crate::formatting::Formatter;
 use axiom_sdk::{
     AxiomSdk,
     build::{BuildSdk, ConfigSource},
@@ -94,8 +94,7 @@ impl BuildCmd {
                 Ok(())
             }
             Some(BuildSubcommand::List) => {
-                let callback = CliProgressCallback::new();
-                let build_status_list = sdk.list_programs(Some(&callback))?;
+                let build_status_list = sdk.list_programs()?;
 
                 // Create a new table
                 let mut table = comfy_table::Table::new();
@@ -124,14 +123,8 @@ impl BuildCmd {
             Some(BuildSubcommand::Download {
                 program_id,
                 program_type,
-            }) => {
-                let callback = CliProgressCallback::new();
-                sdk.download_program(&program_id, &program_type, Some(&callback))
-            }
-            Some(BuildSubcommand::Logs { program_id }) => {
-                let callback = CliProgressCallback::new();
-                sdk.download_build_logs(&program_id, Some(&callback))
-            }
+            }) => sdk.download_program(&program_id, &program_type),
+            Some(BuildSubcommand::Logs { program_id }) => sdk.download_build_logs(&program_id),
             None => {
                 let program_dir = std::env::current_dir()?;
                 let config_source = match (self.build_args.config_id, self.build_args.config) {
@@ -154,11 +147,13 @@ impl BuildCmd {
                     include_dirs: self.build_args.include_dirs,
                     project_id,
                 };
+                use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
-                let program_id = sdk.register_new_program(&program_dir, args, Some(&callback))?;
+                let program_id =
+                    sdk.register_new_program_base(&program_dir, args, Some(&callback))?;
 
                 if self.build_args.wait {
-                    sdk.wait_for_build_completion(&program_id, Some(&callback))
+                    sdk.wait_for_build_completion_base(&program_id, Some(&callback))
                 } else {
                     println!(
                         "To check the build status, run: cargo axiom build status --program-id {program_id}"

@@ -20,7 +20,7 @@ static CLI_VERSION: OnceLock<String> = OnceLock::new();
 pub const DEFAULT_CONFIG_ID: &str = "3c866d43-f693-4eba-9e0f-473f60858b73";
 pub const STAGING_DEFAULT_CONFIG_ID: &str = "0d20f5cc-f3f1-4e20-b90b-2f1c5b5bf75d";
 
-pub trait ProgressCallback: Send + Sync {
+pub trait ProgressCallback {
     fn on_header(&self, text: &str);
     fn on_success(&self, text: &str);
     fn on_info(&self, text: &str);

@@ -2,7 +2,6 @@ use std::{fs::File, io::Read, path::Path};
 
 use eyre::{Context, OptionExt, Result};
 use flate2::{Compression, write::GzEncoder};
-use openvm_build::cargo_command;
 use reqwest::blocking::Client;
 use scopeguard::defer;
 use serde::{Deserialize, Serialize};
@@ -15,35 +14,22 @@ use crate::{
 };
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
+#[allow(dead_code)]
 const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
 
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
 pub trait BuildSdk {
-    fn list_programs(&self, callback: Option<&dyn ProgressCallback>) -> Result<Vec<BuildStatus>>;
+    fn list_programs(&self) -> Result<Vec<BuildStatus>>;
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
-    fn download_program(
-        &self,
-        program_id: &str,
-        program_type: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()>;
-    fn download_build_logs(
-        &self,
-        program_id: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()>;
+    fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
+    fn download_build_logs(&self, program_id: &str) -> Result<()>;
     fn register_new_program(
         &self,
         program_dir: impl AsRef<Path>,
         args: BuildArgs,
-        callback: Option<&dyn ProgressCallback>,
     ) -> Result<String>;
-    fn wait_for_build_completion(
-        &self,
-        program_id: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()>;
+    fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -111,7 +97,7 @@ impl Drop for TarFile {
 }
 
 impl BuildSdk for AxiomSdk {
-    fn list_programs(&self, callback: Option<&dyn ProgressCallback>) -> Result<Vec<BuildStatus>> {
+    fn list_programs(&self) -> Result<Vec<BuildStatus>> {
         let url = format!("{}/programs", self.config.api_url);
 
         let request = authenticated_get(&self.config, &url)?;
@@ -120,9 +106,6 @@ impl BuildSdk for AxiomSdk {
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
             if items.is_empty() {
-                if let Some(cb) = callback {
-                    cb.on_info("No programs found");
-                }
                 return Ok(vec![]);
             }
 
@@ -148,12 +131,7 @@ impl BuildSdk for AxiomSdk {
         Ok(build_status)
     }
 
-    fn download_program(
-        &self,
-        program_id: &str,
-        program_type: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()> {
+    fn download_program(&self, program_id: &str, program_type: &str) -> Result<()> {
         let url = format!(
             "{}/programs/{}/download/{}",
             self.config.api_url, program_id, program_type
@@ -198,25 +176,16 @@ impl BuildSdk for AxiomSdk {
                 )
             })?;
 
-            if let Some(cb) = callback {
-                cb.on_success(&format!("✓ {}", filename));
-            }
             Ok(())
         } else if status.is_client_error() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            if let Some(cb) = callback {
-                cb.on_error(&format!("Client error response: {}", error_text));
-            }
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            if let Some(cb) = callback {
-                cb.on_error(&format!("Server error response: {}", error_text));
-            }
             Err(eyre::eyre!(
                 "Download request failed with status: {} - {}",
                 status,
@@ -225,25 +194,15 @@ impl BuildSdk for AxiomSdk {
         }
     }
 
-    fn download_build_logs(
-        &self,
-        program_id: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()> {
+    fn download_build_logs(&self, program_id: &str) -> Result<()> {
         let url = format!("{}/programs/{}/logs", self.config.api_url, program_id);
-
-        // Create organized directory structure
         let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
         std::fs::create_dir_all(&build_dir)
             .context(format!("Failed to create build directory: {}", build_dir))?;
 
-        // Create output filename in the build directory
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
-        let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &filename, "Failed to download build logs")?;
-        if let Some(cb) = callback {
-            cb.on_success(&format!("✓ {}", filename.display()));
-        }
+        let response = authenticated_get(&self.config, &url)?;
+        download_file(response, &filename, "Failed to download build logs")?;
         Ok(())
     }
 
@@ -251,27 +210,116 @@ impl BuildSdk for AxiomSdk {
         &self,
         program_dir: impl AsRef<Path>,
         args: BuildArgs,
-        callback: Option<&dyn ProgressCallback>,
     ) -> Result<String> {
-        // Check if we're in a Rust project
-        if !is_rust_project(program_dir.as_ref()) {
-            eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
+        self.register_new_program_base(program_dir, args, None)
+    }
+
+    fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
+        self.wait_for_build_completion_base(program_id, None)
+    }
+}
+
+impl AxiomSdk {
+    pub fn wait_for_build_completion_base(
+        &self,
+        program_id: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()> {
+        use std::time::Duration;
+
+        if let Some(cb) = callback {
+            cb.on_progress_start("Checking build status...", None);
         }
 
-        // Use config id if it was provided
+        loop {
+            let response = authenticated_get(
+                &self.config,
+                &format!("{}/programs/{}", self.config.api_url, program_id),
+            )?;
+            let build_status: BuildStatus =
+                send_request_json(response, "Failed to get build status")?;
+
+            match build_status.status.as_str() {
+                "ready" => {
+                    if let Some(cb) = callback {
+                        cb.on_success("Build completed successfully!");
+                        cb.on_section("Downloading Artifacts");
+                    }
+
+                    // Create the program directory
+                    let program_dir = format!("axiom-artifacts/program-{}", program_id);
+                    std::fs::create_dir_all(&program_dir).context(format!(
+                        "Failed to create program directory: {}",
+                        program_dir
+                    ))?;
+
+                    // Download EXE
+
+                    if let Some(cb) = callback {
+                        cb.on_info("Downloading EXE...");
+                    }
+                    if let Err(e) = self.download_program(program_id, "exe") {
+                        if let Some(cb) = callback {
+                            cb.on_error(&format!("Failed to download EXE: {}", e));
+                        }
+                    }
+
+                    if let Some(cb) = callback {
+                        cb.on_info("Downloading logs...");
+                    }
+                    if let Err(e) = self.download_build_logs(program_id) {
+                        if let Some(cb) = callback {
+                            cb.on_error(&format!("Failed to download logs: {}", e));
+                        }
+                    }
+
+                    return Ok(());
+                }
+                "failed" => {
+                    if let Some(cb) = callback {
+                        cb.on_error("Build failed!");
+                    }
+                    let error_msg = build_status
+                        .error_message
+                        .unwrap_or_else(|| "Unknown error".to_string());
+                    eyre::bail!("Build failed: {}", error_msg);
+                }
+                "building" => {
+                    if let Some(cb) = callback {
+                        cb.on_status("Build in progress...");
+                    }
+                }
+                "queued" => {
+                    if let Some(cb) = callback {
+                        cb.on_status("Build queued...");
+                    }
+                }
+                _ => {
+                    if let Some(cb) = callback {
+                        cb.on_status(&format!("Build status: {}...", build_status.status));
+                    }
+                }
+            }
+
+            std::thread::sleep(Duration::from_secs(10));
+        }
+    }
+
+    pub fn register_new_program_base(
+        &self,
+        program_dir: impl AsRef<Path>,
+        args: BuildArgs,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<String> {
+        let git_root = find_git_root(program_dir.as_ref()).context(
+            "Not in a git repository. Please run this command from within a git repository.",
+        )?;
+
         let config_id = match &args.config_source {
-            // If config id was provided, use it
-            Some(ConfigSource::ConfigId(id)) => Some(id.to_string()),
-            // If config path was provided, do nothing (we'll upload the file separately)
-            Some(ConfigSource::ConfigPath(_)) => None,
-            // If no config source was provided, use the config id from the
-            // config file (which could be None)
+            Some(ConfigSource::ConfigId(id)) => Some(id.clone()),
+            Some(ConfigSource::ConfigPath(_)) => None, // Will be handled in form data
             None => self.config.config_id.clone(),
         };
-
-        // Get the git root directory
-        let git_root =
-            find_git_root(program_dir.as_ref()).context("Failed to find git root directory")?;
 
         // Get the current directory, which should be the guest program directory
         let current_dir = program_dir.as_ref().to_path_buf();
@@ -389,7 +437,7 @@ impl BuildSdk for AxiomSdk {
             cb.on_info("Creating project archive...");
         }
         let tar_file = create_tar_archive(
-            program_dir.as_ref(),
+            &git_root,
             args.keep_tarball.unwrap_or(false),
             &exclude_patterns,
             &include_dirs,
@@ -521,142 +569,9 @@ impl BuildSdk for AxiomSdk {
             ))
         }
     }
-
-    fn wait_for_build_completion(
-        &self,
-        program_id: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()> {
-        use std::time::Duration;
-
-        use crate::config::ConfigSdk;
-
-        if let Some(cb) = callback {
-            cb.on_progress_start("Checking build status...", None);
-        }
-
-        loop {
-            // Get status without printing repetitive messages
-            let url = format!("{}/programs/{}", self.config.api_url, program_id);
-            let api_key = self
-                .config
-                .api_key
-                .as_ref()
-                .ok_or(eyre::eyre!("API key not set"))?;
-
-            let response =
-                add_cli_version_header(Client::new().get(url).header(API_KEY_HEADER, api_key))
-                    .send()
-                    .context("Failed to send status request")?;
-
-            let build_status: BuildStatus = if response.status().is_success() {
-                let body: Value = response.json()?;
-                serde_json::from_value(body)?
-            } else {
-                return Err(eyre::eyre!(
-                    "Failed to get build status: {}",
-                    response.status()
-                ));
-            };
-
-            match build_status.status.as_str() {
-                "ready" => {
-                    if let Some(cb) = callback {
-                        cb.on_success("Build completed successfully!");
-                    }
-
-                    // Get OpenVM version from config
-                    let config_metadata =
-                        self.get_vm_config_metadata(Some(&build_status.config_uuid))?;
-
-                    // Print completion information
-                    if let Some(cb) = callback {
-                        cb.on_section("Build Summary");
-                        cb.on_field("Program ID", &build_status.id);
-                        cb.on_field("Program Hash", &build_status.program_hash);
-                        cb.on_field("Config ID", &build_status.config_uuid);
-                        cb.on_field("OpenVM Version", &config_metadata.openvm_version);
-
-                        if let Some(launched_at) = &build_status.launched_at {
-                            if let Some(terminated_at) = &build_status.terminated_at {
-                                cb.on_section("Build Stats");
-                                cb.on_field("Created", &build_status.created_at);
-                                cb.on_field("Initiated", launched_at);
-                                cb.on_field("Finished", terminated_at);
-
-                                if let Ok(duration) = calculate_duration(launched_at, terminated_at)
-                                {
-                                    cb.on_field("Duration", &duration);
-                                }
-                            }
-                        }
-
-                        // Download artifacts automatically
-                        cb.on_section("Downloading Artifacts");
-
-                        // Download ELF
-                        cb.on_info("Downloading ELF...");
-                    }
-                    if let Err(e) = self.download_program(&build_status.id, "elf", callback) {
-                        if let Some(cb) = callback {
-                            cb.on_warning(&format!("Warning: Failed to download ELF: {}", e));
-                        }
-                    }
-
-                    // Download EXE
-                    if let Some(cb) = callback {
-                        cb.on_info("Downloading EXE...");
-                    }
-                    if let Err(e) = self.download_program(&build_status.id, "exe", callback) {
-                        if let Some(cb) = callback {
-                            cb.on_warning(&format!("Warning: Failed to download EXE: {}", e));
-                        }
-                    }
-
-                    // Download logs
-                    if let Some(cb) = callback {
-                        cb.on_info("Downloading logs...");
-                    }
-                    if let Err(e) = self.download_build_logs(&build_status.id, callback) {
-                        if let Some(cb) = callback {
-                            cb.on_warning(&format!("Warning: Failed to download logs: {}", e));
-                        }
-                    }
-
-                    return Ok(());
-                }
-                "error" | "failed" => {
-                    let error_msg = build_status
-                        .error_message
-                        .unwrap_or_else(|| "Unknown error".to_string());
-                    if let Some(cb) = callback {
-                        cb.on_error(&format!("Build failed: {}", error_msg));
-                    }
-                    eyre::bail!("Build failed: {}", error_msg);
-                }
-                "processing" => {
-                    if let Some(cb) = callback {
-                        cb.on_status("Build in progress...");
-                    }
-                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
-                }
-                "not_ready" => {
-                    if let Some(cb) = callback {
-                        cb.on_status("Build queued...");
-                    }
-                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
-                }
-                _ => {
-                    if let Some(cb) = callback {
-                        cb.on_status(&format!("Build status: {}...", build_status.status));
-                    }
-                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
-                }
-            }
-        }
-    }
 }
 
+#[allow(dead_code)]
 fn is_rust_project(program_dir: impl AsRef<Path>) -> bool {
     program_dir.as_ref().join("Cargo.toml").exists()
 }
@@ -754,6 +669,16 @@ fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
 
 // The tarball contains everything in the git root of the guest program that's tracked by git.
 // Additionally, it does `cargo fetch` to pre-fetch dependencies so private dependencies are included.
+fn cargo_command(cmd: &str, args: &[&str]) -> std::process::Command {
+    let mut command = std::process::Command::new("cargo");
+    command.arg(cmd);
+    for arg in args {
+        command.arg(arg);
+    }
+    command
+}
+
+#[allow(dead_code)]
 fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
     use chrono::DateTime;
 
@@ -778,12 +703,12 @@ fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
 }
 
 fn create_tar_archive(
-    program_dir: impl AsRef<Path>,
+    git_root: impl AsRef<Path>,
     keep_tarball: bool,
     exclude_patterns: &[String],
     include_dirs: &[String],
 ) -> Result<TarFile> {
-    let tar_path = program_dir.as_ref().join("program.tar.gz");
+    let tar_path = git_root.as_ref().join("program.tar.gz");
     let tar_file = File::create(&tar_path)?;
     let tar = TarFile {
         path: tar_path.to_string_lossy().to_string(),
@@ -792,11 +717,10 @@ fn create_tar_archive(
     let enc = GzEncoder::new(tar_file, Compression::default());
     let mut builder = Builder::new(enc);
 
-    // Find the git root directory
-    let git_root =
-        find_git_root(program_dir.as_ref()).context("Failed to find git root directory")?;
+    // Use the provided git root directory
     // Get the git root directory name
     let dir_name = git_root
+        .as_ref()
         .file_name()
         .ok_or_eyre("Failed to get git root directory name")?
         .to_string_lossy()
@@ -805,7 +729,7 @@ fn create_tar_archive(
     let original_dir = std::env::current_dir()?;
 
     // Pre-fetch dependencies to pull the private dependencies in the axiom_cargo_home (set it as CARGO_HOME) directory
-    let cargo_workspace_root = find_cargo_workspace_root(program_dir.as_ref())
+    let cargo_workspace_root = find_cargo_workspace_root(git_root.as_ref())
         .context("Failed to find cargo workspace root")?;
 
     std::env::set_current_dir(&cargo_workspace_root)?;
@@ -861,7 +785,7 @@ fn create_tar_archive(
         eyre::bail!("Failed to fetch cargo dependencies");
     }
 
-    std::env::set_current_dir(&git_root)?;
+    std::env::set_current_dir(git_root.as_ref())?;
     // Get list of files tracked by git
     let output = std::process::Command::new("git")
         .args(["ls-files"])

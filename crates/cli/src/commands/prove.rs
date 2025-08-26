@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::{formatting::Formatter, progress::CliProgressCallback};
+use crate::formatting::Formatter;
 use axiom_sdk::{AxiomSdk, prove::ProveSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
@@ -87,17 +87,10 @@ impl ProveCmd {
                 proof_id,
                 proof_type,
                 output,
-            }) => {
-                let callback = CliProgressCallback::new();
-                sdk.get_generated_proof(&proof_id, &proof_type, output, Some(&callback))
-            }
-            Some(ProveSubcommand::Logs { proof_id }) => {
-                let callback = CliProgressCallback::new();
-                sdk.get_proof_logs(&proof_id, Some(&callback))
-            }
+            }) => sdk.get_generated_proof(&proof_id, &proof_type, output),
+            Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
             Some(ProveSubcommand::List { program_id }) => {
-                let callback = CliProgressCallback::new();
-                let proof_status_list = sdk.list_proofs(&program_id, Some(&callback))?;
+                let proof_status_list = sdk.list_proofs(&program_id)?;
 
                 // Create a new table
                 let mut table = comfy_table::Table::new();
@@ -125,16 +118,17 @@ impl ProveCmd {
                 Ok(())
             }
             None => {
+                use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
                 let args = axiom_sdk::prove::ProveArgs {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
                     proof_type: Some(self.prove_args.proof_type),
                 };
-                let proof_id = sdk.generate_new_proof(args, Some(&callback))?;
+                let proof_id = sdk.generate_new_proof_base(args, Some(&callback))?;
 
                 if self.prove_args.wait {
-                    sdk.wait_for_proof_completion(&proof_id, Some(&callback))
+                    sdk.wait_for_proof_completion_base(&proof_id, Some(&callback))
                 } else {
                     println!(
                         "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"

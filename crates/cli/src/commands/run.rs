@@ -1,4 +1,4 @@
-use crate::{formatting::Formatter, progress::CliProgressCallback};
+use crate::formatting::Formatter;
 use axiom_sdk::{AxiomSdk, run::RunSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
@@ -50,15 +50,16 @@ impl RunCmd {
                 Ok(())
             }
             None => {
+                use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
                 let args = axiom_sdk::run::RunArgs {
                     program_id: self.run_args.program_id,
                     input: self.run_args.input,
                 };
-                let execution_id = sdk.execute_program(args, Some(&callback))?;
+                let execution_id = sdk.execute_program_base(args, Some(&callback))?;
 
                 if self.run_args.wait {
-                    sdk.wait_for_execution_completion(&execution_id, Some(&callback))
+                    sdk.wait_for_execution_completion_base(&execution_id, Some(&callback))
                 } else {
                     println!("Execution started successfully! ID: {}", execution_id);
                     println!(

@@ -44,28 +44,10 @@ impl std::str::FromStr for ProofType {
 pub trait VerifySdk {
     fn get_evm_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
     fn get_stark_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
-    fn verify_evm(
-        &self,
-        config_id: Option<&str>,
-        proof_path: PathBuf,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<String>;
-    fn verify_stark(
-        &self,
-        program_id: &str,
-        proof_path: PathBuf,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<String>;
-    fn wait_for_evm_verify_completion(
-        &self,
-        verify_id: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()>;
-    fn wait_for_stark_verify_completion(
-        &self,
-        verify_id: &str,
-        callback: Option<&dyn ProgressCallback>,
-    ) -> Result<()>;
+    fn verify_evm(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String>;
+    fn verify_stark(&self, program_id: &str, proof_path: PathBuf) -> Result<String>;
+    fn wait_for_evm_verify_completion(&self, verify_id: &str) -> Result<()>;
+    fn wait_for_stark_verify_completion(&self, verify_id: &str) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -86,7 +68,25 @@ impl VerifySdk for AxiomSdk {
         self.get_verification_status(&url)
     }
 
-    fn verify_evm(
+    fn verify_evm(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
+        self.verify_evm_base(config_id, proof_path, None)
+    }
+
+    fn verify_stark(&self, program_id: &str, proof_path: PathBuf) -> Result<String> {
+        self.verify_stark_base(program_id, proof_path, None)
+    }
+
+    fn wait_for_evm_verify_completion(&self, verify_id: &str) -> Result<()> {
+        self.wait_for_evm_verify_completion_base(verify_id, None)
+    }
+
+    fn wait_for_stark_verify_completion(&self, verify_id: &str) -> Result<()> {
+        self.wait_for_stark_verify_completion_base(verify_id, None)
+    }
+}
+
+impl AxiomSdk {
+    pub fn verify_evm_base(
         &self,
         config_id: Option<&str>,
         proof_path: PathBuf,
@@ -99,7 +99,7 @@ impl VerifySdk for AxiomSdk {
             eyre::bail!("Proof file does not exist: {:?}", proof_path);
         }
 
-        // For EVM proofs, we need a config_id
+        // Get config_id, using default if not provided
         let config_id = get_config_id(config_id, &self.config)?;
 
         // Parse and validate the EVM proof file
@@ -123,7 +123,7 @@ impl VerifySdk for AxiomSdk {
         self.submit_verification_request(&url, &proof_path, callback)
     }
 
-    fn verify_stark(
+    pub fn verify_stark_base(
         &self,
         program_id: &str,
         proof_path: PathBuf,
@@ -148,7 +148,7 @@ impl VerifySdk for AxiomSdk {
         self.submit_verification_request(&url, &proof_path, callback)
     }
 
-    fn wait_for_evm_verify_completion(
+    pub fn wait_for_evm_verify_completion_base(
         &self,
         verify_id: &str,
         callback: Option<&dyn ProgressCallback>,
@@ -160,7 +160,7 @@ impl VerifySdk for AxiomSdk {
         )
     }
 
-    fn wait_for_stark_verify_completion(
+    pub fn wait_for_stark_verify_completion_base(
         &self,
         verify_id: &str,
         callback: Option<&dyn ProgressCallback>,
@@ -171,9 +171,6 @@ impl VerifySdk for AxiomSdk {
             callback,
         )
     }
-}
-
-impl AxiomSdk {
     /// Common helper function to get verification status from any URL
     fn get_verification_status(&self, url: &str) -> Result<VerifyStatus> {
         // Make the GET request
