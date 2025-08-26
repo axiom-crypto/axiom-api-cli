@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, authenticated_get, authenticated_post, download_file,
-    send_request_json,
+    API_KEY_HEADER, AxiomSdk, add_cli_version_header, authenticated_get, authenticated_post,
+    download_file, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -169,9 +169,7 @@ impl ProveSdk for AxiomSdk {
             .as_ref()
             .ok_or(eyre::eyre!("API key not set"))?;
 
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
+        let response = add_cli_version_header(client.get(url).header(API_KEY_HEADER, api_key))
             .send()
             .context("Failed to send download request")?;
 
@@ -207,9 +205,7 @@ impl ProveSdk for AxiomSdk {
             .as_ref()
             .ok_or(eyre::eyre!("API key not set"))?;
 
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
+        let response = add_cli_version_header(client.get(url).header(API_KEY_HEADER, api_key))
             .send()
             .context("Failed to send logs request")?;
 
@@ -306,11 +302,10 @@ impl ProveSdk for AxiomSdk {
                 .as_ref()
                 .ok_or(eyre::eyre!("API key not set"))?;
 
-            let response = Client::new()
-                .get(url)
-                .header(API_KEY_HEADER, api_key)
-                .send()
-                .context("Failed to send status request")?;
+            let response =
+                add_cli_version_header(Client::new().get(url).header(API_KEY_HEADER, api_key))
+                    .send()
+                    .context("Failed to send status request")?;
 
             let proof_status: ProofStatus = if response.status().is_success() {
                 let body: Value = response.json()?;

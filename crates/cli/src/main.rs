@@ -1,5 +1,6 @@
 use std::process;
 
+use axiom_sdk::set_cli_version;
 use clap::{Args, Parser, Subcommand};
 use dotenvy::dotenv;
 
@@ -55,6 +56,9 @@ enum AxiomCommands {
 
 fn main() {
     dotenv().ok();
+
+    // Make CLI version available to the SDK for request headers
+    set_cli_version(env!("CARGO_PKG_VERSION"));
 
     let Cargo::Axiom(args) = Cargo::parse();
 

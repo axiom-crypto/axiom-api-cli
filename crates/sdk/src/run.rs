@@ -6,7 +6,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{API_KEY_HEADER, AxiomSdk};
+use crate::{API_KEY_HEADER, AxiomSdk, add_cli_version_header};
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -48,9 +48,7 @@ impl RunSdk for AxiomSdk {
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
+        let response = add_cli_version_header(client.get(url).header(API_KEY_HEADER, api_key))
             .send()
             .context("Failed to send status request")?;
 
@@ -123,13 +121,15 @@ impl RunSdk for AxiomSdk {
             .query_pairs_mut()
             .append_pair("program_id", &program_id);
 
-        let response = client
-            .post(url_with_params)
-            .header("Content-Type", "application/json")
-            .header(API_KEY_HEADER, api_key)
-            .body(body.to_string())
-            .send()
-            .context("Failed to send execution request")?;
+        let response = add_cli_version_header(
+            client
+                .post(url_with_params)
+                .header("Content-Type", "application/json")
+                .header(API_KEY_HEADER, api_key)
+                .body(body.to_string()),
+        )
+        .send()
+        .context("Failed to send execution request")?;
 
         // Handle response
         if response.status().is_success() {
