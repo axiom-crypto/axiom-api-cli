@@ -149,11 +149,10 @@ impl BuildCmd {
                 };
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
-                let program_id =
-                    sdk.register_new_program_base(&program_dir, args, Some(&callback))?;
+                let program_id = sdk.register_new_program_base(&program_dir, args, &callback)?;
 
                 if self.build_args.wait {
-                    sdk.wait_for_build_completion_base(&program_id, Some(&callback))
+                    sdk.wait_for_build_completion_base(&program_id, &callback)
                 } else {
                     println!(
                         "To check the build status, run: cargo axiom build status --program-id {program_id}"

@@ -125,10 +125,10 @@ impl ProveCmd {
                     input: self.prove_args.input,
                     proof_type: Some(self.prove_args.proof_type),
                 };
-                let proof_id = sdk.generate_new_proof_base(args, Some(&callback))?;
+                let proof_id = sdk.generate_new_proof_base(args, &callback)?;
 
                 if self.prove_args.wait {
-                    sdk.wait_for_proof_completion_base(&proof_id, Some(&callback))
+                    sdk.wait_for_proof_completion_base(&proof_id, &callback)
                 } else {
                     println!(
                         "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"

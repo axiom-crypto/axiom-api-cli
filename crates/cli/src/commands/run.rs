@@ -56,10 +56,10 @@ impl RunCmd {
                     program_id: self.run_args.program_id,
                     input: self.run_args.input,
                 };
-                let execution_id = sdk.execute_program_base(args, Some(&callback))?;
+                let execution_id = sdk.execute_program_base(args, &callback)?;
 
                 if self.run_args.wait {
-                    sdk.wait_for_execution_completion_base(&execution_id, Some(&callback))
+                    sdk.wait_for_execution_completion_base(&execution_id, &callback)
                 } else {
                     println!("Execution started successfully! ID: {}", execution_id);
                     println!(

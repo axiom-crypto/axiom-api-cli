@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
-    download_file, send_request_json,
+    API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header,
+    authenticated_get, download_file, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -231,11 +231,11 @@ impl ProveSdk for AxiomSdk {
     }
 
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String> {
-        self.generate_new_proof_base(args, None)
+        self.generate_new_proof_base(args, &NoopCallback)
     }
 
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
-        self.wait_for_proof_completion_base(proof_id, None)
+        self.wait_for_proof_completion_base(proof_id, &NoopCallback)
     }
 }
 
@@ -243,16 +243,14 @@ impl AxiomSdk {
     pub fn generate_new_proof_base(
         &self,
         args: ProveArgs,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<String> {
         let program_id = args.program_id;
 
-        if let Some(cb) = callback {
-            cb.on_header("Generating Proof");
-            cb.on_field("Program ID", program_id.as_deref().unwrap_or("N/A"));
-            if let Some(ref proof_type) = args.proof_type {
-                cb.on_field("Proof Type", proof_type);
-            }
+        callback.on_header("Generating Proof");
+        callback.on_field("Program ID", program_id.as_deref().unwrap_or("N/A"));
+        if let Some(ref proof_type) = args.proof_type {
+            callback.on_field("Proof Type", proof_type);
         }
 
         if let Some(Input::FilePath(path)) = &args.input {
@@ -303,9 +301,7 @@ impl AxiomSdk {
             let response_json: serde_json::Value = response.json()?;
             let proof_id = response_json["id"].as_str().unwrap().to_string();
 
-            if let Some(cb) = callback {
-                cb.on_success(&format!("Proof generation initiated ({})", proof_id));
-            }
+            callback.on_success(&format!("Proof generation initiated ({})", proof_id));
 
             Ok(proof_id)
         } else {
@@ -319,7 +315,7 @@ impl AxiomSdk {
     pub fn wait_for_proof_completion_base(
         &self,
         proof_id: &str,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<()> {
         use std::time::Duration;
 
@@ -333,112 +329,102 @@ impl AxiomSdk {
 
             match proof_status.state.as_str() {
                 "Succeeded" => {
-                    if let Some(cb) = callback {
-                        cb.on_clear_line_and_reset();
-                        cb.on_success("Proof generation completed successfully!");
+                    callback.on_clear_line_and_reset();
+                    callback.on_success("Proof generation completed successfully!");
 
-                        cb.on_section("Proof Summary");
-                        cb.on_field("Proof ID", &proof_status.id);
-                        cb.on_field("Program ID", &proof_status.program_uuid);
+                    callback.on_section("Proof Summary");
+                    callback.on_field("Proof ID", &proof_status.id);
+                    callback.on_field("Program ID", &proof_status.program_uuid);
 
-                        let proof_type_name = match proof_status.proof_type.as_str() {
-                            "stark" => "STARK",
-                            "evm" => "EVM",
-                            _ => &proof_status.proof_type,
-                        };
-                        cb.on_field("Proof Type", proof_type_name);
+                    let proof_type_name = match proof_status.proof_type.as_str() {
+                        "stark" => "STARK",
+                        "evm" => "EVM",
+                        _ => &proof_status.proof_type,
+                    };
+                    callback.on_field("Proof Type", proof_type_name);
 
-                        let proof_dir = format!(
-                            "axiom-artifacts/program-{}/proofs",
-                            proof_status.program_uuid
-                        );
-                        std::fs::create_dir_all(&proof_dir).ok();
+                    let proof_dir = format!(
+                        "axiom-artifacts/program-{}/proofs",
+                        proof_status.program_uuid
+                    );
+                    std::fs::create_dir_all(&proof_dir).ok();
 
-                        if proof_status.proof_type == "stark" {
-                            let proof_path = format!("{}/{}.stark", proof_dir, proof_status.id);
-                            if self
-                                .save_proof_to_path(
-                                    &proof_status.id,
-                                    &proof_status.proof_type,
-                                    std::path::PathBuf::from(&proof_path),
-                                )
-                                .is_ok()
-                            {
-                                cb.on_success(&format!("✓ STARK proof saved to {}", proof_path));
-                            }
-                        } else {
-                            let proof_type_name = match proof_status.proof_type.as_str() {
-                                "evm" => "evm",
-                                _ => &proof_status.proof_type,
-                            };
-                            let proof_path =
-                                format!("{}/{}.{}", proof_dir, proof_status.id, proof_type_name);
-                            if self
-                                .save_proof_to_path(
-                                    &proof_status.id,
-                                    &proof_status.proof_type,
-                                    std::path::PathBuf::from(&proof_path),
-                                )
-                                .is_ok()
-                            {
-                                cb.on_success(&format!(
-                                    "✓ {} proof saved to {}",
-                                    proof_type_name.to_uppercase(),
-                                    proof_path
-                                ));
-                            }
-                        }
-
-                        let logs_path = format!("{}/logs.txt", proof_dir);
+                    if proof_status.proof_type == "stark" {
+                        let proof_path = format!("{}/{}.stark", proof_dir, proof_status.id);
                         if self
-                            .save_proof_logs_to_path(
+                            .save_proof_to_path(
                                 &proof_status.id,
-                                std::path::PathBuf::from(&logs_path),
+                                &proof_status.proof_type,
+                                std::path::PathBuf::from(&proof_path),
                             )
                             .is_ok()
                         {
-                            cb.on_success(&format!("✓ Logs saved to {}", logs_path));
+                            callback.on_success(&format!("✓ STARK proof saved to {}", proof_path));
                         }
+                    } else {
+                        let proof_type_name = match proof_status.proof_type.as_str() {
+                            "evm" => "evm",
+                            _ => &proof_status.proof_type,
+                        };
+                        let proof_path =
+                            format!("{}/{}.{}", proof_dir, proof_status.id, proof_type_name);
+                        if self
+                            .save_proof_to_path(
+                                &proof_status.id,
+                                &proof_status.proof_type,
+                                std::path::PathBuf::from(&proof_path),
+                            )
+                            .is_ok()
+                        {
+                            callback.on_success(&format!(
+                                "✓ {} proof saved to {}",
+                                proof_type_name.to_uppercase(),
+                                proof_path
+                            ));
+                        }
+                    }
 
-                        let created_at = &proof_status.created_at;
-                        if let Some(terminated_at) = &proof_status.terminated_at {
-                            cb.on_section("Proof Stats");
-                            cb.on_field("Created", created_at);
-                            cb.on_field("Finished", terminated_at);
+                    let logs_path = format!("{}/logs.txt", proof_dir);
+                    if self
+                        .save_proof_logs_to_path(
+                            &proof_status.id,
+                            std::path::PathBuf::from(&logs_path),
+                        )
+                        .is_ok()
+                    {
+                        callback.on_success(&format!("✓ Logs saved to {}", logs_path));
+                    }
 
-                            if let Ok(duration) = calculate_duration(created_at, terminated_at) {
-                                cb.on_field("Duration", &duration);
-                            }
+                    let created_at = &proof_status.created_at;
+                    if let Some(terminated_at) = &proof_status.terminated_at {
+                        callback.on_section("Proof Stats");
+                        callback.on_field("Created", created_at);
+                        callback.on_field("Finished", terminated_at);
+
+                        if let Ok(duration) = calculate_duration(created_at, terminated_at) {
+                            callback.on_field("Duration", &duration);
                         }
                     }
 
                     return Ok(());
                 }
                 "Failed" => {
-                    if let Some(cb) = callback {
-                        cb.on_clear_line_and_reset();
-                    }
+                    callback.on_clear_line_and_reset();
                     let error_msg = proof_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Proof generation failed: {}", error_msg);
                 }
                 "Queued" => {
-                    if let Some(cb) = callback {
-                        cb.on_status("Proof queued...");
-                    }
+                    callback.on_status("Proof queued...");
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 "InProgress" => {
-                    if let Some(cb) = callback {
-                        cb.on_status("Generating proof...");
-                    }
+                    callback.on_status("Generating proof...");
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    if let Some(cb) = callback {
-                        cb.on_status(&format!("Proof status: {}...", proof_status.state));
-                    }
+                    callback.on_status(&format!("Proof status: {}...", proof_status.state));
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
             }

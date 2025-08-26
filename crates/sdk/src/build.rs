@@ -9,8 +9,8 @@ use serde_json::Value;
 use tar::Builder;
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
-    download_file, send_request_json,
+    API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header,
+    authenticated_get, download_file, send_request_json,
 };
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
@@ -211,11 +211,11 @@ impl BuildSdk for AxiomSdk {
         program_dir: impl AsRef<Path>,
         args: BuildArgs,
     ) -> Result<String> {
-        self.register_new_program_base(program_dir, args, None)
+        self.register_new_program_base(program_dir, args, &NoopCallback)
     }
 
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
-        self.wait_for_build_completion_base(program_id, None)
+        self.wait_for_build_completion_base(program_id, &NoopCallback)
     }
 }
 
@@ -223,13 +223,11 @@ impl AxiomSdk {
     pub fn wait_for_build_completion_base(
         &self,
         program_id: &str,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<()> {
         use std::time::Duration;
 
-        if let Some(cb) = callback {
-            cb.on_progress_start("Checking build status...", None);
-        }
+        callback.on_progress_start("Checking build status...", None);
 
         loop {
             let response = authenticated_get(
@@ -241,10 +239,8 @@ impl AxiomSdk {
 
             match build_status.status.as_str() {
                 "ready" => {
-                    if let Some(cb) = callback {
-                        cb.on_success("Build completed successfully!");
-                        cb.on_section("Downloading Artifacts");
-                    }
+                    callback.on_success("Build completed successfully!");
+                    callback.on_section("Downloading Artifacts");
 
                     // Create the program directory
                     let program_dir = format!("axiom-artifacts/program-{}", program_id);
@@ -255,49 +251,33 @@ impl AxiomSdk {
 
                     // Download EXE
 
-                    if let Some(cb) = callback {
-                        cb.on_info("Downloading EXE...");
-                    }
+                    callback.on_info("Downloading EXE...");
                     if let Err(e) = self.download_program(program_id, "exe") {
-                        if let Some(cb) = callback {
-                            cb.on_error(&format!("Failed to download EXE: {}", e));
-                        }
+                        callback.on_error(&format!("Failed to download EXE: {}", e));
                     }
 
-                    if let Some(cb) = callback {
-                        cb.on_info("Downloading logs...");
-                    }
+                    callback.on_info("Downloading logs...");
                     if let Err(e) = self.download_build_logs(program_id) {
-                        if let Some(cb) = callback {
-                            cb.on_error(&format!("Failed to download logs: {}", e));
-                        }
+                        callback.on_error(&format!("Failed to download logs: {}", e));
                     }
 
                     return Ok(());
                 }
                 "failed" => {
-                    if let Some(cb) = callback {
-                        cb.on_error("Build failed!");
-                    }
+                    callback.on_error("Build failed!");
                     let error_msg = build_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Build failed: {}", error_msg);
                 }
                 "building" => {
-                    if let Some(cb) = callback {
-                        cb.on_status("Build in progress...");
-                    }
+                    callback.on_status("Build in progress...");
                 }
                 "queued" => {
-                    if let Some(cb) = callback {
-                        cb.on_status("Build queued...");
-                    }
+                    callback.on_status("Build queued...");
                 }
                 _ => {
-                    if let Some(cb) = callback {
-                        cb.on_status(&format!("Build status: {}...", build_status.status));
-                    }
+                    callback.on_status(&format!("Build status: {}...", build_status.status));
                 }
             }
 
@@ -309,7 +289,7 @@ impl AxiomSdk {
         &self,
         program_dir: impl AsRef<Path>,
         args: BuildArgs,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<String> {
         let git_root = find_git_root(program_dir.as_ref()).context(
             "Not in a git repository. Please run this command from within a git repository.",
@@ -433,9 +413,7 @@ impl AxiomSdk {
             .unwrap_or_default();
 
         // Create tar archive of the current directory
-        if let Some(cb) = callback {
-            cb.on_info("Creating project archive...");
-        }
+        callback.on_info("Creating project archive...");
         let tar_file = create_tar_archive(
             &git_root,
             args.keep_tarball.unwrap_or(false),
@@ -483,16 +461,14 @@ impl AxiomSdk {
             url.push_str(&format!("&commit_sha={sha}"));
         }
 
-        if let Some(cb) = callback {
-            cb.on_header("Building Program");
+        callback.on_header("Building Program");
 
-            if let Some(id) = &config_id {
-                cb.on_field("Config ID", id);
-            } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
-                cb.on_field("Config File", &path);
-            } else {
-                cb.on_field("Config", "Default");
-            }
+        if let Some(id) = &config_id {
+            callback.on_field("Config ID", id);
+        } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
+            callback.on_field("Config File", &path);
+        } else {
+            callback.on_field("Config", "Default");
         }
 
         // Make the POST request with multipart form data
@@ -502,9 +478,7 @@ impl AxiomSdk {
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
         // Start progress tracking for upload
-        if let Some(cb) = callback {
-            cb.on_progress_start("Uploading", Some(metadata.len()));
-        }
+        callback.on_progress_start("Uploading", Some(metadata.len()));
 
         // Open the file with progress tracking
         let file = File::open(tar_path).context("Failed to open tar file")?;
@@ -546,17 +520,13 @@ impl AxiomSdk {
         .send()?;
 
         // Finish the progress tracking
-        if let Some(cb) = callback {
-            cb.on_progress_finish("✓ Upload complete!");
-        }
+        callback.on_progress_finish("✓ Upload complete!");
 
         // Check if the request was successful
         if response.status().is_success() {
             let body = response.json::<serde_json::Value>().unwrap();
             let program_id = body["id"].as_str().unwrap();
-            if let Some(cb) = callback {
-                cb.on_success(&format!("Build initiated ({})", program_id));
-            }
+            callback.on_success(&format!("Build initiated ({})", program_id));
             Ok(program_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();

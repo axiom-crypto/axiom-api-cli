@@ -6,7 +6,9 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, get_config_id};
+use crate::{
+    API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header, get_config_id,
+};
 
 const VERIFICATION_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -69,19 +71,19 @@ impl VerifySdk for AxiomSdk {
     }
 
     fn verify_evm(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
-        self.verify_evm_base(config_id, proof_path, None)
+        self.verify_evm_base(config_id, proof_path, &NoopCallback)
     }
 
     fn verify_stark(&self, program_id: &str, proof_path: PathBuf) -> Result<String> {
-        self.verify_stark_base(program_id, proof_path, None)
+        self.verify_stark_base(program_id, proof_path, &NoopCallback)
     }
 
     fn wait_for_evm_verify_completion(&self, verify_id: &str) -> Result<()> {
-        self.wait_for_evm_verify_completion_base(verify_id, None)
+        self.wait_for_evm_verify_completion_base(verify_id, &NoopCallback)
     }
 
     fn wait_for_stark_verify_completion(&self, verify_id: &str) -> Result<()> {
-        self.wait_for_stark_verify_completion_base(verify_id, None)
+        self.wait_for_stark_verify_completion_base(verify_id, &NoopCallback)
     }
 }
 
@@ -90,7 +92,7 @@ impl AxiomSdk {
         &self,
         config_id: Option<&str>,
         proof_path: PathBuf,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<String> {
         use crate::config::ConfigSdk;
 
@@ -112,12 +114,10 @@ impl AxiomSdk {
         let config_metadata = self.get_vm_config_metadata(Some(&config_id))?;
 
         // Print information about what we're verifying
-        if let Some(cb) = callback {
-            cb.on_header("EVM Proof Verification");
-            cb.on_field("Proof File", &proof_path.display().to_string());
-            cb.on_field("Config ID", &config_id);
-            cb.on_field("OpenVM Version", &config_metadata.openvm_version);
-        }
+        callback.on_header("EVM Proof Verification");
+        callback.on_field("Proof File", &proof_path.display().to_string());
+        callback.on_field("Config ID", &config_id);
+        callback.on_field("OpenVM Version", &config_metadata.openvm_version);
 
         let url = format!("{}/verify?config_id={}", self.config.api_url, config_id);
         self.submit_verification_request(&url, &proof_path, callback)
@@ -127,7 +127,7 @@ impl AxiomSdk {
         &self,
         program_id: &str,
         proof_path: PathBuf,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<String> {
         // Check if the proof file exists
         if !proof_path.exists() {
@@ -135,11 +135,9 @@ impl AxiomSdk {
         }
 
         // Print information about what we're verifying
-        if let Some(cb) = callback {
-            cb.on_header("STARK Proof Verification");
-            cb.on_field("Proof File", &proof_path.display().to_string());
-            cb.on_field("Program ID", program_id);
-        }
+        callback.on_header("STARK Proof Verification");
+        callback.on_field("Proof File", &proof_path.display().to_string());
+        callback.on_field("Program ID", program_id);
 
         let url = format!(
             "{}/verify/stark?program_id={}",
@@ -151,7 +149,7 @@ impl AxiomSdk {
     pub fn wait_for_evm_verify_completion_base(
         &self,
         verify_id: &str,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<()> {
         self.wait_for_verification_completion(
             "EVM",
@@ -163,7 +161,7 @@ impl AxiomSdk {
     pub fn wait_for_stark_verify_completion_base(
         &self,
         verify_id: &str,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<()> {
         self.wait_for_verification_completion(
             "STARK",
@@ -203,11 +201,9 @@ impl AxiomSdk {
         &self,
         url: &str,
         proof_path: &std::path::Path,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<String> {
-        if let Some(cb) = callback {
-            cb.on_info("Initiating verification...");
-        }
+        callback.on_info("Initiating verification...");
 
         // Read and process the proof file content to remove 0x prefixes
         let proof_content = std::fs::read_to_string(proof_path)
@@ -239,9 +235,7 @@ impl AxiomSdk {
         if response.status().is_success() {
             let response_json: Value = response.json()?;
             let verify_id = response_json["id"].as_str().unwrap();
-            if let Some(cb) = callback {
-                cb.on_success(&format!("Verification request sent: {verify_id}"));
-            }
+            callback.on_success(&format!("Verification request sent: {verify_id}"));
             Ok(verify_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -260,7 +254,7 @@ impl AxiomSdk {
         &self,
         proof_type: &str,
         get_status: F,
-        callback: Option<&dyn ProgressCallback>,
+        callback: &dyn ProgressCallback,
     ) -> Result<()>
     where
         F: Fn() -> Result<VerifyStatus>,
@@ -272,45 +266,38 @@ impl AxiomSdk {
 
             match verify_status.result.as_str() {
                 "verified" => {
-                    if let Some(cb) = callback {
-                        cb.on_clear_line();
-                        cb.on_success("Verification completed successfully!");
+                    callback.on_clear_line();
+                    callback.on_success("Verification completed successfully!");
 
-                        // Print completion information
-                        cb.on_section("Verification Summary");
-                        cb.on_field("Verification Result", "✓ VERIFIED");
-                        cb.on_field("Verification ID", &verify_status.id);
-                        cb.on_field("Proof Type", proof_type);
-                        cb.on_field("Completed At", &verify_status.created_at);
-                    }
+                    // Print completion information
+                    callback.on_section("Verification Summary");
+                    callback.on_field("Verification Result", "✓ VERIFIED");
+                    callback.on_field("Verification ID", &verify_status.id);
+                    callback.on_field("Proof Type", proof_type);
+                    callback.on_field("Completed At", &verify_status.created_at);
 
                     return Ok(());
                 }
                 "failed" => {
-                    if let Some(cb) = callback {
-                        cb.on_clear_line();
-                        cb.on_error("Verification failed!");
+                    callback.on_clear_line();
+                    callback.on_error("Verification failed!");
 
-                        // Print failure information
-                        cb.on_section("Verification Summary");
-                        cb.on_field("Verification Result", "✗ FAILED");
-                        cb.on_field("Verification ID", &verify_status.id);
-                        cb.on_field("Proof Type", proof_type);
-                        cb.on_field("Completed At", &verify_status.created_at);
-                    }
+                    // Print failure information
+                    callback.on_section("Verification Summary");
+                    callback.on_field("Verification Result", "✗ FAILED");
+                    callback.on_field("Verification ID", &verify_status.id);
+                    callback.on_field("Proof Type", proof_type);
+                    callback.on_field("Completed At", &verify_status.created_at);
 
                     eyre::bail!("Proof verification failed");
                 }
                 "processing" => {
-                    if let Some(cb) = callback {
-                        cb.on_status("Verifying proof...");
-                    }
+                    callback.on_status("Verifying proof...");
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    if let Some(cb) = callback {
-                        cb.on_status(&format!("Verification status: {}...", verify_status.result));
-                    }
+                    callback
+                        .on_status(&format!("Verification status: {}...", verify_status.result));
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
             }

@@ -69,11 +69,10 @@ impl VerifyCmd {
             } => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
-                let verify_id =
-                    sdk.verify_evm_base(config_id.as_deref(), proof, Some(&callback))?;
+                let verify_id = sdk.verify_evm_base(config_id.as_deref(), proof, &callback)?;
 
                 if wait {
-                    sdk.wait_for_evm_verify_completion_base(&verify_id, Some(&callback))
+                    sdk.wait_for_evm_verify_completion_base(&verify_id, &callback)
                 } else {
                     println!(
                         "To check the verification status, run: cargo axiom verify status --verify-id {verify_id}"
@@ -88,10 +87,10 @@ impl VerifyCmd {
             } => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
-                let verify_id = sdk.verify_stark_base(&program_id, proof, Some(&callback))?;
+                let verify_id = sdk.verify_stark_base(&program_id, proof, &callback)?;
 
                 if wait {
-                    sdk.wait_for_stark_verify_completion_base(&verify_id, Some(&callback))
+                    sdk.wait_for_stark_verify_completion_base(&verify_id, &callback)
                 } else {
                     println!(
                         "To check the verification status, run: cargo axiom verify status --verify-id {verify_id} --proof-type stark"
