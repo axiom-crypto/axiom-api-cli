@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub mod build;
 pub mod config;
-pub mod formatting;
 pub mod projects;
 pub mod prove;
 pub mod run;
@@ -20,6 +19,22 @@ static CLI_VERSION: OnceLock<String> = OnceLock::new();
 
 pub const DEFAULT_CONFIG_ID: &str = "3c866d43-f693-4eba-9e0f-473f60858b73";
 pub const STAGING_DEFAULT_CONFIG_ID: &str = "0d20f5cc-f3f1-4e20-b90b-2f1c5b5bf75d";
+
+pub trait ProgressCallback: Send + Sync {
+    fn on_header(&self, text: &str);
+    fn on_success(&self, text: &str);
+    fn on_info(&self, text: &str);
+    fn on_warning(&self, text: &str);
+    fn on_error(&self, text: &str);
+    fn on_section(&self, title: &str);
+    fn on_field(&self, key: &str, value: &str);
+    fn on_status(&self, text: &str);
+    fn on_progress_start(&self, message: &str, total: Option<u64>);
+    fn on_progress_update(&self, current: u64);
+    fn on_progress_finish(&self, message: &str);
+    fn on_clear_line(&self);
+    fn on_clear_line_and_reset(&self);
+}
 
 #[derive(Default)]
 pub struct AxiomSdk {
@@ -125,7 +140,6 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
         set_config_id(id)?;
         Ok(id.to_string())
     } else if let Some(id) = &config.config_id {
-        println!("using cached config ID: {id}");
         Ok(id.clone())
     } else {
         Err(eyre::eyre!("No config ID provided"))
@@ -273,7 +287,6 @@ pub fn download_file(
         std::io::copy(&mut content.as_ref(), &mut file)
             .context("Failed to write response to file")?;
 
-        println!("Successfully downloaded to: {}", output_path.display());
         Ok(())
     } else if response.status().is_client_error() {
         let status = response.status();

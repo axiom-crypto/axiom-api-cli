@@ -1,9 +1,4 @@
-use std::{
-    fs::File,
-    io::{self, Read},
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::{fs::File, io::Read, path::Path};
 
 use eyre::{Context, OptionExt, Result};
 use flate2::{Compression, write::GzEncoder};
@@ -15,8 +10,8 @@ use serde_json::Value;
 use tar::Builder;
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, add_cli_version_header, authenticated_get, download_file,
-    send_request_json,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
+    download_file, send_request_json,
 };
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
@@ -25,16 +20,30 @@ const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
 pub trait BuildSdk {
-    fn list_programs(&self) -> Result<Vec<BuildStatus>>;
+    fn list_programs(&self, callback: Option<&dyn ProgressCallback>) -> Result<Vec<BuildStatus>>;
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
-    fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
-    fn download_build_logs(&self, program_id: &str) -> Result<()>;
+    fn download_program(
+        &self,
+        program_id: &str,
+        program_type: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()>;
+    fn download_build_logs(
+        &self,
+        program_id: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()>;
     fn register_new_program(
         &self,
         program_dir: impl AsRef<Path>,
         args: BuildArgs,
+        callback: Option<&dyn ProgressCallback>,
     ) -> Result<String>;
-    fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
+    fn wait_for_build_completion(
+        &self,
+        program_id: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -80,17 +89,11 @@ pub enum ConfigSource {
 }
 struct ProgressReader<R> {
     inner: R,
-    progress: Arc<Mutex<indicatif::ProgressBar>>,
 }
 
 impl<R: Read> Read for ProgressReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let n = self.inner.read(buf)?;
-        if n > 0 {
-            let pb = self.progress.lock().unwrap();
-            pb.inc(n as u64);
-        }
-        Ok(n)
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.inner.read(buf)
     }
 }
 
@@ -108,7 +111,7 @@ impl Drop for TarFile {
 }
 
 impl BuildSdk for AxiomSdk {
-    fn list_programs(&self) -> Result<Vec<BuildStatus>> {
+    fn list_programs(&self, callback: Option<&dyn ProgressCallback>) -> Result<Vec<BuildStatus>> {
         let url = format!("{}/programs", self.config.api_url);
 
         let request = authenticated_get(&self.config, &url)?;
@@ -117,7 +120,9 @@ impl BuildSdk for AxiomSdk {
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
             if items.is_empty() {
-                println!("No programs found");
+                if let Some(cb) = callback {
+                    cb.on_info("No programs found");
+                }
                 return Ok(vec![]);
             }
 
@@ -143,7 +148,12 @@ impl BuildSdk for AxiomSdk {
         Ok(build_status)
     }
 
-    fn download_program(&self, program_id: &str, program_type: &str) -> Result<()> {
+    fn download_program(
+        &self,
+        program_id: &str,
+        program_type: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()> {
         let url = format!(
             "{}/programs/{}/download/{}",
             self.config.api_url, program_id, program_type
@@ -188,19 +198,25 @@ impl BuildSdk for AxiomSdk {
                 )
             })?;
 
-            println!("  ✓ {}", filename);
+            if let Some(cb) = callback {
+                cb.on_success(&format!("✓ {}", filename));
+            }
             Ok(())
         } else if status.is_client_error() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            println!("Client error response: {}", error_text);
+            if let Some(cb) = callback {
+                cb.on_error(&format!("Client error response: {}", error_text));
+            }
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
-            println!("Server error response: {}", error_text);
+            if let Some(cb) = callback {
+                cb.on_error(&format!("Server error response: {}", error_text));
+            }
             Err(eyre::eyre!(
                 "Download request failed with status: {} - {}",
                 status,
@@ -209,7 +225,11 @@ impl BuildSdk for AxiomSdk {
         }
     }
 
-    fn download_build_logs(&self, program_id: &str) -> Result<()> {
+    fn download_build_logs(
+        &self,
+        program_id: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()> {
         let url = format!("{}/programs/{}/logs", self.config.api_url, program_id);
 
         // Create organized directory structure
@@ -221,7 +241,9 @@ impl BuildSdk for AxiomSdk {
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &filename, "Failed to download build logs")?;
-        println!("  ✓ {}", filename.display());
+        if let Some(cb) = callback {
+            cb.on_success(&format!("✓ {}", filename.display()));
+        }
         Ok(())
     }
 
@@ -229,6 +251,7 @@ impl BuildSdk for AxiomSdk {
         &self,
         program_dir: impl AsRef<Path>,
         args: BuildArgs,
+        callback: Option<&dyn ProgressCallback>,
     ) -> Result<String> {
         // Check if we're in a Rust project
         if !is_rust_project(program_dir.as_ref()) {
@@ -362,8 +385,9 @@ impl BuildSdk for AxiomSdk {
             .unwrap_or_default();
 
         // Create tar archive of the current directory
-        println!();
-        Formatter::print_info("Creating project archive...");
+        if let Some(cb) = callback {
+            cb.on_info("Creating project archive...");
+        }
         let tar_file = create_tar_archive(
             program_dir.as_ref(),
             args.keep_tarball.unwrap_or(false),
@@ -411,15 +435,16 @@ impl BuildSdk for AxiomSdk {
             url.push_str(&format!("&commit_sha={sha}"));
         }
 
-        use crate::formatting::Formatter;
-        Formatter::print_header("Building Program");
+        if let Some(cb) = callback {
+            cb.on_header("Building Program");
 
-        if let Some(id) = &config_id {
-            Formatter::print_field("Config ID", id);
-        } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
-            Formatter::print_field("Config File", &path);
-        } else {
-            Formatter::print_field("Config", "Default");
+            if let Some(id) = &config_id {
+                cb.on_field("Config ID", id);
+            } else if let Some(ConfigSource::ConfigPath(path)) = args.config_source.clone() {
+                cb.on_field("Config File", &path);
+            } else {
+                cb.on_field("Config", "Default");
+            }
         }
 
         // Make the POST request with multipart form data
@@ -428,16 +453,14 @@ impl BuildSdk for AxiomSdk {
             .build()?;
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        // Create progress bar for upload
-        let pb = Formatter::create_upload_progress(metadata.len());
-        let progress = Arc::new(Mutex::new(pb));
+        // Start progress tracking for upload
+        if let Some(cb) = callback {
+            cb.on_progress_start("Uploading", Some(metadata.len()));
+        }
 
         // Open the file with progress tracking
         let file = File::open(tar_path).context("Failed to open tar file")?;
-        let progress_reader = ProgressReader {
-            inner: file,
-            progress: Arc::clone(&progress),
-        };
+        let progress_reader = ProgressReader { inner: file };
 
         // Create the form with the progress-tracking reader
         let part = reqwest::blocking::multipart::Part::reader(progress_reader)
@@ -474,17 +497,18 @@ impl BuildSdk for AxiomSdk {
         )
         .send()?;
 
-        // Finish the progress bar
-        progress
-            .lock()
-            .unwrap()
-            .finish_with_message("✓ Upload complete!");
+        // Finish the progress tracking
+        if let Some(cb) = callback {
+            cb.on_progress_finish("✓ Upload complete!");
+        }
 
         // Check if the request was successful
         if response.status().is_success() {
             let body = response.json::<serde_json::Value>().unwrap();
             let program_id = body["id"].as_str().unwrap();
-            Formatter::print_success(&format!("Build initiated ({})", program_id));
+            if let Some(cb) = callback {
+                cb.on_success(&format!("Build initiated ({})", program_id));
+            }
             Ok(program_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -498,16 +522,18 @@ impl BuildSdk for AxiomSdk {
         }
     }
 
-    fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
+    fn wait_for_build_completion(
+        &self,
+        program_id: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()> {
         use std::time::Duration;
 
-        use crate::{
-            config::ConfigSdk,
-            formatting::{Formatter, calculate_duration},
-        };
+        use crate::config::ConfigSdk;
 
-        println!();
-        let spinner = Formatter::create_spinner("Checking build status...");
+        if let Some(cb) = callback {
+            cb.on_progress_start("Checking build status...", None);
+        }
 
         loop {
             // Get status without printing repetitive messages
@@ -535,51 +561,66 @@ impl BuildSdk for AxiomSdk {
 
             match build_status.status.as_str() {
                 "ready" => {
-                    spinner.finish_with_message("✓ Build completed successfully!");
+                    if let Some(cb) = callback {
+                        cb.on_success("Build completed successfully!");
+                    }
 
                     // Get OpenVM version from config
                     let config_metadata =
                         self.get_vm_config_metadata(Some(&build_status.config_uuid))?;
 
                     // Print completion information
-                    Formatter::print_section("Build Summary");
-                    Formatter::print_field("Program ID", &build_status.id);
-                    Formatter::print_field("Program Hash", &build_status.program_hash);
-                    Formatter::print_field("Config ID", &build_status.config_uuid);
-                    Formatter::print_field("OpenVM Version", &config_metadata.openvm_version);
+                    if let Some(cb) = callback {
+                        cb.on_section("Build Summary");
+                        cb.on_field("Program ID", &build_status.id);
+                        cb.on_field("Program Hash", &build_status.program_hash);
+                        cb.on_field("Config ID", &build_status.config_uuid);
+                        cb.on_field("OpenVM Version", &config_metadata.openvm_version);
 
-                    if let Some(launched_at) = &build_status.launched_at {
-                        if let Some(terminated_at) = &build_status.terminated_at {
-                            Formatter::print_section("Build Stats");
-                            Formatter::print_field("Created", &build_status.created_at);
-                            Formatter::print_field("Initiated", launched_at);
-                            Formatter::print_field("Finished", terminated_at);
+                        if let Some(launched_at) = &build_status.launched_at {
+                            if let Some(terminated_at) = &build_status.terminated_at {
+                                cb.on_section("Build Stats");
+                                cb.on_field("Created", &build_status.created_at);
+                                cb.on_field("Initiated", launched_at);
+                                cb.on_field("Finished", terminated_at);
 
-                            if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
-                                Formatter::print_field("Duration", &duration);
+                                if let Ok(duration) = calculate_duration(launched_at, terminated_at)
+                                {
+                                    cb.on_field("Duration", &duration);
+                                }
                             }
+                        }
+
+                        // Download artifacts automatically
+                        cb.on_section("Downloading Artifacts");
+
+                        // Download ELF
+                        cb.on_info("Downloading ELF...");
+                    }
+                    if let Err(e) = self.download_program(&build_status.id, "elf", callback) {
+                        if let Some(cb) = callback {
+                            cb.on_warning(&format!("Warning: Failed to download ELF: {}", e));
                         }
                     }
 
-                    // Download artifacts automatically
-                    Formatter::print_section("Downloading Artifacts");
-
-                    // Download ELF
-                    Formatter::print_info("Downloading ELF...");
-                    if let Err(e) = self.download_program(&build_status.id, "elf") {
-                        println!("Warning: Failed to download ELF: {}", e);
-                    }
-
                     // Download EXE
-                    Formatter::print_info("Downloading EXE...");
-                    if let Err(e) = self.download_program(&build_status.id, "exe") {
-                        println!("Warning: Failed to download EXE: {}", e);
+                    if let Some(cb) = callback {
+                        cb.on_info("Downloading EXE...");
+                    }
+                    if let Err(e) = self.download_program(&build_status.id, "exe", callback) {
+                        if let Some(cb) = callback {
+                            cb.on_warning(&format!("Warning: Failed to download EXE: {}", e));
+                        }
                     }
 
                     // Download logs
-                    Formatter::print_info("Downloading logs...");
-                    if let Err(e) = self.download_build_logs(&build_status.id) {
-                        println!("Warning: Failed to download logs: {}", e);
+                    if let Some(cb) = callback {
+                        cb.on_info("Downloading logs...");
+                    }
+                    if let Err(e) = self.download_build_logs(&build_status.id, callback) {
+                        if let Some(cb) = callback {
+                            cb.on_warning(&format!("Warning: Failed to download logs: {}", e));
+                        }
                     }
 
                     return Ok(());
@@ -588,19 +629,27 @@ impl BuildSdk for AxiomSdk {
                     let error_msg = build_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
-                    spinner.finish_with_message(format!("✗ Build failed: {}", error_msg));
+                    if let Some(cb) = callback {
+                        cb.on_error(&format!("Build failed: {}", error_msg));
+                    }
                     eyre::bail!("Build failed: {}", error_msg);
                 }
                 "processing" => {
-                    spinner.set_message("Build in progress...");
+                    if let Some(cb) = callback {
+                        cb.on_status("Build in progress...");
+                    }
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 "not_ready" => {
-                    spinner.set_message("Build queued...");
+                    if let Some(cb) = callback {
+                        cb.on_status("Build queued...");
+                    }
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    spinner.set_message(format!("Build status: {}...", build_status.status));
+                    if let Some(cb) = callback {
+                        cb.on_status(&format!("Build status: {}...", build_status.status));
+                    }
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
             }
@@ -705,6 +754,29 @@ fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
 
 // The tarball contains everything in the git root of the guest program that's tracked by git.
 // Additionally, it does `cargo fetch` to pre-fetch dependencies so private dependencies are included.
+fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
+    use chrono::DateTime;
+
+    let start_time = DateTime::parse_from_rfc3339(start).map_err(|_| "Invalid start timestamp")?;
+    let end_time = DateTime::parse_from_rfc3339(end).map_err(|_| "Invalid end timestamp")?;
+
+    let duration = end_time.signed_duration_since(start_time);
+    let total_seconds = duration.num_seconds();
+
+    if total_seconds < 60 {
+        Ok(format!("{}s", total_seconds))
+    } else if total_seconds < 3600 {
+        let minutes = total_seconds / 60;
+        let seconds = total_seconds % 60;
+        Ok(format!("{}m {}s", minutes, seconds))
+    } else {
+        let hours = total_seconds / 3600;
+        let minutes = (total_seconds % 3600) / 60;
+        let seconds = total_seconds % 60;
+        Ok(format!("{}h {}m {}s", hours, minutes, seconds))
+    }
+}
+
 fn create_tar_archive(
     program_dir: impl AsRef<Path>,
     keep_tarball: bool,
@@ -848,7 +920,6 @@ fn create_tar_archive(
     for entry in walker.filter_map(Result::ok) {
         let path = entry.path();
         // TODO: print if verbose
-        // println!("adding to tarball: {}", path.display());
         if path.is_file() {
             // Create path with the parent directory name
             let relative_path = path.strip_prefix(".").unwrap();

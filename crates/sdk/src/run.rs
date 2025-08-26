@@ -6,15 +6,27 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{API_KEY_HEADER, AxiomSdk, add_cli_version_header};
+use crate::{API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header};
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
 
 pub trait RunSdk {
     fn get_execution_status(&self, execution_id: &str) -> Result<ExecutionStatus>;
-    fn execute_program(&self, args: RunArgs) -> Result<String>;
-    fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()>;
-    fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String>;
+    fn execute_program(
+        &self,
+        args: RunArgs,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<String>;
+    fn wait_for_execution_completion(
+        &self,
+        execution_id: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()>;
+    fn save_execution_results(
+        &self,
+        execution_status: &ExecutionStatus,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Option<String>;
 }
 
 #[derive(Debug, Default)]
@@ -73,15 +85,20 @@ impl RunSdk for AxiomSdk {
         }
     }
 
-    fn execute_program(&self, args: RunArgs) -> Result<String> {
+    fn execute_program(
+        &self,
+        args: RunArgs,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<String> {
         // Get the program_id from args, return error if not provided
         let program_id = args
             .program_id
             .ok_or_eyre("Program ID is required. Use --program-id to specify.")?;
 
-        use crate::formatting::Formatter;
-        Formatter::print_header("Executing Program");
-        Formatter::print_field("Program ID", &program_id);
+        if let Some(cb) = callback {
+            cb.on_header("Executing Program");
+            cb.on_field("Program ID", &program_id);
+        }
 
         let url = format!("{}/executions", self.config.api_url);
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
@@ -105,7 +122,9 @@ impl RunSdk for AxiomSdk {
                         if !s.trim_start_matches("0x").starts_with("01")
                             && !s.trim_start_matches("0x").starts_with("02")
                         {
-                            eyre::bail!("Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs");
+                            eyre::bail!(
+                                "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
+                            );
                         }
                         json!({ "input": [s] })
                     }
@@ -135,7 +154,9 @@ impl RunSdk for AxiomSdk {
         if response.status().is_success() {
             let response_json: Value = response.json()?;
             let execution_id = response_json["id"].as_str().unwrap();
-            Formatter::print_success(&format!("Execution initiated ({})", execution_id));
+            if let Some(cb) = callback {
+                cb.on_success(&format!("Execution initiated ({})", execution_id));
+            }
             Ok(execution_id.to_string())
         } else if response.status().is_client_error() {
             let status = response.status();
@@ -154,91 +175,105 @@ impl RunSdk for AxiomSdk {
         }
     }
 
-    fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()> {
+    fn wait_for_execution_completion(
+        &self,
+        execution_id: &str,
+        callback: Option<&dyn ProgressCallback>,
+    ) -> Result<()> {
         use std::time::Duration;
-
-        use crate::formatting::{Formatter, calculate_duration};
-
-        println!();
 
         loop {
             let execution_status = self.get_execution_status(execution_id)?;
 
             match execution_status.status.as_str() {
                 "Succeeded" => {
-                    Formatter::clear_line_and_reset();
-                    Formatter::print_success("Execution completed successfully!");
+                    if let Some(cb) = callback {
+                        cb.on_clear_line_and_reset();
+                        cb.on_success("Execution completed successfully!");
 
-                    // Print completion information
-                    Formatter::print_section("Execution Summary");
-                    Formatter::print_field("Execution ID", &execution_status.id);
-                    if let Some(total_cycle) = execution_status.total_cycle {
-                        Formatter::print_field("Total Cycles", &total_cycle.to_string());
-                    }
-                    if let Some(total_tick) = execution_status.total_tick {
-                        Formatter::print_field("Total Ticks", &total_tick.to_string());
-                    }
+                        // Print completion information
+                        cb.on_section("Execution Summary");
+                        cb.on_field("Execution ID", &execution_status.id);
+                        if let Some(total_cycle) = execution_status.total_cycle {
+                            cb.on_field("Total Cycles", &total_cycle.to_string());
+                        }
+                        if let Some(total_tick) = execution_status.total_tick {
+                            cb.on_field("Total Ticks", &total_tick.to_string());
+                        }
 
-                    // Format public values more nicely
-                    if let Some(public_values) = &execution_status.public_values {
-                        if !public_values.is_null() {
-                            Formatter::print_section("Public Values");
-                            if let Ok(formatted) = serde_json::to_string_pretty(public_values) {
-                                for line in formatted.lines() {
-                                    println!("  {}", line);
+                        // Format public values more nicely
+                        if let Some(public_values) = &execution_status.public_values {
+                            if !public_values.is_null() {
+                                cb.on_section("Public Values");
+                                if let Ok(formatted) = serde_json::to_string_pretty(public_values) {
+                                    for line in formatted.lines() {
+                                        cb.on_info(&format!("  {}", line));
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if let Some(launched_at) = &execution_status.launched_at {
-                        if let Some(terminated_at) = &execution_status.terminated_at {
-                            Formatter::print_section("Execution Stats");
-                            Formatter::print_field("Created", &execution_status.created_at);
-                            Formatter::print_field("Initiated", launched_at);
-                            Formatter::print_field("Finished", terminated_at);
+                        if let Some(launched_at) = &execution_status.launched_at {
+                            if let Some(terminated_at) = &execution_status.terminated_at {
+                                cb.on_section("Execution Stats");
+                                cb.on_field("Created", &execution_status.created_at);
+                                cb.on_field("Initiated", launched_at);
+                                cb.on_field("Finished", terminated_at);
 
-                            if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
-                                Formatter::print_field("Duration", &duration);
+                                if let Ok(duration) = calculate_duration(launched_at, terminated_at)
+                                {
+                                    cb.on_field("Duration", &duration);
+                                }
                             }
                         }
-                    }
 
-                    // Save execution results to file
-                    if let Some(results_path) = self.save_execution_results(&execution_status) {
-                        Formatter::print_section("Saving Results");
-                        println!("  ✓ {}", results_path);
+                        // Save execution results to file
+                        if let Some(results_path) =
+                            self.save_execution_results(&execution_status, callback)
+                        {
+                            cb.on_section("Saving Results");
+                            cb.on_success(&format!("✓ {}", results_path));
+                        }
                     }
 
                     return Ok(());
                 }
                 "Failed" => {
-                    Formatter::clear_line_and_reset();
+                    if let Some(cb) = callback {
+                        cb.on_clear_line_and_reset();
+                    }
                     let error_msg = execution_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Execution failed: {}", error_msg);
                 }
                 "Queued" => {
-                    Formatter::print_status("Execution queued...");
+                    if let Some(cb) = callback {
+                        cb.on_status("Execution queued...");
+                    }
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
                 "InProgress" => {
-                    Formatter::print_status("Execution in progress...");
+                    if let Some(cb) = callback {
+                        cb.on_status("Execution in progress...");
+                    }
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    Formatter::print_status(&format!(
-                        "Execution status: {}...",
-                        execution_status.status
-                    ));
+                    if let Some(cb) = callback {
+                        cb.on_status(&format!("Execution status: {}...", execution_status.status));
+                    }
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
             }
         }
     }
 
-    fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String> {
+    fn save_execution_results(
+        &self,
+        execution_status: &ExecutionStatus,
+        _callback: Option<&dyn ProgressCallback>,
+    ) -> Option<String> {
         // Save execution results under the program folder using program_uuid
         let run_dir = format!(
             "axiom-artifacts/program-{}/runs/{}",
@@ -296,4 +331,27 @@ fn validate_input_json(json: &serde_json::Value) -> Result<()> {
                 })
         })?;
     Ok(())
+}
+
+fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
+    use chrono::DateTime;
+
+    let start_time = DateTime::parse_from_rfc3339(start).map_err(|_| "Invalid start timestamp")?;
+    let end_time = DateTime::parse_from_rfc3339(end).map_err(|_| "Invalid end timestamp")?;
+
+    let duration = end_time.signed_duration_since(start_time);
+    let total_seconds = duration.num_seconds();
+
+    if total_seconds < 60 {
+        Ok(format!("{}s", total_seconds))
+    } else if total_seconds < 3600 {
+        let minutes = total_seconds / 60;
+        let seconds = total_seconds % 60;
+        Ok(format!("{}m {}s", minutes, seconds))
+    } else {
+        let hours = total_seconds / 3600;
+        let minutes = (total_seconds % 3600) / 60;
+        let seconds = total_seconds % 60;
+        Ok(format!("{}h {}m {}s", hours, minutes, seconds))
+    }
 }

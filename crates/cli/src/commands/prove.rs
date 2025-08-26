@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{AxiomSdk, prove::ProveSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
@@ -86,10 +87,17 @@ impl ProveCmd {
                 proof_id,
                 proof_type,
                 output,
-            }) => sdk.get_generated_proof(&proof_id, &proof_type, output),
-            Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
+            }) => {
+                let callback = CliProgressCallback::new();
+                sdk.get_generated_proof(&proof_id, &proof_type, output, Some(&callback))
+            }
+            Some(ProveSubcommand::Logs { proof_id }) => {
+                let callback = CliProgressCallback::new();
+                sdk.get_proof_logs(&proof_id, Some(&callback))
+            }
             Some(ProveSubcommand::List { program_id }) => {
-                let proof_status_list = sdk.list_proofs(&program_id)?;
+                let callback = CliProgressCallback::new();
+                let proof_status_list = sdk.list_proofs(&program_id, Some(&callback))?;
 
                 // Create a new table
                 let mut table = comfy_table::Table::new();
@@ -117,15 +125,16 @@ impl ProveCmd {
                 Ok(())
             }
             None => {
+                let callback = CliProgressCallback::new();
                 let args = axiom_sdk::prove::ProveArgs {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
                     proof_type: Some(self.prove_args.proof_type),
                 };
-                let proof_id = sdk.generate_new_proof(args)?;
+                let proof_id = sdk.generate_new_proof(args, Some(&callback))?;
 
                 if self.prove_args.wait {
-                    sdk.wait_for_proof_completion(&proof_id)
+                    sdk.wait_for_proof_completion(&proof_id, Some(&callback))
                 } else {
                     println!(
                         "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
@@ -137,8 +146,6 @@ impl ProveCmd {
     }
 
     fn print_proof_status(status: &axiom_sdk::prove::ProofStatus) {
-        use axiom_sdk::formatting::Formatter;
-
         Formatter::print_section("Proof Status");
         Formatter::print_field("ID", &status.id);
         Formatter::print_field("State", &status.state);

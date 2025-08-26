@@ -30,7 +30,9 @@ impl DownloadKeysCmd {
         let config = axiom_sdk::load_config()?;
         let sdk = AxiomSdk::new(config);
 
-        let pk_downloader = sdk.get_proving_keys(self.config_id.as_deref(), &self.key_type)?;
+        let callback = crate::progress::CliProgressCallback::new();
+        let pk_downloader =
+            sdk.get_proving_keys(self.config_id.as_deref(), &self.key_type, Some(&callback))?;
         println!("Download URL: {}", pk_downloader.download_url);
         Ok(())
     }

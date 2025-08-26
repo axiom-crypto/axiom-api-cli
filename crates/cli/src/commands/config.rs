@@ -52,9 +52,11 @@ impl ConfigCmd {
                 output,
             }) => {
                 if evm_verifier {
-                    sdk.get_evm_verifier(config_id.as_deref(), output)
+                    let callback = crate::progress::CliProgressCallback::new();
+                    sdk.get_evm_verifier(config_id.as_deref(), output, Some(&callback))
                 } else {
-                    sdk.download_config(config_id.as_deref(), output)
+                    let callback = crate::progress::CliProgressCallback::new();
+                    sdk.download_config(config_id.as_deref(), output, Some(&callback))
                 }
             }
             None => Err(eyre::eyre!("A subcommand is required for config")),
@@ -62,7 +64,7 @@ impl ConfigCmd {
     }
 
     fn print_config_status(metadata: &axiom_sdk::config::VmConfigMetadata) {
-        use axiom_sdk::formatting::Formatter;
+        use crate::formatting::Formatter;
 
         Formatter::print_section("Config Status");
         Formatter::print_field("ID", &metadata.id);

@@ -1,3 +1,4 @@
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{
     AxiomSdk,
     build::{BuildSdk, ConfigSource},
@@ -93,7 +94,8 @@ impl BuildCmd {
                 Ok(())
             }
             Some(BuildSubcommand::List) => {
-                let build_status_list = sdk.list_programs()?;
+                let callback = CliProgressCallback::new();
+                let build_status_list = sdk.list_programs(Some(&callback))?;
 
                 // Create a new table
                 let mut table = comfy_table::Table::new();
@@ -122,8 +124,14 @@ impl BuildCmd {
             Some(BuildSubcommand::Download {
                 program_id,
                 program_type,
-            }) => sdk.download_program(&program_id, &program_type),
-            Some(BuildSubcommand::Logs { program_id }) => sdk.download_build_logs(&program_id),
+            }) => {
+                let callback = CliProgressCallback::new();
+                sdk.download_program(&program_id, &program_type, Some(&callback))
+            }
+            Some(BuildSubcommand::Logs { program_id }) => {
+                let callback = CliProgressCallback::new();
+                sdk.download_build_logs(&program_id, Some(&callback))
+            }
             None => {
                 let program_dir = std::env::current_dir()?;
                 let config_source = match (self.build_args.config_id, self.build_args.config) {
@@ -146,10 +154,11 @@ impl BuildCmd {
                     include_dirs: self.build_args.include_dirs,
                     project_id,
                 };
-                let program_id = sdk.register_new_program(&program_dir, args)?;
+                let callback = CliProgressCallback::new();
+                let program_id = sdk.register_new_program(&program_dir, args, Some(&callback))?;
 
                 if self.build_args.wait {
-                    sdk.wait_for_build_completion(&program_id)
+                    sdk.wait_for_build_completion(&program_id, Some(&callback))
                 } else {
                     println!(
                         "To check the build status, run: cargo axiom build status --program-id {program_id}"
@@ -161,8 +170,6 @@ impl BuildCmd {
     }
 
     fn print_build_status(status: &axiom_sdk::build::BuildStatus) {
-        use axiom_sdk::formatting::Formatter;
-
         Formatter::print_section("Build Status");
         Formatter::print_field("ID", &status.id);
         Formatter::print_field("Name", &status.name);
