@@ -49,6 +49,11 @@ fn main() {
 
     println!("cargo:rustc-env=OPENVM_VERSION={openvm_version}");
     println!("cargo:rustc-env=OPENVM_COMMIT={openvm_commit}");
+    // Expose CLI version as rustc-env for inclusion in request headers
+    println!(
+        "cargo:rustc-env=AXIOM_CLI_VERSION={}",
+        env!("CARGO_PKG_VERSION")
+    );
     println!("cargo:rerun-if-changed=.git/HEAD");
     println!("cargo:rerun-if-changed=Cargo.toml");
 }

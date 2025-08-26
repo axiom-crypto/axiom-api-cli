@@ -9,7 +9,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{API_KEY_HEADER, AxiomConfig, AxiomSdk, get_config_id};
+use crate::{API_KEY_HEADER, AxiomConfig, AxiomSdk, add_cli_version_header, get_config_id};
 
 pub trait ConfigSdk {
     fn get_vm_config_metadata(&self, config_id: Option<&str>) -> Result<VmConfigMetadata>;
@@ -73,9 +73,7 @@ impl ConfigSdk for AxiomSdk {
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        let response = client
-            .get(&url)
-            .header(API_KEY_HEADER, api_key)
+        let response = add_cli_version_header(client.get(&url).header(API_KEY_HEADER, api_key))
             .send()
             .context("Failed to send status request")?;
 
@@ -119,9 +117,7 @@ impl ConfigSdk for AxiomSdk {
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        let response = client
-            .get(&url)
-            .header(API_KEY_HEADER, api_key)
+        let response = add_cli_version_header(client.get(&url).header(API_KEY_HEADER, api_key))
             .send()
             .context("Failed to send download request")?;
 
@@ -191,9 +187,7 @@ fn download_artifact(
     let client = Client::new();
     let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-    let response = client
-        .get(&url)
-        .header(API_KEY_HEADER, api_key)
+    let response = add_cli_version_header(client.get(&url).header(API_KEY_HEADER, api_key))
         .send()
         .context("Failed to send download request")?;
 

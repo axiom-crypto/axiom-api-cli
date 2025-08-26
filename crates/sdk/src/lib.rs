@@ -14,6 +14,7 @@ pub mod run;
 pub mod verify;
 
 pub const API_KEY_HEADER: &str = "Axiom-API-Key";
+pub const CLI_VERSION_HEADER: &str = "Axiom-CLI-Version";
 
 pub const DEFAULT_CONFIG_ID: &str = "3c866d43-f693-4eba-9e0f-473f60858b73";
 pub const STAGING_DEFAULT_CONFIG_ID: &str = "0d20f5cc-f3f1-4e20-b90b-2f1c5b5bf75d";
@@ -149,7 +150,9 @@ pub fn validate_api_key(api_url: &str, api_key: &str) -> Result<()> {
     let client = Client::new();
     let url = format!("{}/validate_api_key", api_url);
 
-    let response = client.get(url).header(API_KEY_HEADER, api_key).send()?;
+    let response = add_cli_version_header(client.get(url))
+        .header(API_KEY_HEADER, api_key)
+        .send()?;
 
     if response.status().is_success() {
         // API key is valid - backend returns {"message": "OK"}
@@ -166,25 +169,35 @@ pub fn validate_api_key(api_url: &str, api_key: &str) -> Result<()> {
     }
 }
 
+pub fn add_cli_version_header(builder: RequestBuilder) -> RequestBuilder {
+    if let Ok(version) = std::env::var("AXIOM_CLI_VERSION") {
+        return builder.header(CLI_VERSION_HEADER, version);
+    }
+    if let Some(version) = option_env!("AXIOM_CLI_VERSION") {
+        return builder.header(CLI_VERSION_HEADER, version);
+    }
+    builder
+}
+
 pub fn authenticated_get(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
     let client = Client::new();
     let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-    Ok(client.get(url).header(API_KEY_HEADER, api_key))
+    Ok(add_cli_version_header(client.get(url)).header(API_KEY_HEADER, api_key))
 }
 
 pub fn authenticated_post(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
     let client = Client::new();
     let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-    Ok(client.post(url).header(API_KEY_HEADER, api_key))
+    Ok(add_cli_version_header(client.post(url)).header(API_KEY_HEADER, api_key))
 }
 
 pub fn authenticated_put(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
     let client = Client::new();
     let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-    Ok(client.put(url).header(API_KEY_HEADER, api_key))
+    Ok(add_cli_version_header(client.put(url)).header(API_KEY_HEADER, api_key))
 }
 
 pub fn send_request_json<T: DeserializeOwned>(

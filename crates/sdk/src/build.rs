@@ -14,7 +14,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tar::Builder;
 
-use crate::{API_KEY_HEADER, AxiomSdk, authenticated_get, download_file, send_request_json};
+use crate::{
+    API_KEY_HEADER, AxiomSdk, add_cli_version_header, authenticated_get, download_file,
+    send_request_json,
+};
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
 const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
@@ -152,9 +155,7 @@ impl BuildSdk for AxiomSdk {
             .build()?;
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
+        let response = add_cli_version_header(client.get(url).header(API_KEY_HEADER, api_key))
             .send()
             .context("Failed to download artifact")?;
 
@@ -465,11 +466,13 @@ impl BuildSdk for AxiomSdk {
             form = form.part("config", config_part);
         }
 
-        let response = client
-            .post(url)
-            .header(API_KEY_HEADER, api_key)
-            .multipart(form)
-            .send()?;
+        let response = add_cli_version_header(
+            client
+                .post(url)
+                .header(API_KEY_HEADER, api_key)
+                .multipart(form),
+        )
+        .send()?;
 
         // Finish the progress bar
         progress
@@ -515,11 +518,10 @@ impl BuildSdk for AxiomSdk {
                 .as_ref()
                 .ok_or(eyre::eyre!("API key not set"))?;
 
-            let response = Client::new()
-                .get(url)
-                .header(API_KEY_HEADER, api_key)
-                .send()
-                .context("Failed to send status request")?;
+            let response =
+                add_cli_version_header(Client::new().get(url).header(API_KEY_HEADER, api_key))
+                    .send()
+                    .context("Failed to send status request")?;
 
             let build_status: BuildStatus = if response.status().is_success() {
                 let body: Value = response.json()?;

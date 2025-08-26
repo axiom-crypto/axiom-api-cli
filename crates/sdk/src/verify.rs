@@ -6,7 +6,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{API_KEY_HEADER, AxiomSdk, get_config_id};
+use crate::{API_KEY_HEADER, AxiomSdk, add_cli_version_header, get_config_id};
 
 const VERIFICATION_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -136,9 +136,7 @@ impl AxiomSdk {
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        let response = client
-            .get(url)
-            .header(API_KEY_HEADER, api_key)
+        let response = add_cli_version_header(client.get(url).header(API_KEY_HEADER, api_key))
             .send()
             .context("Failed to send status request")?;
 
@@ -186,12 +184,14 @@ impl AxiomSdk {
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        let response = client
-            .post(url)
-            .header(API_KEY_HEADER, api_key)
-            .multipart(form)
-            .send()
-            .context("Failed to send verification request")?;
+        let response = add_cli_version_header(
+            client
+                .post(url)
+                .header(API_KEY_HEADER, api_key)
+                .multipart(form),
+        )
+        .send()
+        .context("Failed to send verification request")?;
 
         // Handle the response
         if response.status().is_success() {
