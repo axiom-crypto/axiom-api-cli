@@ -84,7 +84,7 @@ pub fn load_config_without_validation() -> Result<AxiomConfig> {
 pub fn load_config() -> Result<AxiomConfig> {
     let config = load_config_without_validation()?;
     if config.api_key.is_none() {
-        eyre::bail!("CLI not initialized. Run 'cargo axiom init' first.");
+        eyre::bail!("CLI not initialized. Run 'cargo axiom register' first.");
     }
     Ok(config)
 }
