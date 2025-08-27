@@ -41,7 +41,7 @@ enum AxiomCommands {
     Prove(ProveCmd),
     /// Execute a program using the Axiom Execution Service
     Run(RunCmd),
-    /// Generate key artifacts
+    /// Manage VM configuration artifacts
     Config(ConfigCmd),
     /// Download proving keys
     #[command(name = "download-keys")]
