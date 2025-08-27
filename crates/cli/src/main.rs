@@ -117,18 +117,10 @@ fn generate_completions(shell: Shell, cmd: &mut clap::Command) -> Result<PathBuf
             println!();
             println!("💡 Fish loads completions automatically. To reload: 'exec fish'");
         }
-        Shell::PowerShell => {
-            println!("To install PowerShell completions:");
-            println!("  # Add to your profile (permanent):");
-            println!(r#"  Add-Content -Path $PROFILE -Value ". '$(pwd)/{filename}'""#);
-            println!();
-            println!("  # Or load for current session:");
-            println!(r#"  . "$(pwd)/{filename}""#);
-        }
         Shell::Elvish => {
             println!("To install elvish completions:");
             println!("  # Add this line to ~/.config/elvish/rc.elv:");
-            println!(r#"  eval (slurp < "$(pwd)/{filename}")"#);
+            println!(r#"  eval (slurp < (pwd)/{filename})"#);
         }
         _ => {
             println!("Completion file saved as: {filename}");
