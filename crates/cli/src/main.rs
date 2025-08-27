@@ -1,8 +1,11 @@
 use std::process;
 
 use axiom_sdk::set_cli_version;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
+use clap_complete::{Generator, Shell, generate};
 use dotenvy::dotenv;
+use eyre::Result;
+use std::fs;
 
 mod commands;
 
@@ -52,6 +55,87 @@ enum AxiomCommands {
     Projects(ProjectsCmd),
     /// Display version information
     Version(VersionCmd),
+    /// Generate shell completions
+    Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+}
+
+fn generate_completions<G: Generator>(
+    generator: G,
+    cmd: &mut clap::Command,
+    shell: Shell,
+) -> Result<()> {
+    let bin_name = cmd.get_name().to_string();
+    let filename = match shell {
+        Shell::Bash => "cargo-axiom.bash",
+        Shell::Zsh => "_cargo-axiom",
+        Shell::Fish => "cargo-axiom.fish",
+        Shell::PowerShell => "cargo-axiom.ps1",
+        Shell::Elvish => "cargo-axiom.elv",
+        _ => "cargo-axiom.completion",
+    };
+
+    let mut file = fs::File::create(filename)?;
+    generate(generator, cmd, bin_name, &mut file);
+
+    println!("✅ Generated completion file: {filename}");
+    println!();
+
+    match shell {
+        Shell::Bash => {
+            println!("To install bash completions:");
+            println!("  # Option 1: Copy to system completion directory");
+            println!("  sudo cp {filename} /etc/bash_completion.d/");
+            println!("  # Option 2: Copy to user completion directory");
+            println!("  mkdir -p ~/.bash_completion.d");
+            println!("  cp {filename} ~/.bash_completion.d/");
+            println!("  # Option 3: Source directly in ~/.bashrc");
+            println!("  echo 'source $(pwd)/{filename}' >> ~/.bashrc");
+        }
+        Shell::Zsh => {
+            println!("To install zsh completions:");
+            println!("  # Option 1: Copy to system completion directory");
+            println!("  sudo cp {filename} /usr/local/share/zsh/site-functions/");
+            println!("  # Option 2: Copy to user completion directory");
+            println!("  mkdir -p ~/.zfunc");
+            println!("  cp {filename} ~/.zfunc/");
+            println!("  echo 'fpath=(~/.zfunc $fpath)' >> ~/.zshrc");
+            println!("  echo 'autoload -U compinit && compinit' >> ~/.zshrc");
+        }
+        Shell::Fish => {
+            println!("To install fish completions:");
+            println!("  mkdir -p ~/.config/fish/completions");
+            println!("  cp {filename} ~/.config/fish/completions/");
+        }
+        Shell::PowerShell => {
+            println!("To install PowerShell completions:");
+            println!("  # Add this line to your PowerShell profile:");
+            println!("  . $(pwd)/{filename}");
+        }
+        Shell::Elvish => {
+            println!("To install elvish completions:");
+            println!("  # Add this line to your ~/.config/elvish/rc.elv:");
+            println!("  eval (slurp < $(pwd)/{filename})");
+        }
+        _ => {
+            println!("To install completions:");
+            println!("  # Please refer to your shell's documentation for completion installation");
+            println!("  # The completion file has been saved as: {filename}");
+        }
+    }
+
+    println!();
+    println!("💡 After installation:");
+    println!(
+        "  • Restart your shell OR run 'source ~/.{}rc' to activate",
+        shell.to_string().to_lowercase()
+    );
+    println!("  • Try typing 'cargo axiom ' and press TAB for autocompletion");
+
+    Ok(())
 }
 
 fn main() {
@@ -73,6 +157,10 @@ fn main() {
         AxiomCommands::Verify(cmd) => cmd.run(),
         AxiomCommands::Projects(cmd) => cmd.run(),
         AxiomCommands::Version(cmd) => cmd.run(),
+        AxiomCommands::Completions { shell } => {
+            let mut cmd = Cargo::command();
+            generate_completions(shell, &mut cmd, shell)
+        }
     };
 
     if let Err(err) = result {
