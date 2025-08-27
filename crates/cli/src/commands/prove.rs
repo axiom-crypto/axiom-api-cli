@@ -44,6 +44,7 @@ enum ProveSubcommand {
         output: Option<PathBuf>,
     },
 
+    /// List all proofs for a program
     List {
         /// The ID of the program to list proofs for
         #[arg(long)]

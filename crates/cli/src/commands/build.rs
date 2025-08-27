@@ -25,6 +25,7 @@ enum BuildSubcommand {
         program_id: String,
     },
 
+    /// List all build programs
     List,
 
     /// Download build artifacts
@@ -38,6 +39,7 @@ enum BuildSubcommand {
         program_type: String,
     },
 
+    /// Download build logs for a program
     Logs {
         /// The program ID to download logs for
         #[clap(long, value_name = "ID")]
