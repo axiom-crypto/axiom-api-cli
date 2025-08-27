@@ -1,8 +1,11 @@
 use std::process;
 
 use axiom_sdk::set_cli_version;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
 use dotenvy::dotenv;
+use eyre::Result;
+use std::{fs, path::PathBuf};
 
 mod commands;
 
@@ -52,6 +55,83 @@ enum AxiomCommands {
     Projects(ProjectsCmd),
     /// Display version information
     Version(VersionCmd),
+    /// Generate shell completions
+    Completions {
+        /// The shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+}
+
+fn generate_completions(shell: Shell, cmd: &mut clap::Command) -> Result<PathBuf> {
+    let bin_name = cmd.get_name().to_string();
+    let filename = match shell {
+        Shell::Bash => "cargo-axiom.bash",
+        Shell::Zsh => "_cargo-axiom",
+        Shell::Fish => "cargo-axiom.fish",
+        Shell::PowerShell => "cargo-axiom.ps1",
+        Shell::Elvish => "cargo-axiom.elv",
+        _ => "cargo-axiom.completion",
+    };
+
+    let mut file = fs::File::create(filename)?;
+    generate(shell, cmd, bin_name, &mut file);
+
+    println!("✅ Generated completion file: {filename}");
+    println!();
+
+    match shell {
+        Shell::Bash => {
+            println!("To install bash completions:");
+            println!("  # Linux system-wide:");
+            println!("  sudo cp {filename} /etc/bash_completion.d/");
+            println!();
+            println!("  # macOS with Homebrew:");
+            println!("  cp {filename} $(brew --prefix)/etc/bash_completion.d/");
+            println!();
+            println!("  # Or source directly in ~/.bashrc:");
+            println!("  echo 'source $(pwd)/{filename}' >> ~/.bashrc");
+            println!();
+            println!("💡 Activate: Restart your shell OR run 'source ~/.bashrc'");
+        }
+        Shell::Zsh => {
+            println!("To install zsh completions:");
+            println!("  # Linux system-wide:");
+            println!("  sudo cp {filename} /usr/local/share/zsh/site-functions/");
+            println!();
+            println!("  # macOS with Homebrew:");
+            println!("  cp {filename} $(brew --prefix)/share/zsh/site-functions/");
+            println!();
+            println!("  # Or user-local:");
+            println!("  mkdir -p ~/.zfunc");
+            println!("  cp {filename} ~/.zfunc/");
+            println!("  echo 'fpath=(~/.zfunc $fpath)' >> ~/.zshrc");
+            println!("  echo 'autoload -U compinit && compinit' >> ~/.zshrc");
+            println!();
+            println!("💡 Activate: Restart your shell OR run 'source ~/.zshrc'");
+        }
+        Shell::Fish => {
+            println!("To install fish completions:");
+            println!("  mkdir -p ~/.config/fish/completions");
+            println!("  cp {filename} ~/.config/fish/completions/");
+            println!();
+            println!("💡 Fish loads completions automatically. To reload: 'exec fish'");
+        }
+        Shell::Elvish => {
+            println!("To install elvish completions:");
+            println!("  # Add this line to ~/.config/elvish/rc.elv:");
+            println!(r#"  eval (slurp < (pwd)/{filename})"#);
+        }
+        _ => {
+            println!("Completion file saved as: {filename}");
+            println!("Please refer to your shell's documentation for installation.");
+        }
+    }
+
+    println!();
+    println!("  • Try typing 'cargo axiom ' and press TAB to test autocompletion");
+
+    Ok(PathBuf::from(filename))
 }
 
 fn main() {
@@ -73,6 +153,10 @@ fn main() {
         AxiomCommands::Verify(cmd) => cmd.run(),
         AxiomCommands::Projects(cmd) => cmd.run(),
         AxiomCommands::Version(cmd) => cmd.run(),
+        AxiomCommands::Completions { shell } => {
+            let mut cmd = Cargo::command();
+            generate_completions(shell, &mut cmd).map(|_| ())
+        }
     };
 
     if let Err(err) = result {
