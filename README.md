@@ -37,7 +37,7 @@
 
 3. Check build status:
    ```bash
-   cargo axiom build status --program-id <PROGRAM_ID>
+   cargo axiom build status --program-id <ID>
    ```
 
 ## Generating Proofs
@@ -45,24 +45,24 @@
 1. Request a proof for your program:
 
    ```bash
-   cargo axiom prove --program-id <PROGRAM_ID> --input <INPUT>
+   cargo axiom prove --program-id <ID> --input <INPUT>
    ```
 
 2. Check proof generation status:
 
    ```bash
-   cargo axiom prove status --proof-id <PROOF_ID>
+   cargo axiom prove status --proof-id <ID>
    ```
 
 3. Download proof logs if needed:
 
    ```bash
-   cargo axiom prove logs --proof-id <PROOF_ID>
+   cargo axiom prove logs --proof-id <ID>
    ```
 
 4. Download proof artifacts:
    ```bash
-   cargo axiom prove download --proof-id <PROOF_ID> --type evm
+   cargo axiom prove download --proof-id <ID> --type evm
    ```
 
 ## Verifying Proofs
@@ -75,7 +75,7 @@
 
 2. Check verification status:
    ```bash
-   cargo axiom verify status --verify-id <VERIFY_ID>
+   cargo axiom verify status --verify-id <ID>
    ```
 
 For more details, see the [Axiom API Documentation](https://proving-api-docs.axiom.xyz/api-reference/axiom-cli).
