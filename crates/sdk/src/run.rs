@@ -105,7 +105,7 @@ impl RunSdk for AxiomSdk {
                         if !s.trim_start_matches("0x").starts_with("01")
                             && !s.trim_start_matches("0x").starts_with("02")
                         {
-                            eyre::bail!("Hex string must start with '01' or '02'");
+                            eyre::bail!("Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs");
                         }
                         json!({ "input": [s] })
                     }
@@ -290,7 +290,7 @@ fn validate_input_json(json: &serde_json::Value) -> Result<()> {
                     if !s.trim_start_matches("0x").starts_with("01")
                         && !s.trim_start_matches("0x").starts_with("02")
                     {
-                        eyre::bail!("Hex string must start with '01' or '02'");
+                        eyre::bail!("Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs");
                     }
                     Ok(())
                 })
