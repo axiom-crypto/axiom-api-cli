@@ -28,13 +28,13 @@ enum ProjectsSubcommand {
     /// Show details for a specific project
     Show {
         /// Project ID to show details for
-        #[arg(long)]
+        #[arg(long, value_name = "ID")]
         project_id: String,
     },
     /// List programs in a project
     Programs {
         /// Project ID to list programs for
-        #[arg(long)]
+        #[arg(long, value_name = "ID")]
         project_id: String,
         /// Page number (default: 1)
         #[arg(long, default_value = "1")]
@@ -46,10 +46,10 @@ enum ProjectsSubcommand {
     /// Move a program to a different project
     Move {
         /// Program ID to move
-        #[arg(long)]
+        #[arg(long, value_name = "ID")]
         program_id: String,
         /// Target project ID to move program to
-        #[arg(long)]
+        #[arg(long, value_name = "ID")]
         to_project: String,
     },
 }

@@ -25,7 +25,7 @@ enum RunSubcommand {
 #[derive(Args, Debug)]
 pub struct RunArgs {
     /// The ID of the program to execute
-    #[arg(long)]
+    #[arg(long, value_name = "ID")]
     program_id: Option<String>,
 
     /// Input data for the execution (file path or hex string)
