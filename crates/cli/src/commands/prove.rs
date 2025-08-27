@@ -47,7 +47,7 @@ enum ProveSubcommand {
     /// List all proofs for a program
     List {
         /// The ID of the program to list proofs for
-        #[arg(long)]
+        #[arg(long, value_name = "ID")]
         program_id: String,
     },
 }
@@ -55,7 +55,7 @@ enum ProveSubcommand {
 #[derive(Args, Debug)]
 pub struct ProveArgs {
     /// The ID of the program to generate a proof for
-    #[arg(long)]
+    #[arg(long, value_name = "ID")]
     program_id: Option<String>,
 
     /// Input data for the proof (file path or hex string)

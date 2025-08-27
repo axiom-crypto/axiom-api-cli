@@ -74,7 +74,7 @@ pub struct BuildArgs {
     include_dirs: Option<String>,
 
     /// The project ID to associate with the build
-    #[arg(long)]
+    #[arg(long, value_name = "ID")]
     project_id: Option<String>,
     /// Wait for the build to complete and download artifacts
     #[clap(long)]
