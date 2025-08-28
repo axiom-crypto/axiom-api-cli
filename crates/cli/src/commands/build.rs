@@ -134,8 +134,6 @@ impl BuildCmd {
                     (None, None) => None,
                 };
 
-                // let project_id =
-                //     axiom_sdk::get_project_id(self.build_args.project_id.as_deref(), &config);
                 let project_id = {
                     let cache_path = program_dir.join(".axiom").join("project-id");
                     match std::fs::read_to_string(&cache_path) {

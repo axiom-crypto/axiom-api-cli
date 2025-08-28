@@ -105,9 +105,6 @@ impl ProjectsCmd {
             ProjectsSubcommand::Create { name } => {
                 let response = sdk.create_project(&name)?;
 
-                // Save this as the current project
-                // axiom_sdk::set_project_id(&response.id)?;
-
                 println!("✓ Created project '{}' with ID: {}", name, response.id);
                 println!("✓ Saved project ID {} for future use", response.id);
                 Ok(())

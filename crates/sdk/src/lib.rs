@@ -505,44 +505,6 @@ mod tests {
         assert_eq!(config.config_id, Some("test-config".to_string()));
     }
 
-    // #[test]
-    // fn test_get_project_id_with_args() {
-    //     let config = AxiomConfig::default();
-
-    //     // Mock save_config to avoid file system operations
-    //     let project_id = "123e4567-e89b-12d3-a456-426614174000";
-    //     let result = get_project_id(Some(project_id), &config);
-
-    //     // Should return the provided project_id
-    //     assert_eq!(result, Some(project_id.to_string()));
-    // }
-
-    // #[test]
-    // fn test_get_project_id_from_config() {
-    //     let config = AxiomConfig {
-    //         last_project_id: Some("456e4567-e89b-12d3-a456-426614174001".to_string()),
-    //         ..Default::default()
-    //     };
-
-    //     let result = get_project_id(None, &config);
-
-    //     // Should return the config's project_id
-    //     assert_eq!(
-    //         result,
-    //         Some("456e4567-e89b-12d3-a456-426614174001".to_string())
-    //     );
-    // }
-
-    // #[test]
-    // fn test_get_project_id_none() {
-    //     let config = AxiomConfig::default();
-
-    //     let result = get_project_id(None, &config);
-
-    //     // Should return None when no project_id available
-    //     assert_eq!(result, None);
-    // }
-
     #[test]
     fn test_axiom_config_serialization() {
         let config = AxiomConfig {
