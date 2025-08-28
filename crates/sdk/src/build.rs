@@ -70,6 +70,8 @@ pub struct BuildArgs {
     pub include_dirs: Option<String>,
     /// The project ID to associate with the build
     pub project_id: Option<String>,
+    /// The project name if it's creating a new project
+    pub project_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -514,6 +516,11 @@ impl AxiomSdk {
         }
         if let Some(project_id) = args.project_id {
             url.push_str(&format!("&project_id={project_id}"));
+        }
+        if let Some(project_name) = args.project_name {
+            let encoded: String =
+                url::form_urlencoded::byte_serialize(project_name.as_bytes()).collect();
+            url.push_str(&format!("&project_name={}", encoded));
         }
         if let Some(bin) = bin_to_build {
             url.push_str(&format!("&bin_name={bin}"));

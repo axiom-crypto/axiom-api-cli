@@ -6,6 +6,7 @@ use axiom_sdk::{
 use clap::{Parser, Subcommand};
 use comfy_table;
 use eyre::Result;
+use std::io::{self, Write};
 
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
@@ -148,9 +149,18 @@ impl BuildCmd {
                         Err(_) => None,
                     }
                 };
-                if let Some(pid) = &project_id {
-                    println!("Using project ID: {pid}");
-                }
+                let had_cached_pid = project_id.is_some();
+                let project_name_for_creation = if had_cached_pid {
+                    None
+                } else {
+                    // No project ID found, prompt for a new project name (optional)
+                    print!("Enter a project name (leave blank to skip): ");
+                    let _ = io::stdout().flush();
+                    let mut input = String::new();
+                    io::stdin().read_line(&mut input)?;
+                    let name = input.trim().to_string();
+                    if name.is_empty() { None } else { Some(name) }
+                };
 
                 let args = axiom_sdk::build::BuildArgs {
                     config_source,
@@ -159,11 +169,12 @@ impl BuildCmd {
                     exclude_files: self.build_args.exclude_files,
                     include_dirs: self.build_args.include_dirs,
                     project_id,
+                    project_name: project_name_for_creation.clone(),
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
 
-                // If no cached project ID existed, fetch and cache it after registration
-                {
+                // If we didn't have a cached project ID, try to fetch and cache it now
+                if !had_cached_pid {
                     let cache_dir = program_dir.join(".axiom");
                     let cache_path = cache_dir.join("project-id");
                     if !cache_path.exists() {
@@ -174,6 +185,11 @@ impl BuildCmd {
                                 std::fs::write(&cache_path, status.project_id.as_bytes())
                             {
                                 eprintln!("Warning: failed to write project ID cache: {e}");
+                            } else {
+                                println!(
+                                    "✓ Saved project ID {} for future builds",
+                                    status.project_id
+                                );
                             }
                         }
                     }
