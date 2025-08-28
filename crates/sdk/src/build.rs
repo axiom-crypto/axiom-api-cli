@@ -47,6 +47,8 @@ pub struct BuildStatus {
     pub openvm_config: String,
     pub cells_used: u64,
     pub proofs_run: u64,
+    pub project_id: String,
+    pub project_name: String,
 }
 
 #[derive(Debug)]
