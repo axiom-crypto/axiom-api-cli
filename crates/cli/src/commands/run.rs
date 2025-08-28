@@ -109,10 +109,8 @@ impl RunCmd {
         if let Some(public_values) = &status.public_values {
             if !public_values.is_null() {
                 Formatter::print_section("Public Values");
-                if let Ok(formatted) = serde_json::to_string_pretty(public_values) {
-                    for line in formatted.lines() {
-                        println!("  {}", line);
-                    }
+                if let Ok(compact) = serde_json::to_string(public_values) {
+                    println!("  {}", compact);
                 }
             }
         }
