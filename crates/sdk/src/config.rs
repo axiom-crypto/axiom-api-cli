@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{Write, copy},
+    io::{Read, Write, copy},
     path::PathBuf,
 };
 
@@ -52,9 +52,7 @@ impl PkDownloader {
 
         let client = Client::new();
 
-        callback.on_progress_start("Downloading proving key", None);
-
-        let response = client
+        let mut response = client
             .get(&self.download_url)
             .send()
             .context("Failed to download proving keys")?;
@@ -63,19 +61,28 @@ impl PkDownloader {
             let content_length = response.content_length();
 
             if let Some(total) = content_length {
-                callback.on_progress_finish("");
                 callback.on_progress_start("Downloading proving key", Some(total));
+            } else {
+                callback.on_progress_start("Downloading proving key", None);
             }
 
             let mut file = File::create(output_path)?;
-            let bytes = response.bytes()?;
-            let downloaded = bytes.len() as u64;
-
             if content_length.is_some() {
-                callback.on_progress_update(downloaded);
-            }
+                let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
+                let mut downloaded = 0u64;
 
-            file.write_all(&bytes)?;
+                loop {
+                    let bytes_read = response.read(&mut buffer)?;
+                    if bytes_read == 0 {
+                        break;
+                    }
+                    file.write_all(&buffer[..bytes_read])?;
+                    downloaded += bytes_read as u64;
+                    callback.on_progress_update(downloaded);
+                }
+            } else {
+                copy(&mut response, &mut file)?;
+            }
             callback.on_progress_finish("✓ Key downloaded successfully");
             Ok(())
         } else if response.status().is_client_error() {
@@ -155,8 +162,14 @@ impl ConfigSdk for AxiomSdk {
         // Check if the request was successful
         if response.status().is_success() {
             // Parse the response to get the download URL
-            let response_json: Value = response.json()?;
-            let downloader: PkDownloader = serde_json::from_value(response_json)?;
+            let response_json: Value = response
+                .json()
+                .context("Failed to parse proving key response as JSON")?;
+            let downloader: PkDownloader =
+                serde_json::from_value(response_json.clone()).context(format!(
+                    "Failed to deserialize proving key response. Got: {}",
+                    response_json
+                ))?;
             Ok(downloader)
         } else if response.status().is_client_error() {
             let status = response.status();

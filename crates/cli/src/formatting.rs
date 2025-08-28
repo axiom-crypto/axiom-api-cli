@@ -67,6 +67,19 @@ impl Formatter {
     }
 
     /// Create a progress bar for file uploads/downloads
+    pub fn create_download_progress(total_bytes: u64) -> ProgressBar {
+        let pb = ProgressBar::new(total_bytes);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("{msg} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
+                .expect("Invalid progress template")
+                .progress_chars("█▉▊▋▌▍▎▏  "),
+        );
+        pb.set_message("Downloading");
+        pb
+    }
+
+    /// Create a progress bar for file uploads (keeping the old method for compatibility)
     pub fn create_upload_progress(total_bytes: u64) -> ProgressBar {
         let pb = ProgressBar::new(total_bytes);
         pb.set_style(
