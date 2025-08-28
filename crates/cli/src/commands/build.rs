@@ -168,6 +168,8 @@ impl BuildCmd {
         Formatter::print_section("Build Status");
         Formatter::print_field("ID", &status.id);
         Formatter::print_field("Name", &status.name);
+        Formatter::print_field("Project ID", &status.project_id);
+        Formatter::print_field("Project Name", &status.project_name);
         Formatter::print_field("Status", &status.status);
         Formatter::print_field("Program Hash", &status.program_hash);
         Formatter::print_field("Config ID", &status.config_uuid);
