@@ -37,7 +37,10 @@ pub struct PkDownloader {
 
 impl PkDownloader {
     pub fn download_pk(&self, output_path: &str) -> Result<()> {
-        std::fs::create_dir_all(output_path)?;
+        let path = std::path::Path::new(output_path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
 
         let client = Client::new();
 
