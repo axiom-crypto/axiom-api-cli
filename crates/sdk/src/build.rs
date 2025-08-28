@@ -14,6 +14,8 @@ use crate::{
 };
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
+const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
+
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
 pub trait BuildSdk {
@@ -93,6 +95,7 @@ impl BuildSdk for AxiomSdk {
         // Extract the items array from the response
         if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
             if items.is_empty() {
+                self.callback.on_info("No programs found");
                 return Ok(vec![]);
             }
 
@@ -163,16 +166,21 @@ impl BuildSdk for AxiomSdk {
                 )
             })?;
 
+            self.callback.on_success(&filename.to_string());
             Ok(())
         } else if status.is_client_error() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
+            self.callback
+                .on_error(&format!("Client error response: {}", error_text));
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
+            self.callback
+                .on_error(&format!("Server error response: {}", error_text));
             Err(eyre::eyre!(
                 "Download request failed with status: {} - {}",
                 status,
@@ -190,6 +198,7 @@ impl BuildSdk for AxiomSdk {
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
         let response = authenticated_get(&self.config, &url)?;
         download_file(response, &filename, "Failed to download build logs")?;
+        self.callback.on_success(&format!("{}", filename.display()));
         Ok(())
     }
 
@@ -268,7 +277,7 @@ impl AxiomSdk {
                 }
             }
 
-            std::thread::sleep(Duration::from_secs(10));
+            std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
         }
     }
 
@@ -278,6 +287,11 @@ impl AxiomSdk {
         args: BuildArgs,
         callback: &dyn ProgressCallback,
     ) -> Result<String> {
+        // Check if we're in a Rust project
+        if !is_rust_project(program_dir.as_ref()) {
+            eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
+        }
+
         let git_root = find_git_root(program_dir.as_ref()).context(
             "Not in a git repository. Please run this command from within a git repository.",
         )?;
@@ -790,4 +804,8 @@ fn create_tar_archive(
     std::env::set_current_dir(original_dir)?;
 
     Ok(tar)
+}
+
+fn is_rust_project(dir: &Path) -> bool {
+    dir.join("Cargo.toml").exists()
 }
