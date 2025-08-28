@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::progress::CliProgressCallback;
 use axiom_sdk::{AxiomSdk, config::ConfigSdk};
 use clap::Args;
 use eyre::Result;
@@ -28,10 +29,18 @@ pub struct DownloadKeysCmd {
 impl DownloadKeysCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config);
+        let callback = CliProgressCallback::new();
+        let sdk = AxiomSdk::new(config).with_callback(callback);
 
         let pk_downloader = sdk.get_proving_keys(self.config_id.as_deref(), &self.key_type)?;
-        println!("Download URL: {}", pk_downloader.download_url);
+
+        let output_path = match self.output {
+            Some(path) => path.to_string_lossy().to_string(),
+            None => format!("{}.bin", self.key_type),
+        };
+
+        pk_downloader.download_pk(&output_path)?;
+        println!("✓ Downloaded to: {}", output_path);
         Ok(())
     }
 }

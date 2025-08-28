@@ -95,6 +95,10 @@ impl ConfigSdk for AxiomSdk {
     fn get_proving_keys(&self, config_id: Option<&str>, key_type: &str) -> Result<PkDownloader> {
         // Load configuration
         let config_id = get_config_id(config_id, &self.config)?;
+
+        self.callback.on_info(&format!(
+            "Getting {key_type} proving key for config ID: {config_id}"
+        ));
         let (key_type, p_or_v) = key_type.split_once('_').unwrap();
         let url = if p_or_v == "pk" {
             format!(
@@ -137,15 +141,60 @@ impl ConfigSdk for AxiomSdk {
     }
 
     fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
-        download_artifact(&self.config, config_id, "evm_verifier", output)
+        let config_id_str = get_config_id(config_id, &self.config)?;
+        self.callback.on_info(&format!(
+            "Downloading evm_verifier for config ID: {config_id_str}"
+        ));
+        let result = download_artifact(&self.config, config_id, "evm_verifier", output.clone());
+        if result.is_ok() {
+            let output_path = output.unwrap_or_else(|| {
+                PathBuf::from(format!(
+                    "axiom-artifacts/configs/{}/evm_verifier.json",
+                    config_id_str
+                ))
+            });
+            self.callback
+                .on_success(&format!("Successfully downloaded to {output_path:?}"));
+        }
+        result
     }
 
     fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
-        download_artifact(&self.config, config_id, "app_vm_commit", output)
+        let config_id_str = get_config_id(config_id, &self.config)?;
+        self.callback.on_info(&format!(
+            "Downloading app_vm_commit for config ID: {config_id_str}"
+        ));
+        let result = download_artifact(&self.config, config_id, "app_vm_commit", output.clone());
+        if result.is_ok() {
+            let output_path = output.unwrap_or_else(|| {
+                PathBuf::from(format!(
+                    "axiom-artifacts/configs/{}/app_vm_commit",
+                    config_id_str
+                ))
+            });
+            self.callback
+                .on_success(&format!("Successfully downloaded to {output_path:?}"));
+        }
+        result
     }
 
     fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
-        download_artifact(&self.config, config_id, "config", output)
+        let config_id_str = get_config_id(config_id, &self.config)?;
+        self.callback.on_info(&format!(
+            "Downloading config for config ID: {config_id_str}"
+        ));
+        let result = download_artifact(&self.config, config_id, "config", output.clone());
+        if result.is_ok() {
+            let output_path = output.unwrap_or_else(|| {
+                PathBuf::from(format!(
+                    "axiom-artifacts/configs/{}/config.toml",
+                    config_id_str
+                ))
+            });
+            self.callback
+                .on_success(&format!("Successfully downloaded to {output_path:?}"));
+        }
+        result
     }
 }
 
@@ -188,11 +237,9 @@ fn download_artifact(
 
     // Check if the request was successful
     if response.status().is_success() {
-        // Create the output file
         let mut file = File::create(&output_path)
             .context(format!("Failed to create output file: {output_path:?}"))?;
 
-        // Stream the response body to the file
         copy(&mut response.bytes()?.as_ref(), &mut file)
             .context("Failed to write response to file")?;
 
@@ -200,11 +247,8 @@ fn download_artifact(
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
-        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+        eyre::bail!("Client error ({}): {}", status, error_text)
     } else {
-        Err(eyre::eyre!(
-            "Download request failed with status: {}",
-            response.status()
-        ))
+        eyre::bail!("Download request failed with status: {}", response.status())
     }
 }

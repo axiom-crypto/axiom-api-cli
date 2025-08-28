@@ -363,7 +363,7 @@ impl AxiomSdk {
                             )
                             .is_ok()
                         {
-                            callback.on_success(&format!("✓ STARK proof saved to {}", proof_path));
+                            callback.on_success(&format!("STARK proof saved to {}", proof_path));
                         }
                     } else {
                         let proof_type_name = match proof_status.proof_type.as_str() {
@@ -381,7 +381,7 @@ impl AxiomSdk {
                             .is_ok()
                         {
                             callback.on_success(&format!(
-                                "✓ {} proof saved to {}",
+                                "{} proof saved to {}",
                                 proof_type_name.to_uppercase(),
                                 proof_path
                             ));
@@ -396,7 +396,7 @@ impl AxiomSdk {
                         )
                         .is_ok()
                     {
-                        callback.on_success(&format!("✓ Logs saved to {}", logs_path));
+                        callback.on_success(&format!("Logs saved to {}", logs_path));
                     }
 
                     let created_at = &proof_status.created_at;
