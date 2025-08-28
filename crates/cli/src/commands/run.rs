@@ -52,14 +52,15 @@ impl RunCmd {
             None => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
+                let sdk = sdk.with_callback(callback);
                 let args = axiom_sdk::run::RunArgs {
                     program_id: self.run_args.program_id,
                     input: self.run_args.input,
                 };
-                let execution_id = sdk.execute_program_base(args, &callback)?;
+                let execution_id = sdk.execute_program(args)?;
 
                 if self.run_args.wait {
-                    sdk.wait_for_execution_completion_base(&execution_id, &callback)
+                    sdk.wait_for_execution_completion(&execution_id)
                 } else {
                     println!("Execution started successfully! ID: {}", execution_id);
                     println!(

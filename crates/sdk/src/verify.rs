@@ -6,9 +6,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{
-    API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header, get_config_id,
-};
+use crate::{API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, get_config_id};
 
 const VERIFICATION_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -71,19 +69,19 @@ impl VerifySdk for AxiomSdk {
     }
 
     fn verify_evm(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String> {
-        self.verify_evm_base(config_id, proof_path, &NoopCallback)
+        self.verify_evm_base(config_id, proof_path, &*self.callback)
     }
 
     fn verify_stark(&self, program_id: &str, proof_path: PathBuf) -> Result<String> {
-        self.verify_stark_base(program_id, proof_path, &NoopCallback)
+        self.verify_stark_base(program_id, proof_path, &*self.callback)
     }
 
     fn wait_for_evm_verify_completion(&self, verify_id: &str) -> Result<()> {
-        self.wait_for_evm_verify_completion_base(verify_id, &NoopCallback)
+        self.wait_for_evm_verify_completion_base(verify_id, &*self.callback)
     }
 
     fn wait_for_stark_verify_completion(&self, verify_id: &str) -> Result<()> {
-        self.wait_for_stark_verify_completion_base(verify_id, &NoopCallback)
+        self.wait_for_stark_verify_completion_base(verify_id, &*self.callback)
     }
 }
 

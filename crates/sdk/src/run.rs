@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header,
-    calculate_duration,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, calculate_duration,
 };
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
@@ -70,11 +69,11 @@ impl RunSdk for AxiomSdk {
     }
 
     fn execute_program(&self, args: RunArgs) -> Result<String> {
-        self.execute_program_base(args, &NoopCallback)
+        self.execute_program_base(args, &*self.callback)
     }
 
     fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()> {
-        self.wait_for_execution_completion_base(execution_id, &NoopCallback)
+        self.wait_for_execution_completion_base(execution_id, &*self.callback)
     }
 
     fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String> {

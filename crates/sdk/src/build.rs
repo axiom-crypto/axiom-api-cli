@@ -9,8 +9,8 @@ use serde_json::Value;
 use tar::Builder;
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header,
-    authenticated_get, download_file, send_request_json,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
+    download_file, send_request_json,
 };
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
@@ -198,11 +198,11 @@ impl BuildSdk for AxiomSdk {
         program_dir: impl AsRef<Path>,
         args: BuildArgs,
     ) -> Result<String> {
-        self.register_new_program_base(program_dir, args, &NoopCallback)
+        self.register_new_program_base(program_dir, args, &*self.callback)
     }
 
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
-        self.wait_for_build_completion_base(program_id, &NoopCallback)
+        self.wait_for_build_completion_base(program_id, &*self.callback)
     }
 }
 

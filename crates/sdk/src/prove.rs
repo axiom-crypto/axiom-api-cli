@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, NoopCallback, ProgressCallback, add_cli_version_header,
-    authenticated_get, calculate_duration, download_file, send_request_json,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
+    calculate_duration, download_file, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -231,11 +231,11 @@ impl ProveSdk for AxiomSdk {
     }
 
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String> {
-        self.generate_new_proof_base(args, &NoopCallback)
+        self.generate_new_proof_base(args, &*self.callback)
     }
 
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
-        self.wait_for_proof_completion_base(proof_id, &NoopCallback)
+        self.wait_for_proof_completion_base(proof_id, &*self.callback)
     }
 }
 

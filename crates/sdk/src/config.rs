@@ -9,9 +9,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{
-    API_KEY_HEADER, AxiomConfig, AxiomSdk, add_cli_version_header, get_config_id,
-};
+use crate::{API_KEY_HEADER, AxiomConfig, AxiomSdk, add_cli_version_header, get_config_id};
 
 pub trait ConfigSdk {
     fn get_vm_config_metadata(&self, config_id: Option<&str>) -> Result<VmConfigMetadata>;

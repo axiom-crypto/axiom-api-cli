@@ -114,14 +114,31 @@ impl ProgressCallback for NoopCallback {
     fn on_clear_line_and_reset(&self) {}
 }
 
-#[derive(Default)]
 pub struct AxiomSdk {
     pub config: AxiomConfig,
+    callback: Box<dyn ProgressCallback>,
 }
 
 impl AxiomSdk {
     pub fn new(config: AxiomConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            callback: Box::new(NoopCallback),
+        }
+    }
+
+    pub fn with_callback<T: ProgressCallback + 'static>(mut self, callback: T) -> Self {
+        self.callback = Box::new(callback);
+        self
+    }
+}
+
+impl Default for AxiomSdk {
+    fn default() -> Self {
+        Self {
+            config: AxiomConfig::default(),
+            callback: Box::new(NoopCallback),
+        }
     }
 }
 

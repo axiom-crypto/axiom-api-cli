@@ -120,15 +120,16 @@ impl ProveCmd {
             None => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
+                let sdk = sdk.with_callback(callback);
                 let args = axiom_sdk::prove::ProveArgs {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
                     proof_type: Some(self.prove_args.proof_type),
                 };
-                let proof_id = sdk.generate_new_proof_base(args, &callback)?;
+                let proof_id = sdk.generate_new_proof(args)?;
 
                 if self.prove_args.wait {
-                    sdk.wait_for_proof_completion_base(&proof_id, &callback)
+                    sdk.wait_for_proof_completion(&proof_id)
                 } else {
                     println!(
                         "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
