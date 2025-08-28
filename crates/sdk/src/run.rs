@@ -1,9 +1,12 @@
+use std::fs;
+
 use cargo_openvm::input::Input;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::validate_input_json;
 use crate::{
     API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, calculate_duration,
 };
@@ -123,36 +126,52 @@ impl AxiomSdk {
         let url = format!("{}/executions", self.config.api_url);
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
 
-        let mut request_body = json!({
-            "program_id": program_id,
-        });
-
-        if let Some(input) = args.input {
-            match input {
-                Input::FilePath(path) => {
-                    let input_content = std::fs::read_to_string(&path)
-                        .with_context(|| format!("Failed to read input file: {:?}", path))?;
-                    let input_json: Value =
-                        serde_json::from_str(&input_content).with_context(|| {
-                            format!("Failed to parse input JSON from file: {:?}", path)
-                        })?;
-                    request_body["input"] = input_json;
-                }
-                Input::HexBytes(hex_bytes) => {
-                    request_body["input"] = json!(hex_bytes);
+        // Create the request body based on input
+        let body = match &args.input {
+            Some(input) => {
+                match input {
+                    Input::FilePath(path) => {
+                        // Read the file content directly as JSON
+                        let file_content = fs::read_to_string(path)
+                            .context(format!("Failed to read input file: {}", path.display()))?;
+                        let input_json = serde_json::from_str(&file_content).context(format!(
+                            "Failed to parse input file as JSON: {}",
+                            path.display()
+                        ))?;
+                        validate_input_json(&input_json)?;
+                        input_json
+                    }
+                    Input::HexBytes(s) => {
+                        if !s.trim_start_matches("0x").starts_with("01")
+                            && !s.trim_start_matches("0x").starts_with("02")
+                        {
+                            eyre::bail!(
+                                "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
+                            );
+                        }
+                        json!({ "input": [s] })
+                    }
                 }
             }
-        }
+            None => json!({ "input": [] }), // Empty JSON if no input provided
+        };
 
-        let client = reqwest::blocking::Client::new();
+        // Make API request
+        let client = Client::new();
+        let mut url_with_params = url::Url::parse(&url)?;
+        url_with_params
+            .query_pairs_mut()
+            .append_pair("program_id", &program_id);
+
         let response = add_cli_version_header(
             client
-                .post(&url)
+                .post(url_with_params)
+                .header("Content-Type", "application/json")
                 .header(API_KEY_HEADER, api_key)
-                .json(&request_body),
+                .body(body.to_string()),
         )
         .send()
-        .with_context(|| format!("Failed to send execution request to {}", url))?;
+        .context("Failed to send execution request")?;
 
         if response.status().is_success() {
             let response_json: Value = response.json()?;

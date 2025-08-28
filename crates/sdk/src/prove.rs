@@ -6,6 +6,7 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::validate_input_json;
 use crate::{
     API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
     calculate_duration, download_file, send_request_json,
@@ -433,30 +434,4 @@ impl AxiomSdk {
             }
         }
     }
-}
-
-fn validate_input_json(json: &serde_json::Value) -> Result<()> {
-    use cargo_openvm::input::is_valid_hex_string;
-
-    json["input"]
-        .as_array()
-        .ok_or_eyre("Input must be an array under 'input' key")?
-        .iter()
-        .try_for_each(|inner| {
-            inner
-                .as_str()
-                .ok_or_eyre("Each value must be a hex string")
-                .and_then(|s| {
-                    if !is_valid_hex_string(s) {
-                        eyre::bail!("Invalid hex string");
-                    }
-                    if !s.trim_start_matches("0x").starts_with("01")
-                        && !s.trim_start_matches("0x").starts_with("02")
-                    {
-                        eyre::bail!("Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs");
-                    }
-                    Ok(())
-                })
-        })?;
-    Ok(())
 }
