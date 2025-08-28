@@ -71,6 +71,8 @@ pub trait ProgressCallback {
     fn on_progress_start(&self, message: &str, total: Option<u64>);
     /// Called to update progress with the current completion count
     fn on_progress_update(&self, current: u64);
+    /// Called to update the progress message without restarting
+    fn on_progress_update_message(&self, message: &str);
     /// Called when finishing a progress operation
     fn on_progress_finish(&self, message: &str);
     /// Called to clear the current line (for status updates)
@@ -109,6 +111,7 @@ impl ProgressCallback for NoopCallback {
     fn on_status(&self, _text: &str) {}
     fn on_progress_start(&self, _message: &str, _total: Option<u64>) {}
     fn on_progress_update(&self, _current: u64) {}
+    fn on_progress_update_message(&self, _message: &str) {}
     fn on_progress_finish(&self, _message: &str) {}
     fn on_clear_line(&self) {}
     fn on_clear_line_and_reset(&self) {}

@@ -63,6 +63,12 @@ impl ProgressCallback for CliProgressCallback {
         }
     }
 
+    fn on_progress_update_message(&self, message: &str) {
+        if let Some(pb) = self.progress_bar.lock().unwrap().as_ref() {
+            pb.set_message(message.to_string());
+        }
+    }
+
     fn on_progress_finish(&self, message: &str) {
         if let Some(pb) = self.progress_bar.lock().unwrap().take() {
             pb.finish_with_message(message.to_string());

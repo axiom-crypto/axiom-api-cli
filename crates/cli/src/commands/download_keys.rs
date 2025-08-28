@@ -39,7 +39,7 @@ impl DownloadKeysCmd {
             None => format!("{}.bin", self.key_type),
         };
 
-        pk_downloader.download_pk(&output_path)?;
+        pk_downloader.download_pk_with_callback(&output_path, &CliProgressCallback::new())?;
         println!("✓ Downloaded to: {}", output_path);
         Ok(())
     }

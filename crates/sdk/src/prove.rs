@@ -313,6 +313,8 @@ impl AxiomSdk {
     ) -> Result<()> {
         use std::time::Duration;
 
+        let mut spinner_started = false;
+
         loop {
             let response = authenticated_get(
                 &self.config,
@@ -323,8 +325,11 @@ impl AxiomSdk {
 
             match proof_status.state.as_str() {
                 "Succeeded" => {
-                    callback.on_clear_line_and_reset();
-                    callback.on_success("Proof generation completed successfully!");
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Proof generation completed successfully!");
+                    } else {
+                        callback.on_success("Proof generation completed successfully!");
+                    }
 
                     callback.on_section("Proof Summary");
                     callback.on_field("Proof ID", &proof_status.id);
@@ -403,22 +408,40 @@ impl AxiomSdk {
                     return Ok(());
                 }
                 "Failed" => {
-                    callback.on_clear_line_and_reset();
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
                     let error_msg = proof_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Proof generation failed: {}", error_msg);
                 }
                 "Queued" => {
-                    callback.on_status("Proof queued...");
+                    if !spinner_started {
+                        callback.on_progress_start("Proof queued", None);
+                        spinner_started = true;
+                    }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 "InProgress" => {
-                    callback.on_status("Generating proof...");
+                    if !spinner_started {
+                        callback.on_progress_start("Generating proof", None);
+                        spinner_started = true;
+                    } else {
+                        // Update message if we were previously in queued state
+                        callback.on_progress_update_message("Generating proof");
+                    }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    callback.on_status(&format!("Proof status: {}...", proof_status.state));
+                    let status_message = format!("Proof status: {}", proof_status.state);
+                    if !spinner_started {
+                        callback.on_progress_start(&status_message, None);
+                        spinner_started = true;
+                    } else {
+                        // Update message for unknown status
+                        callback.on_progress_update_message(&status_message);
+                    }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
             }
