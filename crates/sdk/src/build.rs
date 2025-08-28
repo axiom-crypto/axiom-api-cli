@@ -2,6 +2,7 @@ use std::{fs::File, io::Read, path::Path};
 
 use eyre::{Context, OptionExt, Result};
 use flate2::{Compression, write::GzEncoder};
+use openvm_build::cargo_command;
 use reqwest::blocking::Client;
 use scopeguard::defer;
 use serde::{Deserialize, Serialize};
@@ -671,15 +672,6 @@ fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
 
 // The tarball contains everything in the git root of the guest program that's tracked by git.
 // Additionally, it does `cargo fetch` to pre-fetch dependencies so private dependencies are included.
-fn cargo_command(cmd: &str, args: &[&str]) -> std::process::Command {
-    let mut command = std::process::Command::new("cargo");
-    command.arg(cmd);
-    for arg in args {
-        command.arg(arg);
-    }
-    command
-}
-
 fn create_tar_archive(
     program_dir: impl AsRef<Path>,
     keep_tarball: bool,
