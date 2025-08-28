@@ -10,37 +10,6 @@ use crate::{API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, 
 
 const VERIFICATION_POLLING_INTERVAL_SECS: u64 = 10;
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ProofType {
-    Evm,
-    Stark,
-}
-
-impl std::fmt::Display for ProofType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ProofType::Evm => write!(f, "evm"),
-            ProofType::Stark => write!(f, "stark"),
-        }
-    }
-}
-
-impl std::str::FromStr for ProofType {
-    type Err = eyre::Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        match s.to_lowercase().as_str() {
-            "evm" => Ok(ProofType::Evm),
-            "stark" => Ok(ProofType::Stark),
-            _ => Err(eyre::eyre!(
-                "Invalid proof type: {}. Must be 'evm' or 'stark'",
-                s
-            )),
-        }
-    }
-}
-
 pub trait VerifySdk {
     fn get_evm_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
     fn get_stark_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;

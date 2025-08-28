@@ -1,4 +1,4 @@
-use crate::formatting::Formatter;
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{
     AxiomSdk,
     build::{BuildSdk, ConfigSource},
@@ -85,7 +85,8 @@ pub struct BuildArgs {
 impl BuildCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config.clone());
+        let callback = CliProgressCallback::new();
+        let sdk = AxiomSdk::new(config.clone()).with_callback(callback);
 
         match self.command {
             Some(BuildSubcommand::Status { program_id }) => {
@@ -147,9 +148,6 @@ impl BuildCmd {
                     include_dirs: self.build_args.include_dirs,
                     project_id,
                 };
-                use crate::progress::CliProgressCallback;
-                let callback = CliProgressCallback::new();
-                let sdk = sdk.with_callback(callback);
                 let program_id = sdk.register_new_program(&program_dir, args)?;
 
                 if self.build_args.wait {

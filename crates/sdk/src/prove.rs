@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 
 use crate::validate_input_json;
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
-    calculate_duration, download_file, send_request_json,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, add_cli_version_header,
+    authenticated_get, authenticated_post, calculate_duration, download_file, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -20,14 +20,14 @@ pub trait ProveSdk {
     fn get_generated_proof(
         &self,
         proof_id: &str,
-        proof_type: &str,
+        proof_type: &ProofType,
         output: Option<PathBuf>,
     ) -> Result<()>;
     fn get_proof_logs(&self, proof_id: &str) -> Result<()>;
     fn save_proof_to_path(
         &self,
         proof_id: &str,
-        proof_type: &str,
+        proof_type: &ProofType,
         output_path: PathBuf,
     ) -> Result<()>;
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
@@ -42,7 +42,7 @@ pub struct ProveArgs {
     /// Input data for the proof (file path or hex string)
     pub input: Option<Input>,
     /// The type of proof to generate (stark or evm)
-    pub proof_type: Option<String>,
+    pub proof_type: Option<ProofType>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -97,7 +97,7 @@ impl ProveSdk for AxiomSdk {
     fn get_generated_proof(
         &self,
         proof_id: &str,
-        proof_type: &str,
+        proof_type: &ProofType,
         output: Option<PathBuf>,
     ) -> Result<()> {
         // First get proof status to extract program_uuid
@@ -125,6 +125,8 @@ impl ProveSdk for AxiomSdk {
 
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &output_path, "Failed to download proof")?;
+        self.callback
+            .on_success(&format!("{}", output_path.display()));
         Ok(())
     }
 
@@ -146,18 +148,20 @@ impl ProveSdk for AxiomSdk {
         let output_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &output_path, "Failed to download proof logs")?;
+        self.callback
+            .on_success(&format!("{}", output_path.display()));
         Ok(())
     }
 
     fn save_proof_to_path(
         &self,
         proof_id: &str,
-        proof_type: &str,
+        proof_type: &ProofType,
         output_path: PathBuf,
     ) -> Result<()> {
         let url = format!(
-            "{}/proofs/{}/proof/{}",
-            self.config.api_url, proof_id, proof_type
+            "{}/proofs/{proof_id}/proof/{proof_type}",
+            self.config.api_url,
         );
 
         let client = Client::new();
@@ -184,6 +188,8 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
+            self.callback
+                .on_success(&format!("{}", output_path.display()));
             Ok(())
         } else {
             let status = response.status();
@@ -219,6 +225,8 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
+            self.callback
+                .on_success(&format!("{}", output_path.display()));
             Ok(())
         } else {
             let status = response.status();
@@ -246,74 +254,56 @@ impl AxiomSdk {
         args: ProveArgs,
         callback: &dyn ProgressCallback,
     ) -> Result<String> {
-        let program_id = args.program_id;
+        // Get the program_id from args, return error if not provided
+        let program_id = args
+            .program_id
+            .ok_or_eyre("Program ID is required. Use --program-id to specify.")?;
+
+        let proof_type = args.proof_type.unwrap_or(ProofType::Stark);
 
         callback.on_header("Generating Proof");
-        callback.on_field("Program ID", program_id.as_deref().unwrap_or("N/A"));
-        if let Some(ref proof_type) = args.proof_type {
-            callback.on_field("Proof Type", proof_type);
-        }
+        callback.on_field("Program ID", &program_id);
+        callback.on_field("Proof Type", &proof_type.to_string().to_uppercase());
 
-        if let Some(Input::FilePath(path)) = &args.input {
-            let file_content = std::fs::read_to_string(path)
-                .with_context(|| format!("Failed to read input file: {:?}", path))?;
-            let input_json: serde_json::Value = serde_json::from_str(&file_content)
-                .with_context(|| format!("Failed to parse input JSON from file: {:?}", path))?;
-            validate_input_json(&input_json)?;
-        }
+        let url = format!(
+            "{}/proofs?program_id={program_id}&proof_type={proof_type}",
+            self.config.api_url
+        );
 
-        let url = format!("{}/proofs", self.config.api_url);
-
-        let body = match args.input {
-            Some(input) => match input {
-                Input::FilePath(path) => {
-                    let file_content = std::fs::read_to_string(&path)?;
-                    let input_json: serde_json::Value = serde_json::from_str(&file_content)?;
-                    json!({
-                        "program_id": program_id,
-                        "input": input_json,
-                        "proof_type": args.proof_type
-                    })
+        // Create the request body based on input
+        let body = match &args.input {
+            Some(Input::FilePath(path)) => {
+                let file_content = fs::read_to_string(path)
+                    .context(format!("Failed to read input file: {}", path.display()))?;
+                let input_json = serde_json::from_str(&file_content).context(format!(
+                    "Failed to parse input file as JSON: {}",
+                    path.display()
+                ))?;
+                validate_input_json(&input_json)?;
+                input_json
+            }
+            Some(Input::HexBytes(s)) => {
+                let trimmed = s.trim_start_matches("0x");
+                if !trimmed.starts_with("01") && !trimmed.starts_with("02") {
+                    eyre::bail!(
+                        "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
+                    );
                 }
-                Input::HexBytes(hex_bytes) => {
-                    json!({
-                        "program_id": program_id,
-                        "input": hex_bytes,
-                        "proof_type": args.proof_type
-                    })
-                }
-            },
-            None => json!({
-                "program_id": program_id,
-                "proof_type": args.proof_type
-            }),
+                json!({ "input": [s] })
+            }
+            None => json!({ "input": [] }),
         };
 
-        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
-        let client = reqwest::blocking::Client::new();
-        let response = client
-            .post(&url)
-            .header(API_KEY_HEADER, api_key)
-            .json(&body)
-            .send()
-            .context("Failed to send proof generation request")?;
+        // Make API request using authenticated_post helper
+        let request = authenticated_post(&self.config, &url)?
+            .header("Content-Type", "application/json")
+            .body(body.to_string());
 
-        if response.status().is_success() {
-            let response_json: serde_json::Value = response.json()?;
-            let proof_id = response_json["id"]
-                .as_str()
-                .ok_or_eyre("Missing 'id' field in proof response")?
-                .to_string();
+        let response_json: Value = send_request_json(request, "Failed to generate proof")?;
+        let proof_id = response_json["id"].as_str().unwrap();
 
-            callback.on_success(&format!("Proof generation initiated ({})", proof_id));
-
-            Ok(proof_id)
-        } else {
-            let error_text = response
-                .text()
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            eyre::bail!("Failed to generate proof: {}", error_text);
-        }
+        callback.on_success(&format!("Proof generation initiated ({})", proof_id));
+        Ok(proof_id.to_string())
     }
 
     pub fn wait_for_proof_completion_base(
@@ -322,6 +312,8 @@ impl AxiomSdk {
         callback: &dyn ProgressCallback,
     ) -> Result<()> {
         use std::time::Duration;
+
+        let mut spinner_started = false;
 
         loop {
             let response = authenticated_get(
@@ -333,19 +325,16 @@ impl AxiomSdk {
 
             match proof_status.state.as_str() {
                 "Succeeded" => {
-                    callback.on_clear_line_and_reset();
-                    callback.on_success("Proof generation completed successfully!");
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Proof generation completed successfully!");
+                    } else {
+                        callback.on_success("Proof generation completed successfully!");
+                    }
 
                     callback.on_section("Proof Summary");
                     callback.on_field("Proof ID", &proof_status.id);
                     callback.on_field("Program ID", &proof_status.program_uuid);
-
-                    let proof_type_name = match proof_status.proof_type.as_str() {
-                        "stark" => "STARK",
-                        "evm" => "EVM",
-                        _ => &proof_status.proof_type,
-                    };
-                    callback.on_field("Proof Type", proof_type_name);
+                    callback.on_field("Proof Type", &proof_status.proof_type);
 
                     let proof_dir = format!(
                         "axiom-artifacts/program-{}/proofs",
@@ -358,7 +347,7 @@ impl AxiomSdk {
                         if self
                             .save_proof_to_path(
                                 &proof_status.id,
-                                &proof_status.proof_type,
+                                &proof_status.proof_type.parse()?,
                                 std::path::PathBuf::from(&proof_path),
                             )
                             .is_ok()
@@ -375,7 +364,7 @@ impl AxiomSdk {
                         if self
                             .save_proof_to_path(
                                 &proof_status.id,
-                                &proof_status.proof_type,
+                                &proof_status.proof_type.parse()?,
                                 std::path::PathBuf::from(&proof_path),
                             )
                             .is_ok()
@@ -413,22 +402,40 @@ impl AxiomSdk {
                     return Ok(());
                 }
                 "Failed" => {
-                    callback.on_clear_line_and_reset();
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
                     let error_msg = proof_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Proof generation failed: {}", error_msg);
                 }
                 "Queued" => {
-                    callback.on_status("Proof queued...");
+                    if !spinner_started {
+                        callback.on_progress_start("Proof queued", None);
+                        spinner_started = true;
+                    }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 "InProgress" => {
-                    callback.on_status("Generating proof...");
+                    if !spinner_started {
+                        callback.on_progress_start("Generating proof", None);
+                        spinner_started = true;
+                    } else {
+                        // Update message if we were previously in queued state
+                        callback.on_progress_update_message("Generating proof");
+                    }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    callback.on_status(&format!("Proof status: {}...", proof_status.state));
+                    let status_message = format!("Proof status: {}", proof_status.state);
+                    if !spinner_started {
+                        callback.on_progress_start(&status_message, None);
+                        spinner_started = true;
+                    } else {
+                        // Update message for unknown status
+                        callback.on_progress_update_message(&status_message);
+                    }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
             }

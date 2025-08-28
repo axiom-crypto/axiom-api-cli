@@ -50,7 +50,11 @@ impl ProgressCallback for CliProgressCallback {
 
     fn on_progress_start(&self, message: &str, total: Option<u64>) {
         let pb = if let Some(total_bytes) = total {
-            Formatter::create_upload_progress(total_bytes)
+            if message.contains("Downloading") || message.contains("download") {
+                Formatter::create_download_progress(total_bytes)
+            } else {
+                Formatter::create_upload_progress(total_bytes)
+            }
         } else {
             Formatter::create_spinner(message)
         };
@@ -60,6 +64,12 @@ impl ProgressCallback for CliProgressCallback {
     fn on_progress_update(&self, current: u64) {
         if let Some(pb) = self.progress_bar.lock().unwrap().as_ref() {
             pb.set_position(current);
+        }
+    }
+
+    fn on_progress_update_message(&self, message: &str) {
+        if let Some(pb) = self.progress_bar.lock().unwrap().as_ref() {
+            pb.set_message(message.to_string());
         }
     }
 

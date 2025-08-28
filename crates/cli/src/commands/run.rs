@@ -1,4 +1,4 @@
-use crate::formatting::Formatter;
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{AxiomSdk, run::RunSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
@@ -41,7 +41,8 @@ pub struct RunArgs {
 impl RunCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config);
+        let callback = CliProgressCallback::new();
+        let sdk = AxiomSdk::new(config).with_callback(callback);
 
         match self.command {
             Some(RunSubcommand::Status { execution_id }) => {
@@ -109,10 +110,8 @@ impl RunCmd {
         if let Some(public_values) = &status.public_values {
             if !public_values.is_null() {
                 Formatter::print_section("Public Values");
-                if let Ok(formatted) = serde_json::to_string_pretty(public_values) {
-                    for line in formatted.lines() {
-                        println!("  {}", line);
-                    }
+                if let Ok(compact) = serde_json::to_string(public_values) {
+                    println!("  {}", compact);
                 }
             }
         }

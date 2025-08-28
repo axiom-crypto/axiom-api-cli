@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{Write, copy},
+    io::{Read, Write, copy},
     path::PathBuf,
 };
 
@@ -37,24 +37,61 @@ pub struct PkDownloader {
 
 impl PkDownloader {
     pub fn download_pk(&self, output_path: &str) -> Result<()> {
-        std::fs::create_dir_all(output_path)?;
+        self.download_pk_with_callback(output_path, &crate::NoopCallback)
+    }
+
+    pub fn download_pk_with_callback(
+        &self,
+        output_path: &str,
+        callback: &dyn crate::ProgressCallback,
+    ) -> Result<()> {
+        let path = std::path::Path::new(output_path);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
 
         let client = Client::new();
 
-        let response = client
+        let mut response = client
             .get(&self.download_url)
             .send()
             .context("Failed to download proving keys")?;
 
         if response.status().is_success() {
+            let content_length = response.content_length();
+
+            if let Some(total) = content_length {
+                callback.on_progress_start("Downloading proving key", Some(total));
+            } else {
+                callback.on_progress_start("Downloading proving key", None);
+            }
+
             let mut file = File::create(output_path)?;
-            file.write_all(&response.bytes()?)?;
+            if content_length.is_some() {
+                let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
+                let mut downloaded = 0u64;
+
+                loop {
+                    let bytes_read = response.read(&mut buffer)?;
+                    if bytes_read == 0 {
+                        break;
+                    }
+                    file.write_all(&buffer[..bytes_read])?;
+                    downloaded += bytes_read as u64;
+                    callback.on_progress_update(downloaded);
+                }
+            } else {
+                copy(&mut response, &mut file)?;
+            }
+            callback.on_progress_finish("✓ Key downloaded successfully");
             Ok(())
         } else if response.status().is_client_error() {
+            callback.on_progress_finish("");
             let status = response.status();
             let error_text = response.text()?;
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
+            callback.on_progress_finish("");
             Err(eyre::eyre!(
                 "Config status request failed with status: {}",
                 response.status()
@@ -99,16 +136,16 @@ impl ConfigSdk for AxiomSdk {
         self.callback.on_info(&format!(
             "Getting {key_type} proving key for config ID: {config_id}"
         ));
-        let (key_type, p_or_v) = key_type.split_once('_').unwrap();
+        let (key_type_part, p_or_v) = key_type.split_once('_').unwrap();
         let url = if p_or_v == "pk" {
             format!(
                 "{}/configs/{}/pk/{}",
-                self.config.api_url, config_id, key_type
+                self.config.api_url, config_id, key_type_part
             )
         } else if p_or_v == "vk" {
             format!(
                 "{}/configs/{}/vk/{}",
-                self.config.api_url, config_id, key_type,
+                self.config.api_url, config_id, key_type_part,
             )
         } else {
             return Err(eyre::eyre!("Invalid key type: {}", key_type));
@@ -125,8 +162,14 @@ impl ConfigSdk for AxiomSdk {
         // Check if the request was successful
         if response.status().is_success() {
             // Parse the response to get the download URL
-            let response_json: Value = response.json()?;
-            let downloader = serde_json::from_value(response_json)?;
+            let response_json: Value = response
+                .json()
+                .context("Failed to parse proving key response as JSON")?;
+            let downloader: PkDownloader =
+                serde_json::from_value(response_json.clone()).context(format!(
+                    "Failed to deserialize proving key response. Got: {}",
+                    response_json
+                ))?;
             Ok(downloader)
         } else if response.status().is_client_error() {
             let status = response.status();
