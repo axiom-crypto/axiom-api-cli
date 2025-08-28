@@ -125,7 +125,8 @@ impl ProveSdk for AxiomSdk {
 
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &output_path, "Failed to download proof")?;
-        self.callback.on_success(&format!("{}", output_path.display()));
+        self.callback
+            .on_success(&format!("{}", output_path.display()));
         Ok(())
     }
 
@@ -147,7 +148,8 @@ impl ProveSdk for AxiomSdk {
         let output_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &output_path, "Failed to download proof logs")?;
-        self.callback.on_success(&format!("{}", output_path.display()));
+        self.callback
+            .on_success(&format!("{}", output_path.display()));
         Ok(())
     }
 
@@ -186,6 +188,8 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
+            self.callback
+                .on_success(&format!("{}", output_path.display()));
             Ok(())
         } else {
             let status = response.status();
@@ -221,6 +225,8 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
+            self.callback
+                .on_success(&format!("{}", output_path.display()));
             Ok(())
         } else {
             let status = response.status();
@@ -279,7 +285,9 @@ impl AxiomSdk {
             Some(Input::HexBytes(s)) => {
                 let trimmed = s.trim_start_matches("0x");
                 if !trimmed.starts_with("01") && !trimmed.starts_with("02") {
-                    eyre::bail!("Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs");
+                    eyre::bail!(
+                        "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
+                    );
                 }
                 json!({ "input": [s] })
             }
