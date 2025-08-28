@@ -449,7 +449,7 @@ impl AxiomSdk {
         // Create tar archive of the current directory
         callback.on_info("Creating project archive...");
         let tar_file = create_tar_archive(
-            &git_root,
+            program_dir.as_ref(),
             args.keep_tarball.unwrap_or(false),
             &exclude_patterns,
             &include_dirs,
@@ -681,12 +681,12 @@ fn cargo_command(cmd: &str, args: &[&str]) -> std::process::Command {
 }
 
 fn create_tar_archive(
-    git_root: impl AsRef<Path>,
+    program_dir: impl AsRef<Path>,
     keep_tarball: bool,
     exclude_patterns: &[String],
     include_dirs: &[String],
 ) -> Result<TarFile> {
-    let tar_path = git_root.as_ref().join("program.tar.gz");
+    let tar_path = program_dir.as_ref().join("program.tar.gz");
     let tar_file = File::create(&tar_path)?;
     let tar = TarFile {
         path: tar_path.to_string_lossy().to_string(),
@@ -695,10 +695,11 @@ fn create_tar_archive(
     let enc = GzEncoder::new(tar_file, Compression::default());
     let mut builder = Builder::new(enc);
 
-    // Use the provided git root directory
+    // Find the git root directory
+    let git_root =
+        find_git_root(program_dir.as_ref()).context("Failed to find git root directory")?;
     // Get the git root directory name
     let dir_name = git_root
-        .as_ref()
         .file_name()
         .ok_or_eyre("Failed to get git root directory name")?
         .to_string_lossy()
@@ -707,7 +708,7 @@ fn create_tar_archive(
     let original_dir = std::env::current_dir()?;
 
     // Pre-fetch dependencies to pull the private dependencies in the axiom_cargo_home (set it as CARGO_HOME) directory
-    let cargo_workspace_root = find_cargo_workspace_root(git_root.as_ref())
+    let cargo_workspace_root = find_cargo_workspace_root(program_dir.as_ref())
         .context("Failed to find cargo workspace root")?;
 
     std::env::set_current_dir(&cargo_workspace_root)?;
@@ -763,7 +764,7 @@ fn create_tar_archive(
         eyre::bail!("Failed to fetch cargo dependencies");
     }
 
-    std::env::set_current_dir(git_root.as_ref())?;
+    std::env::set_current_dir(&git_root)?;
     // Get list of files tracked by git
     let output = std::process::Command::new("git")
         .args(["ls-files"])
