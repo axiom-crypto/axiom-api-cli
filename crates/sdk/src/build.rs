@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, path::Path};
+use std::{fs::File, io::{Read, Write}, path::Path};
 
 use eyre::{Context, OptionExt, Result};
 use flate2::{Compression, write::GzEncoder};
@@ -160,25 +160,44 @@ impl BuildSdk for AxiomSdk {
             let mut file = File::create(&filename)
                 .context(format!("Failed to create output file: {filename}"))?;
 
-            // Stream the response directly to the file instead of loading into memory
+            let content_length = response.content_length();
             let mut response = response;
-            std::io::copy(&mut response, &mut file).with_context(|| {
-                format!(
-                    "Failed to stream response body to file for program_type '{}', program_id '{}'",
-                    program_type, program_id
-                )
-            })?;
+            
+            if let Some(total) = content_length {
+                self.callback.on_progress_start(&format!("Downloading {}", program_type), Some(total));
+            } else {
+                self.callback.on_progress_start(&format!("Downloading {}", program_type), None);
+            }
+            
+            if content_length.is_some() {
+                
+                let mut buffer = vec![0u8; 1024 * 1024];
+                let mut downloaded = 0u64;
+                
+                loop {
+                    let bytes_read = response.read(&mut buffer)?;
+                    if bytes_read == 0 { break; }
+                    file.write_all(&buffer[..bytes_read])?;
+                    downloaded += bytes_read as u64;
+                    self.callback.on_progress_update(downloaded);
+                }
+            } else {
+                std::io::copy(&mut response, &mut file)?;
+            }
 
+            self.callback.on_progress_finish("✓ Download complete");
             self.callback.on_success(&filename.to_string());
             Ok(())
         } else if status.is_client_error() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
+            self.callback.on_progress_finish("");
             self.callback
                 .on_error(&format!("Client error response: {}", error_text));
             Err(eyre::eyre!("Client error ({}): {}", status, error_text))
         } else {
+            self.callback.on_progress_finish("");
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unable to read error response".to_string());
