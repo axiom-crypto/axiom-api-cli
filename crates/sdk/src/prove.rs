@@ -8,8 +8,8 @@ use serde_json::{Value, json};
 
 use crate::validate_input_json;
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
-    authenticated_post, calculate_duration, download_file, send_request_json,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, add_cli_version_header,
+    authenticated_get, authenticated_post, calculate_duration, download_file, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -20,14 +20,14 @@ pub trait ProveSdk {
     fn get_generated_proof(
         &self,
         proof_id: &str,
-        proof_type: &str,
+        proof_type: &ProofType,
         output: Option<PathBuf>,
     ) -> Result<()>;
     fn get_proof_logs(&self, proof_id: &str) -> Result<()>;
     fn save_proof_to_path(
         &self,
         proof_id: &str,
-        proof_type: &str,
+        proof_type: &ProofType,
         output_path: PathBuf,
     ) -> Result<()>;
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
@@ -42,7 +42,7 @@ pub struct ProveArgs {
     /// Input data for the proof (file path or hex string)
     pub input: Option<Input>,
     /// The type of proof to generate (stark or evm)
-    pub proof_type: Option<String>,
+    pub proof_type: Option<ProofType>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -97,7 +97,7 @@ impl ProveSdk for AxiomSdk {
     fn get_generated_proof(
         &self,
         proof_id: &str,
-        proof_type: &str,
+        proof_type: &ProofType,
         output: Option<PathBuf>,
     ) -> Result<()> {
         // First get proof status to extract program_uuid
@@ -156,12 +156,12 @@ impl ProveSdk for AxiomSdk {
     fn save_proof_to_path(
         &self,
         proof_id: &str,
-        proof_type: &str,
+        proof_type: &ProofType,
         output_path: PathBuf,
     ) -> Result<()> {
         let url = format!(
-            "{}/proofs/{}/proof/{}",
-            self.config.api_url, proof_id, proof_type
+            "{}/proofs/{proof_id}/proof/{proof_type}",
+            self.config.api_url,
         );
 
         let client = Client::new();
@@ -259,11 +259,11 @@ impl AxiomSdk {
             .program_id
             .ok_or_eyre("Program ID is required. Use --program-id to specify.")?;
 
-        let proof_type = args.proof_type.unwrap_or_else(|| "stark".to_string());
+        let proof_type = args.proof_type.unwrap_or(ProofType::Stark);
 
         callback.on_header("Generating Proof");
         callback.on_field("Program ID", &program_id);
-        callback.on_field("Proof Type", &proof_type.to_uppercase());
+        callback.on_field("Proof Type", &proof_type.to_string().to_uppercase());
 
         let url = format!(
             "{}/proofs?program_id={program_id}&proof_type={proof_type}",
@@ -334,13 +334,7 @@ impl AxiomSdk {
                     callback.on_section("Proof Summary");
                     callback.on_field("Proof ID", &proof_status.id);
                     callback.on_field("Program ID", &proof_status.program_uuid);
-
-                    let proof_type_name = match proof_status.proof_type.as_str() {
-                        "stark" => "STARK",
-                        "evm" => "EVM",
-                        _ => &proof_status.proof_type,
-                    };
-                    callback.on_field("Proof Type", proof_type_name);
+                    callback.on_field("Proof Type", &proof_status.proof_type);
 
                     let proof_dir = format!(
                         "axiom-artifacts/program-{}/proofs",
@@ -353,7 +347,7 @@ impl AxiomSdk {
                         if self
                             .save_proof_to_path(
                                 &proof_status.id,
-                                &proof_status.proof_type,
+                                &proof_status.proof_type.parse()?,
                                 std::path::PathBuf::from(&proof_path),
                             )
                             .is_ok()
@@ -370,7 +364,7 @@ impl AxiomSdk {
                         if self
                             .save_proof_to_path(
                                 &proof_status.id,
-                                &proof_status.proof_type,
+                                &proof_status.proof_type.parse()?,
                                 std::path::PathBuf::from(&proof_path),
                             )
                             .is_ok()

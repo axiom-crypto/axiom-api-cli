@@ -17,6 +17,34 @@ pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 pub const CLI_VERSION_HEADER: &str = "Axiom-CLI-Version";
 static CLI_VERSION: OnceLock<String> = OnceLock::new();
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProofType {
+    Evm,
+    Stark,
+}
+
+impl std::fmt::Display for ProofType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProofType::Evm => write!(f, "evm"),
+            ProofType::Stark => write!(f, "stark"),
+        }
+    }
+}
+
+impl std::str::FromStr for ProofType {
+    type Err = eyre::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "evm" => Ok(ProofType::Evm),
+            "stark" => Ok(ProofType::Stark),
+            _ => eyre::bail!("Invalid proof type: {s}. Must be 'evm' or 'stark'"),
+        }
+    }
+}
+
 pub const DEFAULT_CONFIG_ID: &str = "3c866d43-f693-4eba-9e0f-473f60858b73";
 pub const STAGING_DEFAULT_CONFIG_ID: &str = "0d20f5cc-f3f1-4e20-b90b-2f1c5b5bf75d";
 

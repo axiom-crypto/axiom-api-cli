@@ -1,4 +1,8 @@
-use std::{fs::File, io::{Read, Write}, path::Path};
+use std::{
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
 
 use eyre::{Context, OptionExt, Result};
 use flate2::{Compression, write::GzEncoder};
@@ -162,21 +166,24 @@ impl BuildSdk for AxiomSdk {
 
             let content_length = response.content_length();
             let mut response = response;
-            
+
             if let Some(total) = content_length {
-                self.callback.on_progress_start(&format!("Downloading {}", program_type), Some(total));
+                self.callback
+                    .on_progress_start(&format!("Downloading {}", program_type), Some(total));
             } else {
-                self.callback.on_progress_start(&format!("Downloading {}", program_type), None);
+                self.callback
+                    .on_progress_start(&format!("Downloading {}", program_type), None);
             }
-            
+
             if content_length.is_some() {
-                
                 let mut buffer = vec![0u8; 1024 * 1024];
                 let mut downloaded = 0u64;
-                
+
                 loop {
                     let bytes_read = response.read(&mut buffer)?;
-                    if bytes_read == 0 { break; }
+                    if bytes_read == 0 {
+                        break;
+                    }
                     file.write_all(&buffer[..bytes_read])?;
                     downloaded += bytes_read as u64;
                     self.callback.on_progress_update(downloaded);

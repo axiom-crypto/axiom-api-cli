@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{formatting::Formatter, progress::CliProgressCallback};
-use axiom_sdk::{AxiomSdk, prove::ProveSdk};
+use axiom_sdk::{AxiomSdk, ProofType, prove::ProveSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
 use comfy_table;
@@ -37,8 +37,8 @@ enum ProveSubcommand {
         proof_id: String,
 
         /// The type of proof artifact to download (stark, or evm)
-        #[clap(long = "type", value_parser = ["stark", "evm"])]
-        proof_type: String,
+        #[clap(long = "type")]
+        proof_type: ProofType,
 
         /// Output file path (defaults to proof_id-type.json)
         #[clap(long, value_name = "FILE")]
@@ -64,8 +64,8 @@ pub struct ProveArgs {
     input: Option<Input>,
 
     /// The type of proof to generate (stark or evm)
-    #[clap(long = "type", value_parser = ["stark", "evm"], default_value = "stark")]
-    proof_type: String,
+    #[clap(long = "type", default_value = "stark")]
+    proof_type: ProofType,
 
     /// Wait for the proof to complete and download artifacts
     #[clap(long)]

@@ -1,10 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{formatting::Formatter, progress::CliProgressCallback};
-use axiom_sdk::{
-    AxiomSdk,
-    verify::{ProofType, VerifySdk},
-};
+use axiom_sdk::{AxiomSdk, ProofType, verify::VerifySdk};
 use clap::{Args, Subcommand};
 use eyre::Result;
 
