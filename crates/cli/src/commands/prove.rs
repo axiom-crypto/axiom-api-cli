@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::formatting::Formatter;
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{AxiomSdk, prove::ProveSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
@@ -75,7 +75,8 @@ pub struct ProveArgs {
 impl ProveCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config.clone());
+        let callback = CliProgressCallback::new();
+        let sdk = AxiomSdk::new(config.clone()).with_callback(callback);
 
         match self.command {
             Some(ProveSubcommand::Status { proof_id }) => {

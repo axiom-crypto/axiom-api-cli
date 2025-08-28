@@ -1,3 +1,4 @@
+use crate::progress::CliProgressCallback;
 use axiom_sdk::{AxiomSdk, projects::ProjectSdk};
 use clap::{Args, Subcommand};
 use comfy_table::Table;
@@ -57,7 +58,8 @@ enum ProjectsSubcommand {
 impl ProjectsCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config);
+        let callback = CliProgressCallback::new();
+        let sdk = AxiomSdk::new(config).with_callback(callback);
 
         match self.command {
             ProjectsSubcommand::List { page, page_size } => {

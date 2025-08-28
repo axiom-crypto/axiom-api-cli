@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::formatting::Formatter;
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{
     AxiomSdk,
     verify::{ProofType, VerifySdk},
@@ -59,7 +59,8 @@ enum VerifySubcommand {
 impl VerifyCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config);
+        let callback = CliProgressCallback::new();
+        let sdk = AxiomSdk::new(config).with_callback(callback);
 
         match self.command {
             VerifySubcommand::Evm {
