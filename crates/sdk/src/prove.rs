@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use crate::validate_input_json;
 use crate::{
     API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
-    calculate_duration, download_file, send_request_json,
+    authenticated_post, calculate_duration, download_file, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -125,6 +125,7 @@ impl ProveSdk for AxiomSdk {
 
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &output_path, "Failed to download proof")?;
+        self.callback.on_success(&format!("{}", output_path.display()));
         Ok(())
     }
 
@@ -146,6 +147,7 @@ impl ProveSdk for AxiomSdk {
         let output_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
         let request = authenticated_get(&self.config, &url)?;
         download_file(request, &output_path, "Failed to download proof logs")?;
+        self.callback.on_success(&format!("{}", output_path.display()));
         Ok(())
     }
 
@@ -246,74 +248,54 @@ impl AxiomSdk {
         args: ProveArgs,
         callback: &dyn ProgressCallback,
     ) -> Result<String> {
-        let program_id = args.program_id;
+        // Get the program_id from args, return error if not provided
+        let program_id = args
+            .program_id
+            .ok_or_eyre("Program ID is required. Use --program-id to specify.")?;
+
+        let proof_type = args.proof_type.unwrap_or_else(|| "stark".to_string());
 
         callback.on_header("Generating Proof");
-        callback.on_field("Program ID", program_id.as_deref().unwrap_or("N/A"));
-        if let Some(ref proof_type) = args.proof_type {
-            callback.on_field("Proof Type", proof_type);
-        }
+        callback.on_field("Program ID", &program_id);
+        callback.on_field("Proof Type", &proof_type.to_uppercase());
 
-        if let Some(Input::FilePath(path)) = &args.input {
-            let file_content = std::fs::read_to_string(path)
-                .with_context(|| format!("Failed to read input file: {:?}", path))?;
-            let input_json: serde_json::Value = serde_json::from_str(&file_content)
-                .with_context(|| format!("Failed to parse input JSON from file: {:?}", path))?;
-            validate_input_json(&input_json)?;
-        }
+        let url = format!(
+            "{}/proofs?program_id={program_id}&proof_type={proof_type}",
+            self.config.api_url
+        );
 
-        let url = format!("{}/proofs", self.config.api_url);
-
-        let body = match args.input {
-            Some(input) => match input {
-                Input::FilePath(path) => {
-                    let file_content = std::fs::read_to_string(&path)?;
-                    let input_json: serde_json::Value = serde_json::from_str(&file_content)?;
-                    json!({
-                        "program_id": program_id,
-                        "input": input_json,
-                        "proof_type": args.proof_type
-                    })
+        // Create the request body based on input
+        let body = match &args.input {
+            Some(Input::FilePath(path)) => {
+                let file_content = fs::read_to_string(path)
+                    .context(format!("Failed to read input file: {}", path.display()))?;
+                let input_json = serde_json::from_str(&file_content).context(format!(
+                    "Failed to parse input file as JSON: {}",
+                    path.display()
+                ))?;
+                validate_input_json(&input_json)?;
+                input_json
+            }
+            Some(Input::HexBytes(s)) => {
+                let trimmed = s.trim_start_matches("0x");
+                if !trimmed.starts_with("01") && !trimmed.starts_with("02") {
+                    eyre::bail!("Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs");
                 }
-                Input::HexBytes(hex_bytes) => {
-                    json!({
-                        "program_id": program_id,
-                        "input": hex_bytes,
-                        "proof_type": args.proof_type
-                    })
-                }
-            },
-            None => json!({
-                "program_id": program_id,
-                "proof_type": args.proof_type
-            }),
+                json!({ "input": [s] })
+            }
+            None => json!({ "input": [] }),
         };
 
-        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
-        let client = reqwest::blocking::Client::new();
-        let response = client
-            .post(&url)
-            .header(API_KEY_HEADER, api_key)
-            .json(&body)
-            .send()
-            .context("Failed to send proof generation request")?;
+        // Make API request using authenticated_post helper
+        let request = authenticated_post(&self.config, &url)?
+            .header("Content-Type", "application/json")
+            .body(body.to_string());
 
-        if response.status().is_success() {
-            let response_json: serde_json::Value = response.json()?;
-            let proof_id = response_json["id"]
-                .as_str()
-                .ok_or_eyre("Missing 'id' field in proof response")?
-                .to_string();
+        let response_json: Value = send_request_json(request, "Failed to generate proof")?;
+        let proof_id = response_json["id"].as_str().unwrap();
 
-            callback.on_success(&format!("Proof generation initiated ({})", proof_id));
-
-            Ok(proof_id)
-        } else {
-            let error_text = response
-                .text()
-                .unwrap_or_else(|_| "Unknown error".to_string());
-            eyre::bail!("Failed to generate proof: {}", error_text);
-        }
+        callback.on_success(&format!("Proof generation initiated ({})", proof_id));
+        Ok(proof_id.to_string())
     }
 
     pub fn wait_for_proof_completion_base(
