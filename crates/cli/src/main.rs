@@ -8,6 +8,8 @@ use eyre::Result;
 use std::{fs, path::PathBuf};
 
 mod commands;
+mod formatting;
+mod progress;
 
 use commands::{
     BuildCmd, ConfigCmd, DownloadKeysCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd,

@@ -1,3 +1,4 @@
+use crate::formatting::Formatter;
 use axiom_sdk::{
     AxiomSdk,
     build::{BuildSdk, ConfigSource},
@@ -146,6 +147,9 @@ impl BuildCmd {
                     include_dirs: self.build_args.include_dirs,
                     project_id,
                 };
+                use crate::progress::CliProgressCallback;
+                let callback = CliProgressCallback::new();
+                let sdk = sdk.with_callback(callback);
                 let program_id = sdk.register_new_program(&program_dir, args)?;
 
                 if self.build_args.wait {
@@ -161,8 +165,6 @@ impl BuildCmd {
     }
 
     fn print_build_status(status: &axiom_sdk::build::BuildStatus) {
-        use axiom_sdk::formatting::Formatter;
-
         Formatter::print_section("Build Status");
         Formatter::print_field("ID", &status.id);
         Formatter::print_field("Name", &status.name);

@@ -1,3 +1,4 @@
+use crate::formatting::Formatter;
 use axiom_sdk::{AxiomSdk, run::RunSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
@@ -49,6 +50,9 @@ impl RunCmd {
                 Ok(())
             }
             None => {
+                use crate::progress::CliProgressCallback;
+                let callback = CliProgressCallback::new();
+                let sdk = sdk.with_callback(callback);
                 let args = axiom_sdk::run::RunArgs {
                     program_id: self.run_args.program_id,
                     input: self.run_args.input,
@@ -70,8 +74,6 @@ impl RunCmd {
     }
 
     fn print_execution_status(status: &axiom_sdk::run::ExecutionStatus) {
-        use axiom_sdk::formatting::Formatter;
-
         Formatter::print_section("Execution Status");
         Formatter::print_field("ID", &status.id);
         Formatter::print_field("Status", &status.status);

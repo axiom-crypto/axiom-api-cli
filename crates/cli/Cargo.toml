@@ -18,6 +18,9 @@ clap_complete = "4.5"
 eyre = "0.6.12"
 dotenvy = "0.15.7"
 toml_edit = { workspace = true }
+console = "0.16.0"
+indicatif = "0.18"
+chrono = { version = "0.4", features = ["serde"] }
 
 [build-dependencies]
 cargo_metadata = { workspace = true }

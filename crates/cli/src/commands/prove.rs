@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::formatting::Formatter;
 use axiom_sdk::{AxiomSdk, prove::ProveSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
@@ -117,6 +118,9 @@ impl ProveCmd {
                 Ok(())
             }
             None => {
+                use crate::progress::CliProgressCallback;
+                let callback = CliProgressCallback::new();
+                let sdk = sdk.with_callback(callback);
                 let args = axiom_sdk::prove::ProveArgs {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
@@ -137,8 +141,6 @@ impl ProveCmd {
     }
 
     fn print_proof_status(status: &axiom_sdk::prove::ProofStatus) {
-        use axiom_sdk::formatting::Formatter;
-
         Formatter::print_section("Proof Status");
         Formatter::print_field("ID", &status.id);
         Formatter::print_field("State", &status.state);

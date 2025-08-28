@@ -47,7 +47,6 @@ impl PkDownloader {
             .context("Failed to download proving keys")?;
 
         if response.status().is_success() {
-            println!("Proving keys downloaded successfully");
             let mut file = File::create(output_path)?;
             file.write_all(&response.bytes()?)?;
             Ok(())
@@ -111,8 +110,6 @@ impl ConfigSdk for AxiomSdk {
             return Err(eyre::eyre!("Invalid key type: {}", key_type));
         };
 
-        println!("Getting {key_type} proving key for config ID: {config_id}");
-
         // Make the GET request
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
@@ -162,8 +159,6 @@ fn download_artifact(
     let config_id = get_config_id(config_id, config)?;
     let url = format!("{}/configs/{}/{}", config.api_url, config_id, artifact_type);
 
-    println!("Downloading {artifact_type} for config ID: {config_id}");
-
     // Determine output path
     let output_path = match output {
         Some(path) => path,
@@ -201,7 +196,6 @@ fn download_artifact(
         copy(&mut response.bytes()?.as_ref(), &mut file)
             .context("Failed to write response to file")?;
 
-        println!("Successfully downloaded to {output_path:?}");
         Ok(())
     } else if response.status().is_client_error() {
         let status = response.status();

@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 pub mod build;
 pub mod config;
-pub mod formatting;
 pub mod projects;
 pub mod prove;
 pub mod run;
@@ -21,14 +20,125 @@ static CLI_VERSION: OnceLock<String> = OnceLock::new();
 pub const DEFAULT_CONFIG_ID: &str = "3c866d43-f693-4eba-9e0f-473f60858b73";
 pub const STAGING_DEFAULT_CONFIG_ID: &str = "0d20f5cc-f3f1-4e20-b90b-2f1c5b5bf75d";
 
-#[derive(Default)]
+/// Trait for handling progress reporting and user feedback during SDK operations.
+///
+/// Implementations can provide custom behavior for different types of progress
+/// events, status updates, and user interface elements. This allows the SDK to
+/// remain UI-agnostic while still providing rich feedback to users.
+///
+/// # Examples
+///
+/// ```
+/// use axiom_sdk::{ProgressCallback, NoopCallback};
+///
+/// // Use the no-op callback for silent operation
+/// let callback = NoopCallback;
+///
+/// // Or implement your own callback for custom behavior
+/// struct MyCallback;
+/// impl ProgressCallback for MyCallback {
+///     fn on_success(&self, text: &str) {
+///         println!("✓ {}", text);
+///     }
+///     fn on_error(&self, text: &str) {
+///         eprintln!("✗ {}", text);
+///     }
+///     // ... implement other methods as needed
+/// }
+/// ```
+pub trait ProgressCallback {
+    /// Called to display a header/title for a new operation section
+    fn on_header(&self, text: &str);
+    /// Called when an operation completes successfully
+    fn on_success(&self, text: &str);
+    /// Called to display informational messages
+    fn on_info(&self, text: &str);
+    /// Called to display warning messages
+    fn on_warning(&self, text: &str);
+    /// Called when an error occurs
+    fn on_error(&self, text: &str);
+    /// Called to display a section divider/header
+    fn on_section(&self, title: &str);
+    /// Called to display a field name-value pair
+    fn on_field(&self, key: &str, value: &str);
+    /// Called to display ongoing status updates (e.g., "Processing...")
+    fn on_status(&self, text: &str);
+    /// Called when starting a progress operation that may show a progress bar
+    ///
+    /// # Parameters
+    /// * `message` - Description of the operation being performed
+    /// * `total` - Total number of units if known (for progress bars), None for spinners
+    fn on_progress_start(&self, message: &str, total: Option<u64>);
+    /// Called to update progress with the current completion count
+    fn on_progress_update(&self, current: u64);
+    /// Called when finishing a progress operation
+    fn on_progress_finish(&self, message: &str);
+    /// Called to clear the current line (for status updates)
+    fn on_clear_line(&self);
+    /// Called to clear the current line and reset cursor position
+    fn on_clear_line_and_reset(&self);
+}
+
+/// A no-op implementation of [`ProgressCallback`] that ignores all events.
+///
+/// This is useful for headless or automated environments where you want to
+/// suppress all progress reporting and user interface updates.
+///
+/// # Examples
+///
+/// ```
+/// use axiom_sdk::{AxiomSdk, NoopCallback};
+///
+/// let config = axiom_sdk::load_config().unwrap();
+/// let sdk = AxiomSdk::new(config);
+/// let callback = NoopCallback;
+///
+/// // All progress events will be silently ignored
+/// // let result = sdk.some_operation(&callback);
+/// ```
+pub struct NoopCallback;
+
+impl ProgressCallback for NoopCallback {
+    fn on_header(&self, _text: &str) {}
+    fn on_success(&self, _text: &str) {}
+    fn on_info(&self, _text: &str) {}
+    fn on_warning(&self, _text: &str) {}
+    fn on_error(&self, _text: &str) {}
+    fn on_section(&self, _title: &str) {}
+    fn on_field(&self, _key: &str, _value: &str) {}
+    fn on_status(&self, _text: &str) {}
+    fn on_progress_start(&self, _message: &str, _total: Option<u64>) {}
+    fn on_progress_update(&self, _current: u64) {}
+    fn on_progress_finish(&self, _message: &str) {}
+    fn on_clear_line(&self) {}
+    fn on_clear_line_and_reset(&self) {}
+}
+
 pub struct AxiomSdk {
     pub config: AxiomConfig,
+    callback: Box<dyn ProgressCallback>,
 }
 
 impl AxiomSdk {
     pub fn new(config: AxiomConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            callback: Box::new(NoopCallback),
+        }
+    }
+
+    pub fn with_callback<T: ProgressCallback + 'static>(mut self, callback: T) -> Self {
+        self.callback = Box::new(callback);
+        self
+    }
+}
+
+impl Default for AxiomSdk {
+    fn default() -> Self {
+        Self {
+            config: AxiomConfig::default(),
+            callback: Box::new(NoopCallback),
+        }
     }
 }
 
@@ -107,6 +217,36 @@ pub fn save_config(config: &AxiomConfig) -> Result<()> {
     Ok(())
 }
 
+/// Validates input JSON format for OpenVM programs.
+///
+/// Ensures that the input follows the expected format with hex strings
+/// that start with the proper prefixes for bytes (01) or field elements (02).
+pub fn validate_input_json(json: &serde_json::Value) -> Result<(), eyre::Error> {
+    use cargo_openvm::input::is_valid_hex_string;
+
+    json["input"]
+        .as_array()
+        .ok_or_eyre("Input must be an array under 'input' key")?
+        .iter()
+        .try_for_each(|inner| {
+            inner
+                .as_str()
+                .ok_or_eyre("Each value must be a hex string")
+                .and_then(|s| {
+                    if !is_valid_hex_string(s) {
+                        eyre::bail!("Invalid hex string");
+                    }
+                    if !s.trim_start_matches("0x").starts_with("01")
+                        && !s.trim_start_matches("0x").starts_with("02")
+                    {
+                        eyre::bail!("Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs");
+                    }
+                    Ok(())
+                })
+        })?;
+    Ok(())
+}
+
 pub fn get_api_key() -> Result<String> {
     let config = load_config()?;
     config
@@ -125,7 +265,6 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
         set_config_id(id)?;
         Ok(id.to_string())
     } else if let Some(id) = &config.config_id {
-        println!("using cached config ID: {id}");
         Ok(id.clone())
     } else {
         Err(eyre::eyre!("No config ID provided"))
@@ -203,6 +342,50 @@ pub fn authenticated_put(config: &AxiomConfig, url: &str) -> Result<RequestBuild
     Ok(add_cli_version_header(client.put(url)).header(API_KEY_HEADER, api_key))
 }
 
+/// Calculate a human-readable duration between two RFC3339 timestamps.
+///
+/// Returns a formatted string like "5s", "2m 30s", or "1h 15m 30s".
+///
+/// # Arguments
+/// * `start` - RFC3339 timestamp string (e.g., "2023-01-01T10:00:00Z")
+/// * `end` - RFC3339 timestamp string (e.g., "2023-01-01T10:05:30Z")
+///
+/// # Returns
+/// * `Ok(String)` - Human-readable duration (e.g., "5m 30s")
+/// * `Err(String)` - Error message if timestamps are invalid
+///
+/// # Examples
+/// ```
+/// use axiom_sdk::calculate_duration;
+///
+/// let start = "2023-01-01T10:00:00Z";
+/// let end = "2023-01-01T10:05:30Z";
+/// let duration = calculate_duration(start, end).unwrap();
+/// assert_eq!(duration, "5m 30s");
+/// ```
+pub fn calculate_duration(start: &str, end: &str) -> Result<String, String> {
+    use chrono::DateTime;
+
+    let start_time = DateTime::parse_from_rfc3339(start).map_err(|_| "Invalid start timestamp")?;
+    let end_time = DateTime::parse_from_rfc3339(end).map_err(|_| "Invalid end timestamp")?;
+
+    let duration = end_time.signed_duration_since(start_time);
+    let total_seconds = duration.num_seconds();
+
+    if total_seconds < 60 {
+        Ok(format!("{}s", total_seconds))
+    } else if total_seconds < 3600 {
+        let minutes = total_seconds / 60;
+        let seconds = total_seconds % 60;
+        Ok(format!("{}m {}s", minutes, seconds))
+    } else {
+        let hours = total_seconds / 3600;
+        let minutes = (total_seconds % 3600) / 60;
+        let seconds = total_seconds % 60;
+        Ok(format!("{}h {}m {}s", hours, minutes, seconds))
+    }
+}
+
 pub fn send_request_json<T: DeserializeOwned>(
     request_builder: RequestBuilder,
     error_context: &str,
@@ -273,7 +456,6 @@ pub fn download_file(
         std::io::copy(&mut content.as_ref(), &mut file)
             .context("Failed to write response to file")?;
 
-        println!("Successfully downloaded to: {}", output_path.display());
         Ok(())
     } else if response.status().is_client_error() {
         let status = response.status();
@@ -383,5 +565,32 @@ mod tests {
         assert_eq!(config.api_key, Some("test-key".to_string()));
         assert_eq!(config.config_id, Some("test-config".to_string()));
         assert!(config.last_project_id.is_none());
+    }
+
+    #[test]
+    fn test_duration_calculation() {
+        let start = "2023-01-01T12:00:00Z";
+        let end = "2023-01-01T12:01:30Z";
+
+        let result = calculate_duration(start, end).unwrap();
+        assert_eq!(result, "1m 30s");
+    }
+
+    #[test]
+    fn test_duration_calculation_seconds_only() {
+        let start = "2023-01-01T12:00:00Z";
+        let end = "2023-01-01T12:00:45Z";
+
+        let result = calculate_duration(start, end).unwrap();
+        assert_eq!(result, "45s");
+    }
+
+    #[test]
+    fn test_duration_calculation_hours() {
+        let start = "2023-01-01T12:00:00Z";
+        let end = "2023-01-01T14:15:30Z";
+
+        let result = calculate_duration(start, end).unwrap();
+        assert_eq!(result, "2h 15m 30s");
     }
 }

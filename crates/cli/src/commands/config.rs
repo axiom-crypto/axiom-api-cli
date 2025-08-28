@@ -62,7 +62,7 @@ impl ConfigCmd {
     }
 
     fn print_config_status(metadata: &axiom_sdk::config::VmConfigMetadata) {
-        use axiom_sdk::formatting::Formatter;
+        use crate::formatting::Formatter;
 
         Formatter::print_section("Config Status");
         Formatter::print_field("ID", &metadata.id);

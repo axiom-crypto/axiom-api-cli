@@ -26,5 +26,3 @@ rustc_version = "0.4.0"
 url = "2.5"
 scopeguard = "1.2"
 chrono = { version = "0.4", features = ["serde"] }
-console = "0.16.0"
-indicatif = "0.18"
