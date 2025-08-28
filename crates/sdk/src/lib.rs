@@ -178,7 +178,6 @@ pub struct AxiomConfig {
     pub api_url: String,
     pub api_key: Option<String>,
     pub config_id: Option<String>,
-    pub last_project_id: Option<String>,
 }
 
 impl AxiomConfig {
@@ -187,7 +186,6 @@ impl AxiomConfig {
             api_url,
             api_key,
             config_id,
-            last_project_id: None,
         }
     }
 }
@@ -198,7 +196,6 @@ impl Default for AxiomConfig {
             api_url: "https://api.axiom.xyz/v1".to_string(),
             api_key: None,
             config_id: Some(DEFAULT_CONFIG_ID.to_string()),
-            last_project_id: None,
         }
     }
 }
@@ -299,22 +296,6 @@ pub fn get_config_id(args_config_id: Option<&str>, config: &AxiomConfig) -> Resu
         Ok(id.clone())
     } else {
         Err(eyre::eyre!("No config ID provided"))
-    }
-}
-
-pub fn set_project_id(id: &str) -> Result<()> {
-    let mut config = load_config()?;
-    config.last_project_id = Some(id.to_string());
-    save_config(&config)
-}
-
-pub fn get_project_id(args_project_id: Option<&str>, config: &AxiomConfig) -> Option<String> {
-    if let Some(id) = args_project_id {
-        // Try to save it, but return the ID regardless
-        let _ = set_project_id(id);
-        Some(id.to_string())
-    } else {
-        config.last_project_id.clone()
     }
 }
 
@@ -510,7 +491,6 @@ mod tests {
         assert_eq!(config.api_url, "https://api.axiom.xyz/v1");
         assert!(config.api_key.is_none());
         assert_eq!(config.config_id, Some(DEFAULT_CONFIG_ID.to_string()));
-        assert!(config.last_project_id.is_none());
     }
 
     #[test]
@@ -523,45 +503,6 @@ mod tests {
         assert_eq!(config.api_url, "https://test.api.com");
         assert_eq!(config.api_key, Some("test-key".to_string()));
         assert_eq!(config.config_id, Some("test-config".to_string()));
-        assert!(config.last_project_id.is_none());
-    }
-
-    #[test]
-    fn test_get_project_id_with_args() {
-        let config = AxiomConfig::default();
-
-        // Mock save_config to avoid file system operations
-        let project_id = "123e4567-e89b-12d3-a456-426614174000";
-        let result = get_project_id(Some(project_id), &config);
-
-        // Should return the provided project_id
-        assert_eq!(result, Some(project_id.to_string()));
-    }
-
-    #[test]
-    fn test_get_project_id_from_config() {
-        let config = AxiomConfig {
-            last_project_id: Some("456e4567-e89b-12d3-a456-426614174001".to_string()),
-            ..Default::default()
-        };
-
-        let result = get_project_id(None, &config);
-
-        // Should return the config's project_id
-        assert_eq!(
-            result,
-            Some("456e4567-e89b-12d3-a456-426614174001".to_string())
-        );
-    }
-
-    #[test]
-    fn test_get_project_id_none() {
-        let config = AxiomConfig::default();
-
-        let result = get_project_id(None, &config);
-
-        // Should return None when no project_id available
-        assert_eq!(result, None);
     }
 
     #[test]
@@ -570,7 +511,6 @@ mod tests {
             api_url: "https://test.api.com/v1".to_string(),
             api_key: Some("test-key".to_string()),
             config_id: Some("test-config-id".to_string()),
-            last_project_id: Some("123e4567-e89b-12d3-a456-426614174002".to_string()),
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -579,7 +519,6 @@ mod tests {
         assert_eq!(config.api_url, deserialized.api_url);
         assert_eq!(config.api_key, deserialized.api_key);
         assert_eq!(config.config_id, deserialized.config_id);
-        assert_eq!(config.last_project_id, deserialized.last_project_id);
     }
 
     #[test]
@@ -595,7 +534,6 @@ mod tests {
         assert_eq!(config.api_url, "https://api.axiom.xyz/v1");
         assert_eq!(config.api_key, Some("test-key".to_string()));
         assert_eq!(config.config_id, Some("test-config".to_string()));
-        assert!(config.last_project_id.is_none());
     }
 
     #[test]

@@ -134,8 +134,20 @@ impl BuildCmd {
                     (None, None) => None,
                 };
 
-                let project_id =
-                    axiom_sdk::get_project_id(self.build_args.project_id.as_deref(), &config);
+                let project_id = {
+                    let cache_path = program_dir.join(".axiom").join("project-id");
+                    match std::fs::read_to_string(&cache_path) {
+                        Ok(contents) => {
+                            let trimmed = contents.trim();
+                            if trimmed.is_empty() {
+                                None
+                            } else {
+                                Some(trimmed.to_string())
+                            }
+                        }
+                        Err(_) => None,
+                    }
+                };
                 if let Some(pid) = &project_id {
                     println!("Using project ID: {pid}");
                 }
@@ -149,6 +161,23 @@ impl BuildCmd {
                     project_id,
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
+
+                // If no cached project ID existed, fetch and cache it after registration
+                {
+                    let cache_dir = program_dir.join(".axiom");
+                    let cache_path = cache_dir.join("project-id");
+                    if !cache_path.exists() {
+                        if let Ok(status) = sdk.get_build_status(&program_id) {
+                            if let Err(e) = std::fs::create_dir_all(&cache_dir) {
+                                eprintln!("Warning: failed to create .axiom directory: {e}");
+                            } else if let Err(e) =
+                                std::fs::write(&cache_path, status.project_id.as_bytes())
+                            {
+                                eprintln!("Warning: failed to write project ID cache: {e}");
+                            }
+                        }
+                    }
+                }
 
                 if self.build_args.wait {
                     sdk.wait_for_build_completion(&program_id)

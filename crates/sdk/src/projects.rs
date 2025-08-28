@@ -176,7 +176,6 @@ mod tests {
             api_url: "https://api.test.com/v1".to_string(),
             api_key: None, // No API key
             config_id: None,
-            last_project_id: None,
         };
         let sdk = AxiomSdk::new(config);
 
