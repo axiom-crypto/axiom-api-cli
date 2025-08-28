@@ -221,6 +221,7 @@ impl AxiomSdk {
         program_id: &str,
         callback: &dyn ProgressCallback,
     ) -> Result<()> {
+        use crate::config::ConfigSdk;
         use std::time::Duration;
 
         callback.on_progress_start("Checking build status...", None);
@@ -235,49 +236,79 @@ impl AxiomSdk {
 
             match build_status.status.as_str() {
                 "ready" => {
+                    callback.on_progress_finish("✓ Build completed successfully!");
                     callback.on_success("Build completed successfully!");
-                    callback.on_section("Downloading Artifacts");
 
-                    // Create the program directory
-                    let program_dir = format!("axiom-artifacts/program-{}", program_id);
-                    std::fs::create_dir_all(&program_dir).context(format!(
-                        "Failed to create program directory: {}",
-                        program_dir
-                    ))?;
+                    // Get OpenVM version from config
+                    let config_metadata =
+                        self.get_vm_config_metadata(Some(&build_status.config_uuid))?;
 
-                    // Download EXE
+                    // Print completion information
+                    callback.on_section("Build Summary");
+                    callback.on_field("Program ID", &build_status.id);
+                    callback.on_field("Program Hash", &build_status.program_hash);
+                    callback.on_field("Config ID", &build_status.config_uuid);
+                    callback.on_field("OpenVM Version", &config_metadata.openvm_version);
 
-                    callback.on_info("Downloading EXE...");
-                    if let Err(e) = self.download_program(program_id, "exe") {
-                        callback.on_error(&format!("Failed to download EXE: {}", e));
+                    if let Some(launched_at) = &build_status.launched_at {
+                        if let Some(terminated_at) = &build_status.terminated_at {
+                            callback.on_section("Build Stats");
+                            callback.on_field("Created", &build_status.created_at);
+                            callback.on_field("Initiated", launched_at);
+                            callback.on_field("Finished", terminated_at);
+
+                            if let Ok(duration) =
+                                crate::calculate_duration(launched_at, terminated_at)
+                            {
+                                callback.on_field("Duration", &duration);
+                            }
+                        }
                     }
 
+                    // Download artifacts automatically
+                    callback.on_section("Downloading Artifacts");
+
+                    // Download ELF
+                    callback.on_info("Downloading ELF...");
+                    if let Err(e) = self.download_program(&build_status.id, "elf") {
+                        callback.on_error(&format!("Warning: Failed to download ELF: {}", e));
+                    }
+
+                    // Download EXE
+                    callback.on_info("Downloading EXE...");
+                    if let Err(e) = self.download_program(&build_status.id, "exe") {
+                        callback.on_error(&format!("Warning: Failed to download EXE: {}", e));
+                    }
+
+                    // Download logs
                     callback.on_info("Downloading logs...");
-                    if let Err(e) = self.download_build_logs(program_id) {
-                        callback.on_error(&format!("Failed to download logs: {}", e));
+                    if let Err(e) = self.download_build_logs(&build_status.id) {
+                        callback.on_error(&format!("Warning: Failed to download logs: {}", e));
                     }
 
                     return Ok(());
                 }
-                "failed" => {
-                    callback.on_error("Build failed!");
+                "error" | "failed" => {
                     let error_msg = build_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
+                    callback.on_progress_finish(&format!("✗ Build failed: {}", error_msg));
+                    callback.on_error(&format!("Build failed: {}", error_msg));
                     eyre::bail!("Build failed: {}", error_msg);
                 }
-                "building" => {
+                "processing" => {
                     callback.on_status("Build in progress...");
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
-                "queued" => {
+                "not_ready" => {
                     callback.on_status("Build queued...");
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 _ => {
                     callback.on_status(&format!("Build status: {}...", build_status.status));
+                    std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
             }
-
-            std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
         }
     }
 
