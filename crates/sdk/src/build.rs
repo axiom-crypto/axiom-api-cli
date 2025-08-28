@@ -296,7 +296,6 @@ impl AxiomSdk {
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
                     callback.on_progress_finish(&format!("✗ Build failed: {}", error_msg));
-                    callback.on_error(&format!("Build failed: {}", error_msg));
                     eyre::bail!("Build failed: {}", error_msg);
                 }
                 "processing" => {
