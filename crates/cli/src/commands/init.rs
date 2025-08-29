@@ -348,7 +348,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
     let gitignore_path = project_dir.join(".gitignore");
     if gitignore_path.exists() {
         let gitignore_content = fs::read_to_string(&gitignore_path)?;
-        let additions = vec![".env", "./openvm"];
+        let additions = vec![".env", "./openvm", "/.axiom", "proof.json"];
         let mut updated_content = gitignore_content;
 
         for addition in &additions {
