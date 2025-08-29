@@ -1,4 +1,5 @@
-use crate::{formatting::Formatter, progress::CliProgressCallback};
+use std::io::{self, Write};
+
 use axiom_sdk::{
     AxiomSdk,
     build::{BuildSdk, ConfigSource},
@@ -6,7 +7,8 @@ use axiom_sdk::{
 use clap::{Parser, Subcommand};
 use comfy_table;
 use eyre::Result;
-use std::io::{self, Write};
+
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
@@ -78,9 +80,14 @@ pub struct BuildArgs {
     /// The project ID to associate with the build
     #[arg(long, value_name = "ID")]
     project_id: Option<String>,
+
     /// Wait for the build to complete and download artifacts
     #[clap(long)]
     wait: bool,
+
+    /// Allow building with uncommitted changes
+    #[clap(long)]
+    allow_dirty: bool,
 }
 
 impl BuildCmd {
@@ -170,6 +177,7 @@ impl BuildCmd {
                     include_dirs: self.build_args.include_dirs,
                     project_id,
                     project_name: project_name_for_creation.clone(),
+                    allow_dirty: self.build_args.allow_dirty,
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
 

@@ -72,6 +72,8 @@ pub struct BuildArgs {
     pub project_id: Option<String>,
     /// The project name if it's creating a new project
     pub project_name: Option<String>,
+    /// Allow building with uncommitted changes
+    pub allow_dirty: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -253,8 +255,9 @@ impl AxiomSdk {
         program_id: &str,
         callback: &dyn ProgressCallback,
     ) -> Result<()> {
-        use crate::config::ConfigSdk;
         use std::time::Duration;
+
+        use crate::config::ConfigSdk;
 
         callback.on_progress_start("Checking build status...", None);
 
@@ -357,6 +360,17 @@ impl AxiomSdk {
         let git_root = find_git_root(program_dir.as_ref()).context(
             "Not in a git repository. Please run this command from within a git repository.",
         )?;
+
+        // Check if git repository is clean unless allow-dirty is specified
+        if !args.allow_dirty {
+            let is_clean = check_git_clean(&git_root)?;
+            if !is_clean {
+                eyre::bail!(
+                    "Git repository has uncommitted changes. Please commit your changes or use --allow-dirty to build anyway.\n\
+                    Run 'git status' to see uncommitted changes."
+                );
+            }
+        }
 
         let config_id = match &args.config_source {
             Some(ConfigSource::ConfigId(id)) => Some(id.clone()),
@@ -665,6 +679,22 @@ fn find_cargo_workspace_root(program_dir: impl AsRef<Path>) -> Result<std::path:
 
     // We didn't find any Cargo.toml
     Err(eyre::eyre!("Not in a Cargo project"))
+}
+
+fn check_git_clean(git_root: impl AsRef<Path>) -> Result<bool> {
+    // Check if the git repository is clean (no uncommitted changes)
+    let output = std::process::Command::new("git")
+        .current_dir(git_root.as_ref())
+        .args(["status", "--porcelain"])
+        .output()
+        .context("Failed to run 'git status --porcelain'")?;
+
+    if !output.status.success() {
+        eyre::bail!("Failed to check git status");
+    }
+
+    // If output is empty, the repository is clean
+    Ok(output.stdout.is_empty())
 }
 
 fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
