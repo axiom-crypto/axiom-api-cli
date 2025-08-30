@@ -65,7 +65,6 @@ pub fn execute(args: RegisterArgs) -> Result<()> {
     };
 
     let mut config = AxiomConfig::new(api_url, Some(api_key), config_id);
-    // Set console base url (dummy values for now; user will update)
     config.console_base_url = if args.staging {
         Some("https://axiom-proving-service-staging.vercel.app".to_string())
     } else if args.api_url.is_none() {
