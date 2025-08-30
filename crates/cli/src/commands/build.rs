@@ -173,24 +173,31 @@ impl BuildCmd {
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
 
+                // Always fetch the latest build status to get project ID and print console URL
+                let status = sdk.get_build_status(&program_id)?;
+
+                if let Some(base) = sdk.config.console_base_url.clone() {
+                    let console_url = format!(
+                        "{}/projects/{}",
+                        base.trim_end_matches('/'),
+                        status.project_id,
+                    );
+                    println!("Console: {}", console_url);
+                }
+
                 // If we didn't have a cached project ID, try to fetch and cache it now
                 if !had_cached_pid {
                     let cache_dir = program_dir.join(".axiom");
                     let cache_path = cache_dir.join("project-id");
                     if !cache_path.exists() {
-                        if let Ok(status) = sdk.get_build_status(&program_id) {
-                            if let Err(e) = std::fs::create_dir_all(&cache_dir) {
-                                eprintln!("Warning: failed to create .axiom directory: {e}");
-                            } else if let Err(e) =
-                                std::fs::write(&cache_path, status.project_id.as_bytes())
-                            {
-                                eprintln!("Warning: failed to write project ID cache: {e}");
-                            } else {
-                                println!(
-                                    "✓ Saved project ID {} for future builds",
-                                    status.project_id
-                                );
-                            }
+                        if let Err(e) = std::fs::create_dir_all(&cache_dir) {
+                            eprintln!("Warning: failed to create .axiom directory: {e}");
+                        } else if let Err(e) =
+                            std::fs::write(&cache_path, status.project_id.as_bytes())
+                        {
+                            eprintln!("Warning: failed to write project ID cache: {e}");
+                        } else {
+                            println!("✓ Saved project ID {} for future builds", status.project_id);
                         }
                     }
                 }

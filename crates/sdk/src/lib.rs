@@ -178,6 +178,12 @@ pub struct AxiomConfig {
     pub api_url: String,
     pub api_key: Option<String>,
     pub config_id: Option<String>,
+    pub console_base_url: Option<String>,
+}
+
+fn default_console_base_url() -> String {
+    // Dummy value; will be updated by the user for staging/prod differentiation
+    "https://prove.axiom.xyz".to_string()
 }
 
 impl AxiomConfig {
@@ -186,6 +192,7 @@ impl AxiomConfig {
             api_url,
             api_key,
             config_id,
+            console_base_url: Some(default_console_base_url()),
         }
     }
 }
@@ -196,6 +203,7 @@ impl Default for AxiomConfig {
             api_url: "https://api.axiom.xyz/v1".to_string(),
             api_key: None,
             config_id: Some(DEFAULT_CONFIG_ID.to_string()),
+            console_base_url: Some(default_console_base_url()),
         }
     }
 }
@@ -491,6 +499,7 @@ mod tests {
         assert_eq!(config.api_url, "https://api.axiom.xyz/v1");
         assert!(config.api_key.is_none());
         assert_eq!(config.config_id, Some(DEFAULT_CONFIG_ID.to_string()));
+        assert_eq!(config.console_base_url, Some(default_console_base_url()));
     }
 
     #[test]
@@ -503,6 +512,7 @@ mod tests {
         assert_eq!(config.api_url, "https://test.api.com");
         assert_eq!(config.api_key, Some("test-key".to_string()));
         assert_eq!(config.config_id, Some("test-config".to_string()));
+        assert_eq!(config.console_base_url, Some(default_console_base_url()));
     }
 
     #[test]
@@ -511,6 +521,7 @@ mod tests {
             api_url: "https://test.api.com/v1".to_string(),
             api_key: Some("test-key".to_string()),
             config_id: Some("test-config-id".to_string()),
+            console_base_url: Some(default_console_base_url()),
         };
 
         let json = serde_json::to_string(&config).unwrap();
@@ -519,6 +530,7 @@ mod tests {
         assert_eq!(config.api_url, deserialized.api_url);
         assert_eq!(config.api_key, deserialized.api_key);
         assert_eq!(config.config_id, deserialized.config_id);
+        assert_eq!(config.console_base_url, deserialized.console_base_url);
     }
 
     #[test]

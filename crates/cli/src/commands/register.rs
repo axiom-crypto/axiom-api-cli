@@ -37,7 +37,7 @@ pub fn execute(args: RegisterArgs) -> Result<()> {
     println!("Registering Axiom API credentials...");
 
     // Use provided API URL or default
-    let api_url = args.api_url.unwrap_or_else(|| {
+    let api_url = args.api_url.clone().unwrap_or_else(|| {
         if args.staging {
             STAGING_API_URL.to_string()
         } else {
@@ -64,7 +64,17 @@ pub fn execute(args: RegisterArgs) -> Result<()> {
         Some(DEFAULT_CONFIG_ID.to_string())
     };
 
-    let config = AxiomConfig::new(api_url, Some(api_key), config_id);
+    let mut config = AxiomConfig::new(api_url, Some(api_key), config_id);
+    // Set console base url (dummy values for now; user will update)
+    config.console_base_url = if args.staging {
+        Some("https://axiom-proving-service-staging.vercel.app".to_string())
+    } else if args.api_url.is_none() {
+        // default to prod
+        Some("https://prove.axiom.xyz".to_string())
+    } else {
+        // custom API URL provided, don't set console base url
+        None
+    };
 
     axiom_sdk::save_config(&config)?;
 
