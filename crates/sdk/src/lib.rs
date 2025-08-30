@@ -182,7 +182,6 @@ pub struct AxiomConfig {
 }
 
 fn default_console_base_url() -> String {
-    // Dummy value; will be updated by the user for staging/prod differentiation
     "https://prove.axiom.xyz".to_string()
 }
 
