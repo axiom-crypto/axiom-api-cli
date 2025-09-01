@@ -1,5 +1,5 @@
 [workspace.package]
-version = "0.4.0"
+version = "0.5.0"
 edition = "2024"
 authors = ["Axiom Team"]
 license = "MIT"
@@ -10,11 +10,11 @@ resolver = "2"
 
 [workspace.dependencies]
 # OpenVM
-cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.3.0", default-features = false }
-openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.3.0", default-features = false, features = [
+cargo-openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.0", default-features = false }
+openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.0", default-features = false, features = [
     "evm-prove",
 ] }
-openvm-build = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.3.0", default-features = false }
+openvm-build = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.0", default-features = false }
 
 # Axiom Proving API
 cargo-axiom = { path = "crates/cli", default-features = false }
