@@ -139,7 +139,7 @@ impl ProjectSdk for AxiomSdk {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AxiomConfig;
+    use crate::{AxiomConfig, default_console_base_url};
 
     #[test]
     fn test_project_response_serialization() {
@@ -176,6 +176,7 @@ mod tests {
             api_url: "https://api.test.com/v1".to_string(),
             api_key: None, // No API key
             config_id: None,
+            console_base_url: Some(default_console_base_url()),
         };
         let sdk = AxiomSdk::new(config);
 
