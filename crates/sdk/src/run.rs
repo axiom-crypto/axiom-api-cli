@@ -2,6 +2,7 @@ use std::fs;
 
 use cargo_openvm::input::Input;
 use eyre::{Context, OptionExt, Result};
+use hex;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -147,7 +148,8 @@ impl AxiomSdk {
                                 "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
                             );
                         }
-                        json!({ "input": [s] })
+                        let hex_string = format!("0x{}", hex::encode(s));
+                        json!({ "input": [hex_string] })
                     }
                 }
             }
