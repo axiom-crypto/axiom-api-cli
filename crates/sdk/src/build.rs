@@ -2,9 +2,13 @@ use std::{
     fs::File,
     io::{Read, Write},
     path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
-use eyre::{Context, OptionExt, Result};
+use eyre::{Context, OptionExt, Result, eyre};
 use flate2::{Compression, write::GzEncoder};
 use openvm_build::cargo_command;
 use reqwest::blocking::Client;
@@ -93,6 +97,22 @@ impl Drop for TarFile {
         if !self.keep {
             std::fs::remove_file(&self.path).unwrap();
         }
+    }
+}
+
+struct CountingReader<R: Read> {
+    inner: R,
+    progress: Arc<AtomicU64>,
+}
+
+impl<R: Read> Read for CountingReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let bytes_read = self.inner.read(buf)?;
+        if bytes_read > 0 {
+            self.progress
+                .fetch_add(bytes_read as u64, Ordering::Relaxed);
+        }
+        Ok(bytes_read)
     }
 }
 
@@ -553,52 +573,86 @@ impl AxiomSdk {
             callback.on_field("Config", "Default");
         }
 
-        // Make the POST request with multipart form data
-        let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(300)) // 5 minute timeout
-            .build()?;
-        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
-
         // Start progress tracking for upload
         callback.on_progress_start("Uploading", Some(metadata.len()));
 
-        // Open the file
-        let file = File::open(tar_path).context("Failed to open tar file")?;
+        // Use a counting reader and perform the request in a background thread while
+        // polling progress from the main thread to update the callback.
+        let uploaded = Arc::new(AtomicU64::new(0));
+        let uploaded_for_thread = Arc::clone(&uploaded);
+        let tar_path_string = tar_path.clone();
+        let url_clone = url.clone();
+        let api_key_owned = self
+            .config
+            .api_key
+            .as_ref()
+            .ok_or_eyre("API key not set")?
+            .to_string();
+        let config_source_for_form = args.config_source.clone();
 
-        // Create the form with the file reader
-        let part = reqwest::blocking::multipart::Part::reader(file)
-            .file_name("program.tar.gz")
-            .mime_str("application/gzip")?;
+        let handle = std::thread::spawn(move || -> Result<reqwest::blocking::Response> {
+            let client = Client::builder()
+                .timeout(std::time::Duration::from_secs(300)) // 5 minute timeout
+                .build()?;
 
-        let mut form = reqwest::blocking::multipart::Form::new().part("program", part);
+            // Open the file and wrap with counting reader
+            let file = File::open(&tar_path_string).context("Failed to open tar file")?;
+            let counting_reader = CountingReader {
+                inner: file,
+                progress: uploaded_for_thread,
+            };
 
-        // Add config file if provided
-        if let Some(ConfigSource::ConfigPath(config_path_str)) = args.config_source {
-            let config_path = Path::new(&config_path_str);
-            let config_file_content = std::fs::read(config_path).with_context(|| {
-                format!(
-                    "Failed to read OpenVM config file at: {}",
-                    config_path.display()
-                )
-            })?;
-            let file_name = config_path
-                .file_name()
-                .ok_or_eyre("Invalid config file path")?
-                .to_string_lossy()
-                .to_string();
-            let config_part = reqwest::blocking::multipart::Part::bytes(config_file_content)
-                .file_name(file_name)
-                .mime_str("application/octet-stream")?;
-            form = form.part("config", config_part);
+            // Create multipart form
+            let part = reqwest::blocking::multipart::Part::reader(counting_reader)
+                .file_name("program.tar.gz")
+                .mime_str("application/gzip")?;
+
+            let mut form = reqwest::blocking::multipart::Form::new().part("program", part);
+
+            // Add config file if provided
+            if let Some(ConfigSource::ConfigPath(config_path_str)) = config_source_for_form {
+                let config_path = Path::new(&config_path_str);
+                let config_file_content = std::fs::read(config_path).with_context(|| {
+                    format!(
+                        "Failed to read OpenVM config file at: {}",
+                        config_path.display()
+                    )
+                })?;
+                let file_name = config_path
+                    .file_name()
+                    .ok_or_eyre("Invalid config file path")?
+                    .to_string_lossy()
+                    .to_string();
+                let config_part = reqwest::blocking::multipart::Part::bytes(config_file_content)
+                    .file_name(file_name)
+                    .mime_str("application/octet-stream")?;
+                form = form.part("config", config_part);
+            }
+
+            let request = add_cli_version_header(
+                client
+                    .post(url_clone)
+                    .header(API_KEY_HEADER, api_key_owned)
+                    .multipart(form),
+            );
+
+            let response = request.send()?;
+            Ok(response)
+        });
+
+        // Poll progress until the upload thread finishes
+        loop {
+            if handle.is_finished() {
+                break;
+            }
+            let current = uploaded.load(Ordering::Relaxed);
+            callback.on_progress_update(current);
+            std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
-        let response = add_cli_version_header(
-            client
-                .post(url)
-                .header(API_KEY_HEADER, api_key)
-                .multipart(form),
-        )
-        .send()?;
+        let response = handle
+            .join()
+            .map_err(|e| eyre!("upload thread panicked: {e:?}"))??;
 
         // Finish the progress tracking
         callback.on_progress_finish("✓ Upload complete!");
