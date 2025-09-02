@@ -1,6 +1,6 @@
-use std::path::PathBuf;
-use std::sync::OnceLock;
+use std::{path::PathBuf, sync::OnceLock};
 
+use cargo_openvm::input::decode_hex_string;
 use dirs::home_dir;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::{Client, RequestBuilder, Response};
@@ -257,8 +257,6 @@ pub fn save_config(config: &AxiomConfig) -> Result<()> {
 /// Ensures that the input follows the expected format with hex strings
 /// that start with the proper prefixes for bytes (01) or field elements (02).
 pub fn validate_input_json(json: &serde_json::Value) -> Result<(), eyre::Error> {
-    use cargo_openvm::input::is_valid_hex_string;
-
     json["input"]
         .as_array()
         .ok_or_eyre("Input must be an array under 'input' key")?
@@ -267,16 +265,9 @@ pub fn validate_input_json(json: &serde_json::Value) -> Result<(), eyre::Error> 
             inner
                 .as_str()
                 .ok_or_eyre("Each value must be a hex string")
-                .and_then(|s| {
-                    if !is_valid_hex_string(s) {
-                        eyre::bail!("Invalid hex string");
-                    }
-                    if !s.trim_start_matches("0x").starts_with("01")
-                        && !s.trim_start_matches("0x").starts_with("02")
-                    {
-                        eyre::bail!("Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs");
-                    }
-                    Ok(())
+                .and_then(|s| match decode_hex_string(s) {
+                    Err(msg) => Err(eyre::eyre!("Invalid hex string: {msg}")),
+                    Ok(_) => Ok(()),
                 })
         })?;
     Ok(())

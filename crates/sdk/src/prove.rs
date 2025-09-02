@@ -6,10 +6,10 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::validate_input_json;
 use crate::{
     API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, add_cli_version_header,
     authenticated_get, authenticated_post, calculate_duration, download_file, send_request_json,
+    validate_input_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -283,8 +283,7 @@ impl AxiomSdk {
                 input_json
             }
             Some(Input::HexBytes(s)) => {
-                let trimmed = s.trim_start_matches("0x");
-                if !trimmed.starts_with("01") && !trimmed.starts_with("02") {
+                if !matches!(s.first(), Some(x) if x == &0x01 || x == &0x02) {
                     eyre::bail!(
                         "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
                     );
