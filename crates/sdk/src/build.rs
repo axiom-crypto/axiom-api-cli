@@ -1,14 +1,14 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-};
 use std::{
     fs::File,
     io::{Read, Write},
     path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
-use eyre::{Context, OptionExt, Result};
+use eyre::{Context, OptionExt, Result, eyre};
 use flate2::{Compression, write::GzEncoder};
 use openvm_build::cargo_command;
 use reqwest::blocking::Client;
@@ -650,7 +650,9 @@ impl AxiomSdk {
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
-        let response = handle.join().expect("upload thread panicked")?;
+        let response = handle
+            .join()
+            .map_err(|e| eyre!("upload thread panicked: {e:?}"))??;
 
         // Finish the progress tracking
         callback.on_progress_finish("✓ Upload complete!");
