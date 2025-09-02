@@ -4,8 +4,7 @@ use clap::Parser;
 use eyre::{OptionExt, Result, WrapErr, bail};
 use toml_edit::{DocumentMut, Item, Table, Value};
 
-const MAIN_RS_PREPEND: &str = r#"
-openvm::init!();
+const MAIN_RS_PREPEND: &str = r#"openvm::init!();
 
 "#;
 
