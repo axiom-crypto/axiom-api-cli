@@ -27,6 +27,10 @@ enum BuildSubcommand {
         /// The program ID to check status for
         #[clap(long, value_name = "ID")]
         program_id: String,
+
+        /// Wait for the build to complete
+        #[clap(long)]
+        wait: bool,
     },
 
     /// List all build programs
@@ -81,9 +85,9 @@ pub struct BuildArgs {
     #[arg(long, value_name = "ID")]
     project_id: Option<String>,
 
-    /// Wait for the build to complete and download artifacts
+    /// Run in detached mode (don't wait for completion)
     #[clap(long)]
-    wait: bool,
+    detach: bool,
 
     /// Allow building with uncommitted changes
     #[clap(long)]
@@ -97,10 +101,14 @@ impl BuildCmd {
         let sdk = AxiomSdk::new(config.clone()).with_callback(callback);
 
         match self.command {
-            Some(BuildSubcommand::Status { program_id }) => {
-                let build_status = sdk.get_build_status(&program_id)?;
-                Self::print_build_status(&build_status);
-                Ok(())
+            Some(BuildSubcommand::Status { program_id, wait }) => {
+                if wait {
+                    sdk.wait_for_build_completion(&program_id)
+                } else {
+                    let build_status = sdk.get_build_status(&program_id)?;
+                    Self::print_build_status(&build_status);
+                    Ok(())
+                }
             }
             Some(BuildSubcommand::List) => {
                 let build_status_list = sdk.list_programs()?;
@@ -210,7 +218,7 @@ impl BuildCmd {
                     }
                 }
 
-                if self.build_args.wait {
+                if !self.build_args.detach {
                     sdk.wait_for_build_completion(&program_id)
                 } else {
                     println!(
