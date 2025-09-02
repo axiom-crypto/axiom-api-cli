@@ -336,45 +336,29 @@ impl AxiomSdk {
                     callback.on_field("Program ID", &proof_status.program_uuid);
                     callback.on_field("Proof Type", &proof_status.proof_type);
 
+                    // Use same directory structure as download: program-{uuid}/proofs/{proof_id}/
                     let proof_dir = format!(
-                        "axiom-artifacts/program-{}/proofs",
-                        proof_status.program_uuid
+                        "axiom-artifacts/program-{}/proofs/{}",
+                        proof_status.program_uuid, proof_status.id
                     );
                     std::fs::create_dir_all(&proof_dir).ok();
 
-                    if proof_status.proof_type == "stark" {
-                        let proof_path = format!("{}/{}.stark", proof_dir, proof_status.id);
-                        if self
-                            .save_proof_to_path(
-                                &proof_status.id,
-                                &proof_status.proof_type.parse()?,
-                                std::path::PathBuf::from(&proof_path),
-                            )
-                            .is_ok()
-                        {
-                            callback.on_success(&format!("STARK proof saved to {}", proof_path));
-                        }
-                    } else {
-                        let proof_type_name = match proof_status.proof_type.as_str() {
-                            "evm" => "evm",
-                            _ => &proof_status.proof_type,
-                        };
-                        let proof_path =
-                            format!("{}/{}.{}", proof_dir, proof_status.id, proof_type_name);
-                        if self
-                            .save_proof_to_path(
-                                &proof_status.id,
-                                &proof_status.proof_type.parse()?,
-                                std::path::PathBuf::from(&proof_path),
-                            )
-                            .is_ok()
-                        {
-                            callback.on_success(&format!(
-                                "{} proof saved to {}",
-                                proof_type_name.to_uppercase(),
-                                proof_path
-                            ));
-                        }
+                    // Use same naming convention as download: {proof_type}-proof.json
+                    let proof_path =
+                        format!("{}/{}-proof.json", proof_dir, proof_status.proof_type);
+                    if self
+                        .save_proof_to_path(
+                            &proof_status.id,
+                            &proof_status.proof_type.parse()?,
+                            std::path::PathBuf::from(&proof_path),
+                        )
+                        .is_ok()
+                    {
+                        callback.on_success(&format!(
+                            "{} proof saved to {}",
+                            proof_status.proof_type.to_uppercase(),
+                            proof_path
+                        ));
                     }
 
                     let logs_path = format!("{}/logs.txt", proof_dir);

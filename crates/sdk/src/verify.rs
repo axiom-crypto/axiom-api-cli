@@ -13,10 +13,14 @@ const VERIFICATION_POLLING_INTERVAL_SECS: u64 = 10;
 pub trait VerifySdk {
     fn get_evm_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
     fn get_stark_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
+    /// Get verification result for either EVM or STARK proofs - the backend automatically detects the type
+    fn get_verification_result(&self, verify_id: &str) -> Result<VerifyStatus>;
     fn verify_evm(&self, config_id: Option<&str>, proof_path: PathBuf) -> Result<String>;
     fn verify_stark(&self, program_id: &str, proof_path: PathBuf) -> Result<String>;
     fn wait_for_evm_verify_completion(&self, verify_id: &str) -> Result<()>;
     fn wait_for_stark_verify_completion(&self, verify_id: &str) -> Result<()>;
+    /// Wait for verification completion for either EVM or STARK proofs
+    fn wait_for_verify_completion(&self, verify_id: &str) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,16 +28,24 @@ pub struct VerifyStatus {
     pub id: String,
     pub created_at: String,
     pub result: String,
+    pub proof_type: String,
 }
 
 impl VerifySdk for AxiomSdk {
     fn get_evm_verification_result(&self, verify_id: &str) -> Result<VerifyStatus> {
+        // Use unified endpoint - the backend automatically detects EVM vs STARK
         let url = format!("{}/verify/{}", self.config.api_url, verify_id);
         self.get_verification_status(&url)
     }
 
     fn get_stark_verification_result(&self, verify_id: &str) -> Result<VerifyStatus> {
-        let url = format!("{}/verify/stark/{}", self.config.api_url, verify_id);
+        // Use unified endpoint - the backend automatically detects EVM vs STARK
+        let url = format!("{}/verify/{}", self.config.api_url, verify_id);
+        self.get_verification_status(&url)
+    }
+
+    fn get_verification_result(&self, verify_id: &str) -> Result<VerifyStatus> {
+        let url = format!("{}/verify/{}", self.config.api_url, verify_id);
         self.get_verification_status(&url)
     }
 
@@ -51,6 +63,10 @@ impl VerifySdk for AxiomSdk {
 
     fn wait_for_stark_verify_completion(&self, verify_id: &str) -> Result<()> {
         self.wait_for_stark_verify_completion_base(verify_id, &*self.callback)
+    }
+
+    fn wait_for_verify_completion(&self, verify_id: &str) -> Result<()> {
+        self.wait_for_verify_completion_base(verify_id, &*self.callback)
     }
 }
 
@@ -256,6 +272,57 @@ impl AxiomSdk {
                     callback.on_field("Verification Result", "✗ FAILED");
                     callback.on_field("Verification ID", &verify_status.id);
                     callback.on_field("Proof Type", proof_type);
+                    callback.on_field("Completed At", &verify_status.created_at);
+
+                    eyre::bail!("Proof verification failed");
+                }
+                "processing" => {
+                    callback.on_status("Verifying proof...");
+                    std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
+                }
+                _ => {
+                    callback
+                        .on_status(&format!("Verification status: {}...", verify_status.result));
+                    std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
+                }
+            }
+        }
+    }
+
+    /// Unified wait for verification completion that works for both EVM and STARK proofs
+    pub fn wait_for_verify_completion_base(
+        &self,
+        verify_id: &str,
+        callback: &dyn ProgressCallback,
+    ) -> Result<()> {
+        use std::time::Duration;
+
+        loop {
+            let verify_status = self.get_verification_result(verify_id)?;
+
+            match verify_status.result.as_str() {
+                "verified" => {
+                    callback.on_clear_line();
+                    callback.on_success("Verification completed successfully!");
+
+                    // Print completion information
+                    callback.on_section("Verification Summary");
+                    callback.on_field("Verification Result", "✓ VERIFIED");
+                    callback.on_field("Verification ID", &verify_status.id);
+                    callback.on_field("Proof Type", &verify_status.proof_type.to_uppercase());
+                    callback.on_field("Completed At", &verify_status.created_at);
+
+                    return Ok(());
+                }
+                "failed" => {
+                    callback.on_clear_line();
+                    callback.on_error("Verification failed!");
+
+                    // Print failure information
+                    callback.on_section("Verification Summary");
+                    callback.on_field("Verification Result", "✗ FAILED");
+                    callback.on_field("Verification ID", &verify_status.id);
+                    callback.on_field("Proof Type", &verify_status.proof_type.to_uppercase());
                     callback.on_field("Completed At", &verify_status.created_at);
 
                     eyre::bail!("Proof verification failed");
