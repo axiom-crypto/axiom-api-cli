@@ -4,16 +4,7 @@ use clap::Parser;
 use eyre::{OptionExt, Result, WrapErr, bail};
 use toml_edit::{DocumentMut, Item, Table, Value};
 
-const MAIN_RS_PREPEND: &str = r#"#[allow(unused_imports)]
-use {
-    openvm_k256::Secp256k1Point,
-    openvm_p256::P256Point,
-    openvm_pairing::{
-        bls12_381::{Bls12_381Fp2, Bls12_381G1Affine},
-        bn254::{Bn254Fp2, Bn254G1Affine},
-    },
-};
-
+const MAIN_RS_PREPEND: &str = r#"
 openvm::init!();
 
 "#;
