@@ -26,3 +26,4 @@ rustc_version = "0.4.0"
 url = "2.5"
 scopeguard = "1.2"
 chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
