@@ -20,6 +20,10 @@ enum RunSubcommand {
         /// The execution ID to check status for
         #[clap(long, value_name = "ID")]
         execution_id: String,
+
+        /// Wait for the execution to complete
+        #[clap(long)]
+        wait: bool,
     },
 }
 
@@ -33,9 +37,9 @@ pub struct RunArgs {
     #[clap(long, value_parser, help = "Input to OpenVM program")]
     input: Option<Input>,
 
-    /// Wait for the execution to complete
+    /// Run in detached mode (don't wait for completion)
     #[clap(long)]
-    wait: bool,
+    detach: bool,
 }
 
 impl RunCmd {
@@ -45,10 +49,14 @@ impl RunCmd {
         let sdk = AxiomSdk::new(config).with_callback(callback);
 
         match self.command {
-            Some(RunSubcommand::Status { execution_id }) => {
-                let execution_status = sdk.get_execution_status(&execution_id)?;
-                Self::print_execution_status(&execution_status);
-                Ok(())
+            Some(RunSubcommand::Status { execution_id, wait }) => {
+                if wait {
+                    sdk.wait_for_execution_completion(&execution_id)
+                } else {
+                    let execution_status = sdk.get_execution_status(&execution_id)?;
+                    Self::print_execution_status(&execution_status);
+                    Ok(())
+                }
             }
             None => {
                 use crate::progress::CliProgressCallback;
@@ -60,7 +68,7 @@ impl RunCmd {
                 };
                 let execution_id = sdk.execute_program(args)?;
 
-                if self.run_args.wait {
+                if !self.run_args.detach {
                     sdk.wait_for_execution_completion(&execution_id)
                 } else {
                     println!("Execution started successfully! ID: {}", execution_id);

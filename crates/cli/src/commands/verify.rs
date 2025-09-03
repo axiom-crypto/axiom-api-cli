@@ -23,9 +23,9 @@ enum VerifySubcommand {
         #[clap(long, value_name = "FILE")]
         proof: PathBuf,
 
-        /// Wait for the verification to complete
+        /// Run in detached mode (don't wait for completion)
         #[clap(long)]
-        wait: bool,
+        detach: bool,
     },
     /// Verify a STARK proof
     Stark {
@@ -37,15 +37,19 @@ enum VerifySubcommand {
         #[clap(long, value_name = "FILE")]
         proof: PathBuf,
 
-        /// Wait for the verification to complete
+        /// Run in detached mode (don't wait for completion)
         #[clap(long)]
-        wait: bool,
+        detach: bool,
     },
     /// Check the status of a verification
     Status {
         /// The verification ID to check status for
         #[clap(long, value_name = "ID")]
         verify_id: String,
+
+        /// Wait for the verification to complete
+        #[clap(long)]
+        wait: bool,
     },
 }
 
@@ -59,14 +63,14 @@ impl VerifyCmd {
             VerifySubcommand::Evm {
                 config_id,
                 proof,
-                wait,
+                detach,
             } => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
                 let sdk = sdk.with_callback(callback);
                 let verify_id = sdk.verify_evm(config_id.as_deref(), proof)?;
 
-                if wait {
+                if !detach {
                     sdk.wait_for_evm_verify_completion(&verify_id)
                 } else {
                     println!(
@@ -78,14 +82,14 @@ impl VerifyCmd {
             VerifySubcommand::Stark {
                 program_id,
                 proof,
-                wait,
+                detach,
             } => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
                 let sdk = sdk.with_callback(callback);
                 let verify_id = sdk.verify_stark(&program_id, proof)?;
 
-                if wait {
+                if !detach {
                     sdk.wait_for_stark_verify_completion(&verify_id)
                 } else {
                     println!(
@@ -94,10 +98,14 @@ impl VerifyCmd {
                     Ok(())
                 }
             }
-            VerifySubcommand::Status { verify_id } => {
-                let verify_status = sdk.get_verification_result(&verify_id)?;
-                Self::print_verify_status(&verify_status);
-                Ok(())
+            VerifySubcommand::Status { verify_id, wait } => {
+                if wait {
+                    sdk.wait_for_verify_completion(&verify_id)
+                } else {
+                    let verify_status = sdk.get_verification_result(&verify_id)?;
+                    Self::print_verify_status(&verify_status);
+                    Ok(())
+                }
             }
         }
     }
