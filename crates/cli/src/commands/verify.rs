@@ -111,10 +111,15 @@ impl VerifyCmd {
     }
 
     fn print_verify_status(status: &axiom_sdk::verify::VerifyStatus) {
-        Formatter::print_section("Verification Status");
-        Formatter::print_field("ID", &status.id);
+        // Just show the status information, no completion messages
+        Formatter::print_section("Verification Summary");
+        match status.result.as_str() {
+            "verified" => Formatter::print_field("Verification Result", "✓ VERIFIED"),
+            "failed" => Formatter::print_field("Verification Result", "✗ FAILED"),
+            _ => Formatter::print_field("Verification Result", &status.result.to_uppercase()),
+        }
+        Formatter::print_field("Verification ID", &status.id);
         Formatter::print_field("Proof Type", &status.proof_type.to_uppercase());
-        Formatter::print_field("Result", &status.result);
         Formatter::print_field("Created At", &status.created_at);
     }
 }

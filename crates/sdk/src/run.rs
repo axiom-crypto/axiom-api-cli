@@ -8,8 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, calculate_duration,
-    validate_input_json,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, validate_input_json,
 };
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
@@ -21,10 +20,21 @@ pub trait RunSdk {
     fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String>;
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct RunArgs {
     pub program_id: Option<String>,
     pub input: Option<Input>,
+    pub mode: String,
+}
+
+impl Default for RunArgs {
+    fn default() -> Self {
+        Self {
+            program_id: None,
+            input: None,
+            mode: "pure".to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,9 +47,12 @@ pub struct ExecutionStatus {
     pub launched_at: Option<String>,
     pub terminated_at: Option<String>,
     pub created_by: String,
+    pub mode: String,
+    pub public_values: Option<Value>,
+    pub cost: Option<u64>,
+    pub num_segments: Option<usize>,
     pub total_cycle: Option<u64>,
     pub total_tick: Option<u64>,
-    pub public_values: Option<Value>,
 }
 
 impl RunSdk for AxiomSdk {
@@ -96,8 +109,11 @@ impl RunSdk for AxiomSdk {
             "created_at": execution_status.created_at,
             "launched_at": execution_status.launched_at,
             "terminated_at": execution_status.terminated_at,
+            "mode": execution_status.mode,
             "total_cycles": execution_status.total_cycle,
             "total_ticks": execution_status.total_tick,
+            "cost": execution_status.cost,
+            "num_segments": execution_status.num_segments,
             "public_values": execution_status.public_values
         });
 
@@ -161,7 +177,8 @@ impl AxiomSdk {
         let mut url_with_params = url::Url::parse(&url)?;
         url_with_params
             .query_pairs_mut()
-            .append_pair("program_id", &program_id);
+            .append_pair("program_id", &program_id)
+            .append_pair("mode", &args.mode);
 
         let response = add_cli_version_header(
             client
@@ -207,70 +224,148 @@ impl AxiomSdk {
     ) -> Result<()> {
         use std::time::Duration;
 
+        let mut spinner_started = false;
+
         loop {
             let execution_status = self.get_execution_status(execution_id)?;
 
             match execution_status.status.as_str() {
                 "Succeeded" => {
-                    callback.on_clear_line_and_reset();
-                    callback.on_success("Execution completed successfully!");
-
-                    callback.on_section("Execution Summary");
-                    callback.on_field("Execution ID", &execution_status.id);
-                    if let Some(total_cycle) = execution_status.total_cycle {
-                        callback.on_field("Total Cycles", &total_cycle.to_string());
-                    }
-                    if let Some(total_tick) = execution_status.total_tick {
-                        callback.on_field("Total Ticks", &total_tick.to_string());
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Execution completed successfully!");
+                    } else {
+                        callback.on_success("Execution completed successfully!");
                     }
 
-                    if let Some(public_values) = &execution_status.public_values {
-                        if !public_values.is_null() {
-                            callback.on_section("Public Values");
-                            if let Ok(compact) = serde_json::to_string(public_values) {
-                                callback.on_info(&compact);
+                    // Add spacing before sections
+                    println!();
+
+                    // Match the detailed status format
+                    callback.on_section("Execution Status");
+                    callback.on_field("ID", &execution_status.id);
+                    callback.on_field("Status", &execution_status.status);
+                    callback.on_field("Mode", &execution_status.mode);
+                    callback.on_field("Program ID", &execution_status.program_uuid);
+                    callback.on_field("Created By", &execution_status.created_by);
+                    callback.on_field("Created At", &execution_status.created_at);
+
+                    if let Some(launched_at) = &execution_status.launched_at {
+                        callback.on_field("Launched At", launched_at);
+                    }
+
+                    if let Some(terminated_at) = &execution_status.terminated_at {
+                        callback.on_field("Terminated At", terminated_at);
+                    }
+
+                    if let Some(error_message) = &execution_status.error_message {
+                        callback.on_field("Error", error_message);
+                    }
+
+                    // Show mode-specific statistics
+                    let mut has_stats = false;
+                    match execution_status.mode.as_str() {
+                        "meter" => {
+                            if execution_status.cost.is_some()
+                                || execution_status.total_cycle.is_some()
+                            {
+                                callback.on_section("Execution Statistics");
+                                has_stats = true;
+                            }
+                            if let Some(cost) = execution_status.cost {
+                                callback.on_field("Cost", &cost.to_string());
+                            }
+                            if let Some(total_cycle) = execution_status.total_cycle {
+                                callback.on_field("Total Cycles", &total_cycle.to_string());
+                            }
+                        }
+                        "segment" => {
+                            if execution_status.num_segments.is_some()
+                                || execution_status.total_cycle.is_some()
+                            {
+                                callback.on_section("Execution Statistics");
+                                has_stats = true;
+                            }
+                            if let Some(num_segments) = execution_status.num_segments {
+                                callback.on_field("Number of Segments", &num_segments.to_string());
+                            }
+                            if let Some(total_cycle) = execution_status.total_cycle {
+                                callback.on_field("Total Cycles", &total_cycle.to_string());
+                            }
+                        }
+                        "pure" => {
+                            // Pure mode only shows public values, no statistics
+                        }
+                        _ => {
+                            // For other modes, show cycles if available
+                            if let Some(total_cycle) = execution_status.total_cycle {
+                                callback.on_section("Execution Statistics");
+                                callback.on_field("Total Cycles", &total_cycle.to_string());
+                                has_stats = true;
                             }
                         }
                     }
 
-                    if let Some(launched_at) = &execution_status.launched_at {
-                        if let Some(terminated_at) = &execution_status.terminated_at {
-                            callback.on_section("Execution Stats");
-                            callback.on_field("Created", &execution_status.created_at);
-                            callback.on_field("Initiated", launched_at);
-                            callback.on_field("Finished", terminated_at);
+                    // Legacy tick count (keeping for compatibility, but not for pure mode)
+                    if execution_status.mode != "pure" {
+                        if let Some(total_tick) = execution_status.total_tick {
+                            if !has_stats {
+                                callback.on_section("Execution Statistics");
+                            }
+                            callback.on_field("Total Ticks", &total_tick.to_string());
+                        }
+                    }
 
-                            if let Ok(duration) = calculate_duration(launched_at, terminated_at) {
-                                callback.on_field("Duration", &duration);
+                    // Format public values more nicely (match CLI format)
+                    if let Some(public_values) = &execution_status.public_values {
+                        if !public_values.is_null() {
+                            callback.on_section("Public Values");
+                            if let Ok(compact) = serde_json::to_string(public_values) {
+                                println!("  {}", compact);
                             }
                         }
                     }
 
                     if let Some(results_path) = self.save_execution_results(&execution_status) {
                         callback.on_section("Saving Results");
-                        callback.on_success(&format!("✓ {}", results_path));
+                        callback.on_success(&results_path);
                     }
 
                     return Ok(());
                 }
                 "Failed" => {
-                    callback.on_clear_line_and_reset();
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
                     let error_msg = execution_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Execution failed: {}", error_msg);
                 }
                 "Queued" => {
-                    callback.on_status("Execution queued...");
+                    if !spinner_started {
+                        callback.on_progress_start("Execution queued", None);
+                        spinner_started = true;
+                    }
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
                 "InProgress" => {
-                    callback.on_status("Execution in progress...");
+                    if !spinner_started {
+                        callback.on_progress_start("Executing program", None);
+                        spinner_started = true;
+                    } else {
+                        // Update message if we were previously in queued state
+                        callback.on_progress_update_message("Executing program");
+                    }
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    callback
-                        .on_status(&format!("Execution status: {}...", execution_status.status));
+                    let status_message = format!("Execution status: {}", execution_status.status);
+                    if !spinner_started {
+                        callback.on_progress_start(&status_message, None);
+                        spinner_started = true;
+                    } else {
+                        callback.on_progress_update_message(&status_message);
+                    }
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
             }
@@ -296,8 +391,11 @@ impl AxiomSdk {
             "created_at": execution_status.created_at,
             "launched_at": execution_status.launched_at,
             "terminated_at": execution_status.terminated_at,
+            "mode": execution_status.mode,
             "total_cycles": execution_status.total_cycle,
             "total_ticks": execution_status.total_tick,
+            "cost": execution_status.cost,
+            "num_segments": execution_status.num_segments,
             "public_values": execution_status.public_values
         });
 
