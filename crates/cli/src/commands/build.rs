@@ -254,9 +254,5 @@ impl BuildCmd {
         if let Some(error_message) = &status.error_message {
             Formatter::print_field("Error", error_message);
         }
-
-        Formatter::print_section("Statistics");
-        Formatter::print_field("Cells Used", &status.cells_used.to_string());
-        Formatter::print_field("Proofs Run", &status.proofs_run.to_string());
     }
 }

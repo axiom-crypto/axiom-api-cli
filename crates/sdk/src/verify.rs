@@ -135,7 +135,6 @@ impl AxiomSdk {
         callback: &dyn ProgressCallback,
     ) -> Result<()> {
         self.wait_for_verification_completion(
-            "EVM",
             || self.get_evm_verification_result(verify_id),
             callback,
         )
@@ -147,7 +146,6 @@ impl AxiomSdk {
         callback: &dyn ProgressCallback,
     ) -> Result<()> {
         self.wait_for_verification_completion(
-            "STARK",
             || self.get_stark_verification_result(verify_id),
             callback,
         )
@@ -237,7 +235,6 @@ impl AxiomSdk {
     /// Common helper function for waiting for verification completion
     fn wait_for_verification_completion<F>(
         &self,
-        proof_type: &str,
         get_status: F,
         callback: &dyn ProgressCallback,
     ) -> Result<()>
@@ -246,43 +243,71 @@ impl AxiomSdk {
     {
         use std::time::Duration;
 
+        let mut spinner_started = false;
+
         loop {
             let verify_status = get_status()?;
 
             match verify_status.result.as_str() {
                 "verified" => {
-                    callback.on_clear_line();
-                    callback.on_success("Verification completed successfully!");
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Verification completed successfully!");
+                    } else {
+                        callback.on_success("Verification completed successfully!");
+                    }
 
-                    // Print completion information
+                    // Add spacing before sections
+                    println!();
+
+                    // Match the CLI status format - use Summary and correct field labels
                     callback.on_section("Verification Summary");
-                    callback.on_field("Verification Result", "✓ VERIFIED");
+                    match verify_status.result.as_str() {
+                        "verified" => callback.on_field("Verification Result", "✓ VERIFIED"),
+                        "failed" => callback.on_field("Verification Result", "✗ FAILED"),
+                        _ => callback
+                            .on_field("Verification Result", &verify_status.result.to_uppercase()),
+                    }
                     callback.on_field("Verification ID", &verify_status.id);
-                    callback.on_field("Proof Type", proof_type);
-                    callback.on_field("Completed At", &verify_status.created_at);
+                    callback.on_field("Proof Type", &verify_status.proof_type.to_uppercase());
+                    callback.on_field("Created At", &verify_status.created_at);
 
                     return Ok(());
                 }
                 "failed" => {
-                    callback.on_clear_line();
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
                     callback.on_error("Verification failed!");
 
-                    // Print failure information
+                    // Match the CLI status format - use Summary and correct field labels
                     callback.on_section("Verification Summary");
-                    callback.on_field("Verification Result", "✗ FAILED");
+                    match verify_status.result.as_str() {
+                        "verified" => callback.on_field("Verification Result", "✓ VERIFIED"),
+                        "failed" => callback.on_field("Verification Result", "✗ FAILED"),
+                        _ => callback
+                            .on_field("Verification Result", &verify_status.result.to_uppercase()),
+                    }
                     callback.on_field("Verification ID", &verify_status.id);
-                    callback.on_field("Proof Type", proof_type);
-                    callback.on_field("Completed At", &verify_status.created_at);
+                    callback.on_field("Proof Type", &verify_status.proof_type.to_uppercase());
+                    callback.on_field("Created At", &verify_status.created_at);
 
                     eyre::bail!("Proof verification failed");
                 }
                 "processing" => {
-                    callback.on_status("Verifying proof...");
+                    if !spinner_started {
+                        callback.on_progress_start("Verifying proof", None);
+                        spinner_started = true;
+                    }
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    callback
-                        .on_status(&format!("Verification status: {}...", verify_status.result));
+                    let status_message = format!("Verification status: {}", verify_status.result);
+                    if !spinner_started {
+                        callback.on_progress_start(&status_message, None);
+                        spinner_started = true;
+                    } else {
+                        callback.on_progress_update_message(&status_message);
+                    }
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
             }
@@ -297,43 +322,71 @@ impl AxiomSdk {
     ) -> Result<()> {
         use std::time::Duration;
 
+        let mut spinner_started = false;
+
         loop {
             let verify_status = self.get_verification_result(verify_id)?;
 
             match verify_status.result.as_str() {
                 "verified" => {
-                    callback.on_clear_line();
-                    callback.on_success("Verification completed successfully!");
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Verification completed successfully!");
+                    } else {
+                        callback.on_success("Verification completed successfully!");
+                    }
 
-                    // Print completion information
+                    // Add spacing before sections
+                    println!();
+
+                    // Match the CLI status format - use Summary and correct field labels
                     callback.on_section("Verification Summary");
-                    callback.on_field("Verification Result", "✓ VERIFIED");
+                    match verify_status.result.as_str() {
+                        "verified" => callback.on_field("Verification Result", "✓ VERIFIED"),
+                        "failed" => callback.on_field("Verification Result", "✗ FAILED"),
+                        _ => callback
+                            .on_field("Verification Result", &verify_status.result.to_uppercase()),
+                    }
                     callback.on_field("Verification ID", &verify_status.id);
                     callback.on_field("Proof Type", &verify_status.proof_type.to_uppercase());
-                    callback.on_field("Completed At", &verify_status.created_at);
+                    callback.on_field("Created At", &verify_status.created_at);
 
                     return Ok(());
                 }
                 "failed" => {
-                    callback.on_clear_line();
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
                     callback.on_error("Verification failed!");
 
-                    // Print failure information
+                    // Match the CLI status format - use Summary and correct field labels
                     callback.on_section("Verification Summary");
-                    callback.on_field("Verification Result", "✗ FAILED");
+                    match verify_status.result.as_str() {
+                        "verified" => callback.on_field("Verification Result", "✓ VERIFIED"),
+                        "failed" => callback.on_field("Verification Result", "✗ FAILED"),
+                        _ => callback
+                            .on_field("Verification Result", &verify_status.result.to_uppercase()),
+                    }
                     callback.on_field("Verification ID", &verify_status.id);
                     callback.on_field("Proof Type", &verify_status.proof_type.to_uppercase());
-                    callback.on_field("Completed At", &verify_status.created_at);
+                    callback.on_field("Created At", &verify_status.created_at);
 
                     eyre::bail!("Proof verification failed");
                 }
                 "processing" => {
-                    callback.on_status("Verifying proof...");
+                    if !spinner_started {
+                        callback.on_progress_start("Verifying proof", None);
+                        spinner_started = true;
+                    }
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    callback
-                        .on_status(&format!("Verification status: {}...", verify_status.result));
+                    let status_message = format!("Verification status: {}", verify_status.result);
+                    if !spinner_started {
+                        callback.on_progress_start(&status_message, None);
+                        spinner_started = true;
+                    } else {
+                        callback.on_progress_update_message(&status_message);
+                    }
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
                 }
             }

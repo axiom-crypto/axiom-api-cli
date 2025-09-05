@@ -8,8 +8,7 @@ use serde_json::{Value, json};
 
 use crate::{
     API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, add_cli_version_header,
-    authenticated_get, authenticated_post, calculate_duration, download_file, send_request_json,
-    validate_input_json,
+    authenticated_get, authenticated_post, download_file, send_request_json, validate_input_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -331,10 +330,35 @@ impl AxiomSdk {
                         callback.on_success("Proof generation completed successfully!");
                     }
 
-                    callback.on_section("Proof Summary");
-                    callback.on_field("Proof ID", &proof_status.id);
-                    callback.on_field("Program ID", &proof_status.program_uuid);
+                    // Add spacing before sections
+                    println!();
+
+                    // Match the detailed status format
+                    callback.on_section("Proof Status");
+                    callback.on_field("ID", &proof_status.id);
+                    callback.on_field("State", &proof_status.state);
                     callback.on_field("Proof Type", &proof_status.proof_type);
+                    callback.on_field("Program ID", &proof_status.program_uuid);
+                    callback.on_field("Created By", &proof_status.created_by);
+                    callback.on_field("Created At", &proof_status.created_at);
+
+                    if let Some(launched_at) = &proof_status.launched_at {
+                        callback.on_field("Launched At", launched_at);
+                    }
+
+                    if let Some(terminated_at) = &proof_status.terminated_at {
+                        callback.on_field("Terminated At", terminated_at);
+                    }
+
+                    if let Some(error_message) = &proof_status.error_message {
+                        callback.on_field("Error", error_message);
+                    }
+
+                    callback.on_section("Statistics");
+                    callback.on_field("Cells Used", &proof_status.cells_used.to_string());
+
+                    // Add spacing after statistics and add saving section
+                    callback.on_section("Saving Results");
 
                     // Use same directory structure as download: program-{uuid}/proofs/{proof_id}/
                     let proof_dir = format!(
@@ -372,17 +396,6 @@ impl AxiomSdk {
                         callback.on_success(&format!("Logs saved to {}", logs_path));
                     }
 
-                    let created_at = &proof_status.created_at;
-                    if let Some(terminated_at) = &proof_status.terminated_at {
-                        callback.on_section("Proof Stats");
-                        callback.on_field("Created", created_at);
-                        callback.on_field("Finished", terminated_at);
-
-                        if let Ok(duration) = calculate_duration(created_at, terminated_at) {
-                            callback.on_field("Duration", &duration);
-                        }
-                    }
-
                     return Ok(());
                 }
                 "Failed" => {
@@ -417,7 +430,6 @@ impl AxiomSdk {
                         callback.on_progress_start(&status_message, None);
                         spinner_started = true;
                     } else {
-                        // Update message for unknown status
                         callback.on_progress_update_message(&status_message);
                     }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
