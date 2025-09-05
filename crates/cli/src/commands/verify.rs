@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{formatting::Formatter, progress::CliProgressCallback};
-use axiom_sdk::{AxiomSdk, ProofType, verify::VerifySdk};
+use axiom_sdk::{AxiomSdk, verify::VerifySdk};
 use clap::{Args, Subcommand};
 use eyre::Result;
 
@@ -23,9 +23,9 @@ enum VerifySubcommand {
         #[clap(long, value_name = "FILE")]
         proof: PathBuf,
 
-        /// Wait for the verification to complete
+        /// Run in detached mode (don't wait for completion)
         #[clap(long)]
-        wait: bool,
+        detach: bool,
     },
     /// Verify a STARK proof
     Stark {
@@ -37,9 +37,9 @@ enum VerifySubcommand {
         #[clap(long, value_name = "FILE")]
         proof: PathBuf,
 
-        /// Wait for the verification to complete
+        /// Run in detached mode (don't wait for completion)
         #[clap(long)]
-        wait: bool,
+        detach: bool,
     },
     /// Check the status of a verification
     Status {
@@ -47,9 +47,9 @@ enum VerifySubcommand {
         #[clap(long, value_name = "ID")]
         verify_id: String,
 
-        /// The proof type (evm or stark)
-        #[clap(long, value_name = "TYPE")]
-        proof_type: ProofType,
+        /// Wait for the verification to complete
+        #[clap(long)]
+        wait: bool,
     },
 }
 
@@ -63,18 +63,18 @@ impl VerifyCmd {
             VerifySubcommand::Evm {
                 config_id,
                 proof,
-                wait,
+                detach,
             } => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
                 let sdk = sdk.with_callback(callback);
                 let verify_id = sdk.verify_evm(config_id.as_deref(), proof)?;
 
-                if wait {
+                if !detach {
                     sdk.wait_for_evm_verify_completion(&verify_id)
                 } else {
                     println!(
-                        "To check the verification status, run: cargo axiom verify status --verify-id {verify_id} --proof-type evm"
+                        "To check the verification status, run: cargo axiom verify status --verify-id {verify_id}"
                     );
                     Ok(())
                 }
@@ -82,40 +82,38 @@ impl VerifyCmd {
             VerifySubcommand::Stark {
                 program_id,
                 proof,
-                wait,
+                detach,
             } => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
                 let sdk = sdk.with_callback(callback);
                 let verify_id = sdk.verify_stark(&program_id, proof)?;
 
-                if wait {
+                if !detach {
                     sdk.wait_for_stark_verify_completion(&verify_id)
                 } else {
                     println!(
-                        "To check the verification status, run: cargo axiom verify status --verify-id {verify_id} --proof-type stark"
+                        "To check the verification status, run: cargo axiom verify status --verify-id {verify_id}"
                     );
                     Ok(())
                 }
             }
-            VerifySubcommand::Status {
-                verify_id,
-                proof_type,
-            } => {
-                let verify_status = match proof_type {
-                    ProofType::Evm => sdk.get_evm_verification_result(&verify_id)?,
-                    ProofType::Stark => sdk.get_stark_verification_result(&verify_id)?,
-                };
-                Self::print_verify_status(&verify_status, proof_type);
-                Ok(())
+            VerifySubcommand::Status { verify_id, wait } => {
+                if wait {
+                    sdk.wait_for_verify_completion(&verify_id)
+                } else {
+                    let verify_status = sdk.get_verification_result(&verify_id)?;
+                    Self::print_verify_status(&verify_status);
+                    Ok(())
+                }
             }
         }
     }
 
-    fn print_verify_status(status: &axiom_sdk::verify::VerifyStatus, proof_type: ProofType) {
+    fn print_verify_status(status: &axiom_sdk::verify::VerifyStatus) {
         Formatter::print_section("Verification Status");
         Formatter::print_field("ID", &status.id);
-        Formatter::print_field("Proof Type", &proof_type.to_string().to_uppercase());
+        Formatter::print_field("Proof Type", &status.proof_type.to_uppercase());
         Formatter::print_field("Result", &status.result);
         Formatter::print_field("Created At", &status.created_at);
     }
