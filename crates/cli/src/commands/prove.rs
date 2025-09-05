@@ -172,5 +172,8 @@ impl ProveCmd {
 
         Formatter::print_section("Statistics");
         Formatter::print_field("Cells Used", &status.cells_used.to_string());
+        if let Some(num_instructions) = status.num_instructions {
+            Formatter::print_field("Total Cycles", &num_instructions.to_string());
+        }
     }
 }

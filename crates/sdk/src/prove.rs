@@ -56,6 +56,7 @@ pub struct ProofStatus {
     pub terminated_at: Option<String>,
     pub created_by: String,
     pub cells_used: u64,
+    pub num_instructions: Option<u64>,
 }
 
 impl ProveSdk for AxiomSdk {
@@ -356,6 +357,9 @@ impl AxiomSdk {
 
                     callback.on_section("Statistics");
                     callback.on_field("Cells Used", &proof_status.cells_used.to_string());
+                    if let Some(num_instructions) = proof_status.num_instructions {
+                        callback.on_field("Total Cycles", &num_instructions.to_string());
+                    }
 
                     // Add spacing after statistics and add saving section
                     callback.on_section("Saving Results");
