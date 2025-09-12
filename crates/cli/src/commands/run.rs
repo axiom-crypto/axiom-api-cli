@@ -33,9 +33,13 @@ pub struct RunArgs {
     #[clap(long, value_parser, help = "Input to OpenVM program")]
     input: Option<Input>,
 
-    /// Wait for the execution to complete
+    /// Execution mode: pure (output only), meter (output + cost + instructions), segment (output + segments + instructions)
+    #[clap(long, default_value = "pure", value_parser = ["pure", "meter", "segment"], help = "Execution mode")]
+    mode: String,
+
+    /// Run in detached mode (don't wait for completion)
     #[clap(long)]
-    wait: bool,
+    detach: bool,
 }
 
 impl RunCmd {
@@ -57,10 +61,11 @@ impl RunCmd {
                 let args = axiom_sdk::run::RunArgs {
                     program_id: self.run_args.program_id,
                     input: self.run_args.input,
+                    mode: self.run_args.mode,
                 };
                 let execution_id = sdk.execute_program(args)?;
 
-                if self.run_args.wait {
+                if !self.run_args.detach {
                     sdk.wait_for_execution_completion(&execution_id)
                 } else {
                     println!("Execution started successfully! ID: {}", execution_id);
@@ -78,6 +83,7 @@ impl RunCmd {
         Formatter::print_section("Execution Status");
         Formatter::print_field("ID", &status.id);
         Formatter::print_field("Status", &status.status);
+        Formatter::print_field("Mode", &status.mode);
         Formatter::print_field("Program ID", &status.program_uuid);
         Formatter::print_field("Created By", &status.created_by);
         Formatter::print_field("Created At", &status.created_at);
@@ -94,18 +100,41 @@ impl RunCmd {
             Formatter::print_field("Error", error_message);
         }
 
-        if let Some(total_cycle) = status.total_cycle {
-            Formatter::print_section("Execution Statistics");
-            Formatter::print_field("Total Cycles", &total_cycle.to_string());
-        }
-
-        if let Some(total_tick) = status.total_tick {
-            if status.total_cycle.is_none() {
-                Formatter::print_section("Execution Statistics");
+        // Show mode-specific statistics
+        match status.mode.as_str() {
+            "meter" => {
+                if status.cost.is_some() || status.total_cycle.is_some() {
+                    Formatter::print_section("Execution Statistics");
+                }
+                if let Some(cost) = status.cost {
+                    Formatter::print_field("Cost", &cost.to_string());
+                }
+                if let Some(total_cycle) = status.total_cycle {
+                    Formatter::print_field("Total Cycles", &total_cycle.to_string());
+                }
             }
-            Formatter::print_field("Total Ticks", &total_tick.to_string());
+            "segment" => {
+                if status.num_segments.is_some() || status.total_cycle.is_some() {
+                    Formatter::print_section("Execution Statistics");
+                }
+                if let Some(num_segments) = status.num_segments {
+                    Formatter::print_field("Number of Segments", &num_segments.to_string());
+                }
+                if let Some(total_cycle) = status.total_cycle {
+                    Formatter::print_field("Total Cycles", &total_cycle.to_string());
+                }
+            }
+            "pure" => {
+                // Pure mode only shows public values, no statistics
+            }
+            _ => {
+                // For other modes, show cycles if available
+                if let Some(total_cycle) = status.total_cycle {
+                    Formatter::print_section("Execution Statistics");
+                    Formatter::print_field("Total Cycles", &total_cycle.to_string());
+                }
+            }
         }
-
         // Format public values more nicely
         if let Some(public_values) = &status.public_values {
             if !public_values.is_null() {

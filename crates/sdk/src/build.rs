@@ -277,8 +277,6 @@ impl AxiomSdk {
     ) -> Result<()> {
         use std::time::Duration;
 
-        use crate::config::ConfigSdk;
-
         callback.on_progress_start("Checking build status...", None);
 
         loop {
@@ -292,33 +290,38 @@ impl AxiomSdk {
             match build_status.status.as_str() {
                 "ready" => {
                     callback.on_progress_finish("✓ Build completed successfully!");
-                    callback.on_success("Build completed successfully!");
 
-                    // Get OpenVM version from config
-                    let config_metadata =
-                        self.get_vm_config_metadata(Some(&build_status.config_uuid))?;
+                    // Add spacing before sections
+                    println!();
 
-                    // Print completion information
-                    callback.on_section("Build Summary");
-                    callback.on_field("Program ID", &build_status.id);
+                    // Match the detailed status format
+                    callback.on_section("Build Status");
+                    callback.on_field("ID", &build_status.id);
+                    callback.on_field("Name", &build_status.name);
+                    callback.on_field("Project ID", &build_status.project_id);
+                    callback.on_field("Project Name", &build_status.project_name);
+                    callback.on_field("Status", &build_status.status);
                     callback.on_field("Program Hash", &build_status.program_hash);
                     callback.on_field("Config ID", &build_status.config_uuid);
-                    callback.on_field("OpenVM Version", &config_metadata.openvm_version);
+                    callback.on_field("Created By", &build_status.created_by);
+                    callback.on_field("Created At", &build_status.created_at);
+                    callback.on_field("Last Active", &build_status.last_active_at);
 
                     if let Some(launched_at) = &build_status.launched_at {
-                        if let Some(terminated_at) = &build_status.terminated_at {
-                            callback.on_section("Build Stats");
-                            callback.on_field("Created", &build_status.created_at);
-                            callback.on_field("Initiated", launched_at);
-                            callback.on_field("Finished", terminated_at);
-
-                            if let Ok(duration) =
-                                crate::calculate_duration(launched_at, terminated_at)
-                            {
-                                callback.on_field("Duration", &duration);
-                            }
-                        }
+                        callback.on_field("Launched At", launched_at);
                     }
+
+                    if let Some(terminated_at) = &build_status.terminated_at {
+                        callback.on_field("Terminated At", terminated_at);
+                    }
+
+                    if let Some(error_message) = &build_status.error_message {
+                        callback.on_field("Error", error_message);
+                    }
+
+                    callback.on_section("Statistics");
+                    callback.on_field("Cells Used", &build_status.cells_used.to_string());
+                    callback.on_field("Proofs Run", &build_status.proofs_run.to_string());
 
                     // Download artifacts automatically
                     callback.on_section("Downloading Artifacts");
@@ -344,22 +347,25 @@ impl AxiomSdk {
                     return Ok(());
                 }
                 "error" | "failed" => {
+                    callback.on_progress_finish("");
                     let error_msg = build_status
                         .error_message
                         .unwrap_or_else(|| "Unknown error".to_string());
-                    callback.on_progress_finish(&format!("✗ Build failed: {}", error_msg));
                     eyre::bail!("Build failed: {}", error_msg);
                 }
                 "processing" => {
-                    callback.on_status("Build in progress...");
+                    callback.on_progress_update_message("Building program");
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 "not_ready" => {
-                    callback.on_status("Build queued...");
+                    callback.on_progress_update_message("Build queued");
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
                 _ => {
-                    callback.on_status(&format!("Build status: {}...", build_status.status));
+                    callback.on_progress_update_message(&format!(
+                        "Build status: {}",
+                        build_status.status
+                    ));
                     std::thread::sleep(Duration::from_secs(BUILD_POLLING_INTERVAL_SECS));
                 }
             }

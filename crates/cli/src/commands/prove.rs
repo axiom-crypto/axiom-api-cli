@@ -23,6 +23,10 @@ enum ProveSubcommand {
         /// The proof ID to check status for
         #[clap(long, value_name = "ID")]
         proof_id: String,
+
+        /// Wait for the proof to complete
+        #[clap(long)]
+        wait: bool,
     },
     /// Download logs for a proof
     Logs {
@@ -67,9 +71,9 @@ pub struct ProveArgs {
     #[clap(long = "type", default_value = "stark")]
     proof_type: ProofType,
 
-    /// Wait for the proof to complete and download artifacts
+    /// Run in detached mode (don't wait for completion)
     #[clap(long)]
-    wait: bool,
+    detach: bool,
 }
 
 impl ProveCmd {
@@ -79,10 +83,14 @@ impl ProveCmd {
         let sdk = AxiomSdk::new(config.clone()).with_callback(callback);
 
         match self.command {
-            Some(ProveSubcommand::Status { proof_id }) => {
-                let proof_status = sdk.get_proof_status(&proof_id)?;
-                Self::print_proof_status(&proof_status);
-                Ok(())
+            Some(ProveSubcommand::Status { proof_id, wait }) => {
+                if wait {
+                    sdk.wait_for_proof_completion(&proof_id)
+                } else {
+                    let proof_status = sdk.get_proof_status(&proof_id)?;
+                    Self::print_proof_status(&proof_status);
+                    Ok(())
+                }
             }
             Some(ProveSubcommand::Download {
                 proof_id,
@@ -129,7 +137,7 @@ impl ProveCmd {
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
 
-                if self.prove_args.wait {
+                if !self.prove_args.detach {
                     sdk.wait_for_proof_completion(&proof_id)
                 } else {
                     println!(
@@ -164,5 +172,8 @@ impl ProveCmd {
 
         Formatter::print_section("Statistics");
         Formatter::print_field("Cells Used", &status.cells_used.to_string());
+        if let Some(num_instructions) = status.num_instructions {
+            Formatter::print_field("Total Cycles", &num_instructions.to_string());
+        }
     }
 }
