@@ -11,7 +11,7 @@
    Or from source:
 
    ```bash
-   git clone https://github.com/axiom-crypto/axiom-api-cli --tag v1.0.0
+   git clone https://github.com/axiom-crypto/axiom-api-cli --tag v1.0.1
    cd axiom-api-cli/crates/cli
    cargo +1.86 install --locked --force --path .
    ```
