@@ -92,6 +92,10 @@ pub struct BuildArgs {
     /// Allow building with uncommitted changes
     #[clap(long)]
     allow_dirty: bool,
+
+    /// Specify default_num_gpus for this program
+    #[clap(long)]
+    default_num_gpus: Option<usize>
 }
 
 impl BuildCmd {
@@ -186,6 +190,7 @@ impl BuildCmd {
                     project_id,
                     project_name: project_name_for_creation.clone(),
                     allow_dirty: self.build_args.allow_dirty,
+                    default_num_gpus: self.build_args.default_num_gpus
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
 

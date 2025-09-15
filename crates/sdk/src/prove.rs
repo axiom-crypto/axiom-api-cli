@@ -42,6 +42,8 @@ pub struct ProveArgs {
     pub input: Option<Input>,
     /// The type of proof to generate (stark or evm)
     pub proof_type: Option<ProofType>,
+    /// The num gpus to use for this proof
+    pub num_gpus: Option<usize>
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +59,7 @@ pub struct ProofStatus {
     pub created_by: String,
     pub cells_used: u64,
     pub num_instructions: Option<u64>,
+    pub num_gpus: usize
 }
 
 impl ProveSdk for AxiomSdk {

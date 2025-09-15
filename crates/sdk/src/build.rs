@@ -58,6 +58,7 @@ pub struct BuildStatus {
     pub proofs_run: u64,
     pub project_id: String,
     pub project_name: String,
+    pub default_num_gpus: usize
 }
 
 #[derive(Debug)]
@@ -78,6 +79,8 @@ pub struct BuildArgs {
     pub project_name: Option<String>,
     /// Allow building with uncommitted changes
     pub allow_dirty: bool,
+    /// Set default num gpus for this program
+    pub default_num_gpus: Option<usize>
 }
 
 #[derive(Debug, Clone)]
@@ -306,6 +309,7 @@ impl AxiomSdk {
                     callback.on_field("Created By", &build_status.created_by);
                     callback.on_field("Created At", &build_status.created_at);
                     callback.on_field("Last Active", &build_status.last_active_at);
+                    callback.on_field("Num GPUs", &build_status.default_num_gpus);
 
                     if let Some(launched_at) = &build_status.launched_at {
                         callback.on_field("Launched At", launched_at);

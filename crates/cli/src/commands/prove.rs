@@ -74,6 +74,10 @@ pub struct ProveArgs {
     /// Run in detached mode (don't wait for completion)
     #[clap(long)]
     detach: bool,
+
+    /// Num GPUs to use for this proof
+    #[clap(long)]
+    num_gpus: Option<usize>
 }
 
 impl ProveCmd {
@@ -134,6 +138,7 @@ impl ProveCmd {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
                     proof_type: Some(self.prove_args.proof_type),
+                    num_gpus: self.prove_args.num_gpus
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
 
