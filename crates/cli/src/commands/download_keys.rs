@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use crate::progress::CliProgressCallback;
 use axiom_sdk::{AxiomSdk, config::ConfigSdk};
 use clap::Args;
 use eyre::Result;
+
+use crate::progress::CliProgressCallback;
 
 #[derive(Args, Debug)]
 pub struct DownloadKeysCmd {

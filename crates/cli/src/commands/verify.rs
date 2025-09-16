@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{AxiomSdk, verify::VerifySdk};
 use clap::{Args, Subcommand};
 use eyre::Result;
+
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 
 #[derive(Args, Debug)]
 pub struct VerifyCmd {

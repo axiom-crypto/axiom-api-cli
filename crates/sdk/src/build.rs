@@ -58,7 +58,7 @@ pub struct BuildStatus {
     pub proofs_run: u64,
     pub project_id: String,
     pub project_name: String,
-    pub default_num_gpus: usize
+    pub default_num_gpus: usize,
 }
 
 #[derive(Debug)]
@@ -80,7 +80,7 @@ pub struct BuildArgs {
     /// Allow building with uncommitted changes
     pub allow_dirty: bool,
     /// Set default num gpus for this program
-    pub default_num_gpus: Option<usize>
+    pub default_num_gpus: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -309,7 +309,7 @@ impl AxiomSdk {
                     callback.on_field("Created By", &build_status.created_by);
                     callback.on_field("Created At", &build_status.created_at);
                     callback.on_field("Last Active", &build_status.last_active_at);
-                    callback.on_field("Num GPUs", &build_status.default_num_gpus);
+                    callback.on_field("Num GPUs", &build_status.default_num_gpus.to_string());
 
                     if let Some(launched_at) = &build_status.launched_at {
                         callback.on_field("Launched At", launched_at);
@@ -572,6 +572,9 @@ impl AxiomSdk {
         if let Ok(sha) = get_git_commit_sha(&git_root) {
             url.push_str(&format!("&commit_sha={sha}"));
         }
+        if let Some(default_num_gpus) = args.default_num_gpus {
+            url.push_str(&format!("&default_num_gpus={}", default_num_gpus));
+        }
 
         callback.on_header("Building Program");
 
@@ -581,6 +584,10 @@ impl AxiomSdk {
             callback.on_field("Config File", &path);
         } else {
             callback.on_field("Config", "Default");
+        }
+
+        if let Some(default_num_gpus) = args.default_num_gpus {
+            callback.on_field("Default Num GPUs", &default_num_gpus.to_string());
         }
 
         // Start progress tracking for upload

@@ -1,11 +1,30 @@
 use std::path::PathBuf;
 
-use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{AxiomSdk, ProofType, prove::ProveSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
 use comfy_table;
 use eyre::Result;
+
+use crate::{formatting::Formatter, progress::CliProgressCallback};
+
+fn validate_priority(s: &str) -> Result<u8, String> {
+    let priority: u8 = s.parse().map_err(|_| "Priority must be a number")?;
+    if priority >= 1 && priority <= 10 {
+        Ok(priority)
+    } else {
+        Err("Priority must be between 1 and 10".to_string())
+    }
+}
+
+fn validate_num_gpus(s: &str) -> Result<usize, String> {
+    let num_gpus: usize = s.parse().map_err(|_| "Number of GPUs must be a number")?;
+    if num_gpus >= 1 && num_gpus <= 10000 {
+        Ok(num_gpus)
+    } else {
+        Err("Number of GPUs must be between 1 and 10000".to_string())
+    }
+}
 
 #[derive(Args, Debug)]
 pub struct ProveCmd {
@@ -75,9 +94,13 @@ pub struct ProveArgs {
     #[clap(long)]
     detach: bool,
 
-    /// Num GPUs to use for this proof
-    #[clap(long)]
-    num_gpus: Option<usize>
+    /// Num GPUs to use for this proof (1-10000)
+    #[clap(long, value_parser = validate_num_gpus)]
+    num_gpus: Option<usize>,
+
+    /// Priority for this proof (1-10, higher = more priority)
+    #[clap(long, value_parser = validate_priority)]
+    priority: Option<u8>,
 }
 
 impl ProveCmd {
@@ -138,7 +161,8 @@ impl ProveCmd {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
                     proof_type: Some(self.prove_args.proof_type),
-                    num_gpus: self.prove_args.num_gpus
+                    num_gpus: self.prove_args.num_gpus,
+                    priority: self.prove_args.priority,
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
 

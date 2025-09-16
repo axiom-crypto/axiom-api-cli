@@ -1,7 +1,9 @@
-use crate::formatting::Formatter;
+use std::sync::Mutex;
+
 use axiom_sdk::ProgressCallback;
 use indicatif::ProgressBar;
-use std::sync::Mutex;
+
+use crate::formatting::Formatter;
 
 pub struct CliProgressCallback {
     progress_bar: Mutex<Option<ProgressBar>>,

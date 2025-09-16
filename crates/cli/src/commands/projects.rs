@@ -1,8 +1,9 @@
-use crate::progress::CliProgressCallback;
 use axiom_sdk::{AxiomSdk, projects::ProjectSdk};
 use clap::{Args, Subcommand};
 use comfy_table::Table;
 use eyre::Result;
+
+use crate::progress::CliProgressCallback;
 
 #[derive(Args, Debug)]
 pub struct ProjectsCmd {
