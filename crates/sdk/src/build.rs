@@ -309,7 +309,10 @@ impl AxiomSdk {
                     callback.on_field("Created By", &build_status.created_by);
                     callback.on_field("Created At", &build_status.created_at);
                     callback.on_field("Last Active", &build_status.last_active_at);
-                    callback.on_field("Num GPUs", &build_status.default_num_gpus.to_string());
+                    callback.on_field(
+                        "Default Num GPUs",
+                        &build_status.default_num_gpus.to_string(),
+                    );
 
                     if let Some(launched_at) = &build_status.launched_at {
                         callback.on_field("Launched At", launched_at);

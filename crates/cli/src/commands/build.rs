@@ -259,5 +259,6 @@ impl BuildCmd {
         if let Some(error_message) = &status.error_message {
             Formatter::print_field("Error", error_message);
         }
+        Formatter::print_field("Default Num GPUs", &status.default_num_gpus.to_string());
     }
 }

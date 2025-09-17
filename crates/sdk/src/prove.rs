@@ -62,6 +62,7 @@ pub struct ProofStatus {
     pub cells_used: u64,
     pub num_instructions: Option<u64>,
     pub num_gpus: usize,
+    pub priority: u8,
 }
 
 impl ProveSdk for AxiomSdk {
@@ -376,6 +377,10 @@ impl AxiomSdk {
                     if let Some(error_message) = &proof_status.error_message {
                         callback.on_field("Error", error_message);
                     }
+
+                    callback.on_section("Configuration");
+                    callback.on_field("Num GPUs", &proof_status.num_gpus.to_string());
+                    callback.on_field("Priority", &proof_status.priority.to_string());
 
                     callback.on_section("Statistics");
                     callback.on_field("Cells Used", &proof_status.cells_used.to_string());
