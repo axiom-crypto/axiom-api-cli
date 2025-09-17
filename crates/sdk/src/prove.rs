@@ -42,6 +42,10 @@ pub struct ProveArgs {
     pub input: Option<Input>,
     /// The type of proof to generate (stark or evm)
     pub proof_type: Option<ProofType>,
+    /// The num gpus to use for this proof (1-10000)
+    pub num_gpus: Option<usize>,
+    /// Priority for this proof (1-10, higher = more priority)
+    pub priority: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +61,8 @@ pub struct ProofStatus {
     pub created_by: String,
     pub cells_used: u64,
     pub num_instructions: Option<u64>,
+    pub num_gpus: usize,
+    pub priority: u8,
 }
 
 impl ProveSdk for AxiomSdk {
@@ -265,10 +271,27 @@ impl AxiomSdk {
         callback.on_field("Program ID", &program_id);
         callback.on_field("Proof Type", &proof_type.to_string().to_uppercase());
 
-        let url = format!(
+        if let Some(num_gpus) = args.num_gpus {
+            callback.on_field("Num GPUs", &num_gpus.to_string());
+        }
+
+        if let Some(priority) = args.priority {
+            callback.on_field("Priority", &priority.to_string());
+        }
+
+        let mut url = format!(
             "{}/proofs?program_id={program_id}&proof_type={proof_type}",
             self.config.api_url
         );
+
+        // Add optional parameters as query parameters
+        if let Some(num_gpus) = args.num_gpus {
+            url.push_str(&format!("&num_gpus={}", num_gpus));
+        }
+
+        if let Some(priority) = args.priority {
+            url.push_str(&format!("&priority={}", priority));
+        }
 
         // Create the request body based on input
         let body = match &args.input {
@@ -354,6 +377,10 @@ impl AxiomSdk {
                     if let Some(error_message) = &proof_status.error_message {
                         callback.on_field("Error", error_message);
                     }
+
+                    callback.on_section("Configuration");
+                    callback.on_field("Num GPUs", &proof_status.num_gpus.to_string());
+                    callback.on_field("Priority", &proof_status.priority.to_string());
 
                     callback.on_section("Statistics");
                     callback.on_field("Cells Used", &proof_status.cells_used.to_string());

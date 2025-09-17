@@ -1,11 +1,30 @@
 use std::path::PathBuf;
 
-use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{AxiomSdk, ProofType, prove::ProveSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
 use comfy_table;
 use eyre::Result;
+
+use crate::{formatting::Formatter, progress::CliProgressCallback};
+
+fn validate_priority(s: &str) -> Result<u8, String> {
+    let priority: u8 = s.parse().map_err(|_| "Priority must be a number")?;
+    if (1..=10).contains(&priority) {
+        Ok(priority)
+    } else {
+        Err("Priority must be between 1 and 10".to_string())
+    }
+}
+
+fn validate_num_gpus(s: &str) -> Result<usize, String> {
+    let num_gpus: usize = s.parse().map_err(|_| "Number of GPUs must be a number")?;
+    if (1..=10000).contains(&num_gpus) {
+        Ok(num_gpus)
+    } else {
+        Err("Number of GPUs must be between 1 and 10000".to_string())
+    }
+}
 
 #[derive(Args, Debug)]
 pub struct ProveCmd {
@@ -74,6 +93,14 @@ pub struct ProveArgs {
     /// Run in detached mode (don't wait for completion)
     #[clap(long)]
     detach: bool,
+
+    /// Num GPUs to use for this proof (1-10000)
+    #[clap(long, value_parser = validate_num_gpus)]
+    num_gpus: Option<usize>,
+
+    /// Priority for this proof (1-10, higher = more priority)
+    #[clap(long, value_parser = validate_priority)]
+    priority: Option<u8>,
 }
 
 impl ProveCmd {
@@ -134,6 +161,8 @@ impl ProveCmd {
                     program_id: self.prove_args.program_id,
                     input: self.prove_args.input,
                     proof_type: Some(self.prove_args.proof_type),
+                    num_gpus: self.prove_args.num_gpus,
+                    priority: self.prove_args.priority,
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
 
@@ -169,6 +198,10 @@ impl ProveCmd {
         if let Some(error_message) = &status.error_message {
             Formatter::print_field("Error", error_message);
         }
+
+        Formatter::print_section("Configuration");
+        Formatter::print_field("Num GPUs", &status.num_gpus.to_string());
+        Formatter::print_field("Priority", &status.priority.to_string());
 
         Formatter::print_section("Statistics");
         Formatter::print_field("Cells Used", &status.cells_used.to_string());

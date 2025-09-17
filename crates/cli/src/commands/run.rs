@@ -1,8 +1,9 @@
-use crate::{formatting::Formatter, progress::CliProgressCallback};
 use axiom_sdk::{AxiomSdk, run::RunSdk};
 use cargo_openvm::input::Input;
 use clap::{Args, Subcommand};
 use eyre::Result;
+
+use crate::{formatting::Formatter, progress::CliProgressCallback};
 
 #[derive(Args, Debug)]
 pub struct RunCmd {

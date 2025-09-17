@@ -736,7 +736,7 @@ dependencies = [
 
 [[package]]
 name = "axiom-sdk"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "cargo-openvm",
  "cargo_metadata 0.21.0",
@@ -1019,7 +1019,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-axiom"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "axiom-sdk",
  "cargo-openvm",
