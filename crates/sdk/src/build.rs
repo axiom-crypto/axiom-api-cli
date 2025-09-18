@@ -22,7 +22,7 @@ use crate::{
     download_file, send_request_json,
 };
 
-pub const MAX_PROGRAM_SIZE_MB: u64 = 1024;
+pub const MAX_PROGRAM_SIZE_MB: u64 = 2048;
 const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
 
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
@@ -535,7 +535,6 @@ impl AxiomSdk {
         // Check if the tar file size exceeds 10MB
         let metadata = std::fs::metadata(tar_path).context("Failed to get tar file metadata")?;
         if metadata.len() > MAX_PROGRAM_SIZE_MB * 1024 * 1024 {
-            std::fs::remove_file(tar_path).ok();
             eyre::bail!(
                 "Project archive size ({}) exceeds maximum allowed size of {}MB",
                 metadata.len(),
