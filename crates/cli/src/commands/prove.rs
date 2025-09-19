@@ -160,11 +160,11 @@ impl ProveCmd {
                 Ok(())
             }
             Some(ProveSubcommand::Cancel { proof_id }) => {
-                sdk.cancel_proof(&proof_id)?;
-                println!(
-                    "✓ Successfully requested cancellation for proof {}",
-                    proof_id
-                );
+                let message = sdk.cancel_proof(&proof_id)?;
+                println!("✓ {}", message);
+
+                // Wait for cancellation to complete
+                sdk.wait_for_proof_cancellation(&proof_id)?;
                 Ok(())
             }
             None => {
