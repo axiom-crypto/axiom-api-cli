@@ -74,6 +74,12 @@ enum ProveSubcommand {
         #[arg(long, value_name = "ID")]
         program_id: String,
     },
+    /// Cancel a running proof
+    Cancel {
+        /// The proof ID to cancel
+        #[clap(long, value_name = "ID")]
+        proof_id: String,
+    },
 }
 
 #[derive(Args, Debug)]
@@ -151,6 +157,14 @@ impl ProveCmd {
 
                 // Print the table
                 println!("{table}");
+                Ok(())
+            }
+            Some(ProveSubcommand::Cancel { proof_id }) => {
+                let message = sdk.cancel_proof(&proof_id)?;
+                println!("✓ {}", message);
+
+                // Wait for cancellation to complete
+                sdk.wait_for_proof_cancellation(&proof_id)?;
                 Ok(())
             }
             None => {

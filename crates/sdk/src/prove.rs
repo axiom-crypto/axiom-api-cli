@@ -32,6 +32,8 @@ pub trait ProveSdk {
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String>;
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()>;
+    fn cancel_proof(&self, proof_id: &str) -> Result<String>;
+    fn wait_for_proof_cancellation(&self, proof_id: &str) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -252,6 +254,37 @@ impl ProveSdk for AxiomSdk {
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
         self.wait_for_proof_completion_base(proof_id, &*self.callback)
     }
+
+    fn cancel_proof(&self, proof_id: &str) -> Result<String> {
+        let url = format!("{}/proofs/{}/cancel", self.config.api_url, proof_id);
+
+        let request = authenticated_post(&self.config, &url)?
+            .header("Content-Type", "application/json")
+            .body("{}");
+
+        let response = request.send().context("Failed to send cancel request")?;
+
+        if response.status().is_success() {
+            // Try to get response message, fallback to default
+            let response_text = response.text().unwrap_or_else(|_| "{}".to_string());
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+                if let Some(message) = json.get("message").and_then(|m| m.as_str()) {
+                    return Ok(message.to_string());
+                }
+            }
+            Ok("Cancellation request submitted successfully".to_string())
+        } else {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            eyre::bail!("Failed to cancel proof ({}): {}", status, error_text);
+        }
+    }
+
+    fn wait_for_proof_cancellation(&self, proof_id: &str) -> Result<()> {
+        self.wait_for_proof_cancellation_base(proof_id, &*self.callback)
+    }
 }
 
 impl AxiomSdk {
@@ -438,6 +471,23 @@ impl AxiomSdk {
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Proof generation failed: {}", error_msg);
                 }
+                "Canceled" => {
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Proof generation was canceled");
+                    } else {
+                        callback.on_info("Proof generation was canceled");
+                    }
+                    return Ok(());
+                }
+                "Canceling" => {
+                    if !spinner_started {
+                        callback.on_progress_start("Canceling proof", None);
+                        spinner_started = true;
+                    } else {
+                        callback.on_progress_update_message("Canceling proof");
+                    }
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
+                }
                 "Queued" => {
                     if !spinner_started {
                         callback.on_progress_start("Proof queued", None);
@@ -462,6 +512,71 @@ impl AxiomSdk {
                         spinner_started = true;
                     } else {
                         callback.on_progress_update_message(&status_message);
+                    }
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
+                }
+            }
+        }
+    }
+
+    pub fn wait_for_proof_cancellation_base(
+        &self,
+        proof_id: &str,
+        callback: &dyn ProgressCallback,
+    ) -> Result<()> {
+        use std::time::Duration;
+
+        let mut spinner_started = false;
+
+        loop {
+            let response = authenticated_get(
+                &self.config,
+                &format!("{}/proofs/{}", self.config.api_url, proof_id),
+            )?;
+            let proof_status: ProofStatus =
+                send_request_json(response, "Failed to get proof status")?;
+
+            match proof_status.state.as_str() {
+                "Canceled" => {
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Proof successfully canceled");
+                    } else {
+                        callback.on_success("Proof successfully canceled");
+                    }
+                    return Ok(());
+                }
+                "Canceling" => {
+                    if !spinner_started {
+                        callback.on_progress_start("Canceling proof", None);
+                        spinner_started = true;
+                    }
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
+                }
+                "Failed" => {
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
+                    let error_msg = proof_status
+                        .error_message
+                        .unwrap_or_else(|| "Unknown error".to_string());
+                    eyre::bail!(
+                        "Proof failed before cancellation could complete: {}",
+                        error_msg
+                    );
+                }
+                "Succeeded" => {
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
+                    eyre::bail!(
+                        "Proof completed successfully before cancellation could take effect"
+                    );
+                }
+                _ => {
+                    // For any other state (Queued, InProgress, etc.), keep waiting for cancellation
+                    if !spinner_started {
+                        callback.on_progress_start("Waiting for cancellation", None);
+                        spinner_started = true;
                     }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }
