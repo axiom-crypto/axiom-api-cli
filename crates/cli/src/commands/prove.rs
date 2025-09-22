@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
-use axiom_sdk::{AxiomSdk, ProofType, prove::ProveSdk};
-use cargo_openvm::input::Input;
+use axiom_sdk::{AxiomSdk, ProofType, input::Input, prove::ProveSdk};
 use clap::{Args, Subcommand};
 use comfy_table;
 use eyre::Result;

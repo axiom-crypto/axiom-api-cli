@@ -1,6 +1,6 @@
 use std::{fs, io::copy, path::PathBuf};
 
-use cargo_openvm::input::Input;
+use crate::input::Input;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};

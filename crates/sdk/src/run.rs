@@ -1,6 +1,6 @@
 use std::fs;
 
-use cargo_openvm::input::Input;
+use crate::input::Input;
 use eyre::{Context, OptionExt, Result};
 use hex;
 use reqwest::blocking::Client;

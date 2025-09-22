@@ -8,7 +8,6 @@ license.workspace = true
 
 [dependencies]
 axiom-sdk = { workspace = true }
-cargo-openvm = { workspace = true }
 
 comfy-table = { workspace = true }
 serde_json = { workspace = true }
