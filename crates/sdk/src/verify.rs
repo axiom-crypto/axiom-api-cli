@@ -93,12 +93,28 @@ impl AxiomSdk {
             .map_err(|e| eyre::eyre!("Invalid JSON in proof file: {}", e))?;
 
         // Basic schema validation
-        proof_json.get("version").ok_or_eyre("Missing 'version' field in proof")?;
-        proof_json.get("user_public_values").ok_or_eyre("Missing 'user_public_values' field")?;
-        proof_json.get("proof_data").ok_or_eyre("Missing 'proof_data' field")?;
+        proof_json
+            .get("version")
+            .ok_or_eyre("Missing 'version' field in proof")?;
+        proof_json
+            .get("user_public_values")
+            .ok_or_eyre("Missing 'user_public_values' field")?;
+        proof_json
+            .get("app_exe_commit")
+            .ok_or_eyre("Missing 'app_exe_commit' field")?;
+        proof_json
+            .get("app_vm_commit")
+            .ok_or_eyre("Missing 'app_vm_commit' field")?;
+        proof_json
+            .get("proof_data")
+            .ok_or_eyre("Missing 'proof_data' field")?;
         let proof_data = proof_json.get("proof_data").unwrap();
-        proof_data.get("accumulator").ok_or_eyre("Missing 'accumulator' in proof_data")?;
-        proof_data.get("proof").ok_or_eyre("Missing 'proof' in proof_data")?;
+        proof_data
+            .get("accumulator")
+            .ok_or_eyre("Missing 'accumulator' in proof_data")?;
+        proof_data
+            .get("proof")
+            .ok_or_eyre("Missing 'proof' in proof_data")?;
 
         // Get config metadata for additional information
         let config_metadata = self.get_vm_config_metadata(Some(&config_id))?;
