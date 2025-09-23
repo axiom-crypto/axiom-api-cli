@@ -1,6 +1,6 @@
 use std::{fs, io::copy, path::PathBuf};
 
-use cargo_openvm::input::Input;
+use crate::input::Input;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -32,6 +32,8 @@ pub trait ProveSdk {
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String>;
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()>;
+    fn cancel_proof(&self, proof_id: &str) -> Result<String>;
+    fn wait_for_proof_cancellation(&self, proof_id: &str) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -42,6 +44,10 @@ pub struct ProveArgs {
     pub input: Option<Input>,
     /// The type of proof to generate (stark or evm)
     pub proof_type: Option<ProofType>,
+    /// The num gpus to use for this proof (1-10000)
+    pub num_gpus: Option<usize>,
+    /// Priority for this proof (1-10, higher = more priority)
+    pub priority: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -57,6 +63,8 @@ pub struct ProofStatus {
     pub created_by: String,
     pub cells_used: u64,
     pub num_instructions: Option<u64>,
+    pub num_gpus: usize,
+    pub priority: u8,
 }
 
 impl ProveSdk for AxiomSdk {
@@ -246,6 +254,37 @@ impl ProveSdk for AxiomSdk {
     fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
         self.wait_for_proof_completion_base(proof_id, &*self.callback)
     }
+
+    fn cancel_proof(&self, proof_id: &str) -> Result<String> {
+        let url = format!("{}/proofs/{}/cancel", self.config.api_url, proof_id);
+
+        let request = authenticated_post(&self.config, &url)?
+            .header("Content-Type", "application/json")
+            .body("{}");
+
+        let response = request.send().context("Failed to send cancel request")?;
+
+        if response.status().is_success() {
+            // Try to get response message, fallback to default
+            let response_text = response.text().unwrap_or_else(|_| "{}".to_string());
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_text) {
+                if let Some(message) = json.get("message").and_then(|m| m.as_str()) {
+                    return Ok(message.to_string());
+                }
+            }
+            Ok("Cancellation request submitted successfully".to_string())
+        } else {
+            let status = response.status();
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            eyre::bail!("Failed to cancel proof ({}): {}", status, error_text);
+        }
+    }
+
+    fn wait_for_proof_cancellation(&self, proof_id: &str) -> Result<()> {
+        self.wait_for_proof_cancellation_base(proof_id, &*self.callback)
+    }
 }
 
 impl AxiomSdk {
@@ -265,10 +304,27 @@ impl AxiomSdk {
         callback.on_field("Program ID", &program_id);
         callback.on_field("Proof Type", &proof_type.to_string().to_uppercase());
 
-        let url = format!(
+        if let Some(num_gpus) = args.num_gpus {
+            callback.on_field("Num GPUs", &num_gpus.to_string());
+        }
+
+        if let Some(priority) = args.priority {
+            callback.on_field("Priority", &priority.to_string());
+        }
+
+        let mut url = format!(
             "{}/proofs?program_id={program_id}&proof_type={proof_type}",
             self.config.api_url
         );
+
+        // Add optional parameters as query parameters
+        if let Some(num_gpus) = args.num_gpus {
+            url.push_str(&format!("&num_gpus={}", num_gpus));
+        }
+
+        if let Some(priority) = args.priority {
+            url.push_str(&format!("&priority={}", priority));
+        }
 
         // Create the request body based on input
         let body = match &args.input {
@@ -355,6 +411,10 @@ impl AxiomSdk {
                         callback.on_field("Error", error_message);
                     }
 
+                    callback.on_section("Configuration");
+                    callback.on_field("Num GPUs", &proof_status.num_gpus.to_string());
+                    callback.on_field("Priority", &proof_status.priority.to_string());
+
                     callback.on_section("Statistics");
                     callback.on_field("Cells Used", &proof_status.cells_used.to_string());
                     if let Some(num_instructions) = proof_status.num_instructions {
@@ -411,6 +471,23 @@ impl AxiomSdk {
                         .unwrap_or_else(|| "Unknown error".to_string());
                     eyre::bail!("Proof generation failed: {}", error_msg);
                 }
+                "Canceled" => {
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Proof generation was canceled");
+                    } else {
+                        callback.on_info("Proof generation was canceled");
+                    }
+                    return Ok(());
+                }
+                "Canceling" => {
+                    if !spinner_started {
+                        callback.on_progress_start("Canceling proof", None);
+                        spinner_started = true;
+                    } else {
+                        callback.on_progress_update_message("Canceling proof");
+                    }
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
+                }
                 "Queued" => {
                     if !spinner_started {
                         callback.on_progress_start("Proof queued", None);
@@ -435,6 +512,71 @@ impl AxiomSdk {
                         spinner_started = true;
                     } else {
                         callback.on_progress_update_message(&status_message);
+                    }
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
+                }
+            }
+        }
+    }
+
+    pub fn wait_for_proof_cancellation_base(
+        &self,
+        proof_id: &str,
+        callback: &dyn ProgressCallback,
+    ) -> Result<()> {
+        use std::time::Duration;
+
+        let mut spinner_started = false;
+
+        loop {
+            let response = authenticated_get(
+                &self.config,
+                &format!("{}/proofs/{}", self.config.api_url, proof_id),
+            )?;
+            let proof_status: ProofStatus =
+                send_request_json(response, "Failed to get proof status")?;
+
+            match proof_status.state.as_str() {
+                "Canceled" => {
+                    if spinner_started {
+                        callback.on_progress_finish("✓ Proof successfully canceled");
+                    } else {
+                        callback.on_success("Proof successfully canceled");
+                    }
+                    return Ok(());
+                }
+                "Canceling" => {
+                    if !spinner_started {
+                        callback.on_progress_start("Canceling proof", None);
+                        spinner_started = true;
+                    }
+                    std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
+                }
+                "Failed" => {
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
+                    let error_msg = proof_status
+                        .error_message
+                        .unwrap_or_else(|| "Unknown error".to_string());
+                    eyre::bail!(
+                        "Proof failed before cancellation could complete: {}",
+                        error_msg
+                    );
+                }
+                "Succeeded" => {
+                    if spinner_started {
+                        callback.on_progress_finish("");
+                    }
+                    eyre::bail!(
+                        "Proof completed successfully before cancellation could take effect"
+                    );
+                }
+                _ => {
+                    // For any other state (Queued, InProgress, etc.), keep waiting for cancellation
+                    if !spinner_started {
+                        callback.on_progress_start("Waiting for cancellation", None);
+                        spinner_started = true;
                     }
                     std::thread::sleep(Duration::from_secs(PROOF_POLLING_INTERVAL_SECS));
                 }

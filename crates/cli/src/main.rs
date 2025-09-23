@@ -1,11 +1,10 @@
-use std::process;
+use std::{fs, path::PathBuf, process};
 
 use axiom_sdk::set_cli_version;
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{Shell, generate};
 use dotenvy::dotenv;
 use eyre::Result;
-use std::{fs, path::PathBuf};
 
 mod commands;
 mod formatting;

@@ -7,8 +7,6 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-cargo-openvm = { workspace = true }
-openvm-sdk = { workspace = true }
 openvm-build = { workspace = true }
 
 serde = { workspace = true }

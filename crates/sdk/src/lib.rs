@@ -1,13 +1,15 @@
 use std::{path::PathBuf, sync::OnceLock};
 
-use cargo_openvm::input::decode_hex_string;
 use dirs::home_dir;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::{Client, RequestBuilder, Response};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
+use crate::input::decode_hex_string;
+
 pub mod build;
 pub mod config;
+pub mod input;
 pub mod projects;
 pub mod prove;
 pub mod run;
