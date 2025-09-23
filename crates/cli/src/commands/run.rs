@@ -1,5 +1,4 @@
-use axiom_sdk::{AxiomSdk, run::RunSdk};
-use cargo_openvm::input::Input;
+use axiom_sdk::{AxiomSdk, input::Input, run::RunSdk};
 use clap::{Args, Subcommand};
 use eyre::Result;
 
