@@ -8,12 +8,14 @@ use eyre::Result;
 
 mod commands;
 mod formatting;
+mod output;
 mod progress;
 
 use commands::{
     BuildCmd, ConfigCmd, DownloadKeysCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd,
     VerifyCmd, VersionCmd,
 };
+use output::OutputMode;
 
 #[derive(Parser)]
 #[command(name = "cargo", bin_name = "cargo")]
@@ -28,6 +30,10 @@ struct AxiomArgs {
     /// Enable debug mode to show full error traces
     #[arg(long, global = true)]
     debug: bool,
+
+    /// Output in JSON format
+    #[arg(long, global = true)]
+    json: bool,
 
     #[command(subcommand)]
     command: AxiomCommands,
@@ -143,17 +149,23 @@ fn main() {
 
     let Cargo::Axiom(args) = Cargo::parse();
 
+    let output_mode = if args.json {
+        OutputMode::Json
+    } else {
+        OutputMode::Human
+    };
+
     let result = match args.command {
-        AxiomCommands::Init(cmd) => cmd.run(),
-        AxiomCommands::Register(cmd) => cmd.run(),
-        AxiomCommands::Build(cmd) => cmd.run(),
-        AxiomCommands::Prove(cmd) => cmd.run(),
-        AxiomCommands::Run(cmd) => cmd.run(),
-        AxiomCommands::Config(cmd) => cmd.run(),
-        AxiomCommands::DownloadKeys(cmd) => cmd.run(),
-        AxiomCommands::Verify(cmd) => cmd.run(),
-        AxiomCommands::Projects(cmd) => cmd.run(),
-        AxiomCommands::Version(cmd) => cmd.run(),
+        AxiomCommands::Init(cmd) => cmd.run(output_mode),
+        AxiomCommands::Register(cmd) => cmd.run(output_mode),
+        AxiomCommands::Build(cmd) => cmd.run(output_mode),
+        AxiomCommands::Prove(cmd) => cmd.run(output_mode),
+        AxiomCommands::Run(cmd) => cmd.run(output_mode),
+        AxiomCommands::Config(cmd) => cmd.run(output_mode),
+        AxiomCommands::DownloadKeys(cmd) => cmd.run(output_mode),
+        AxiomCommands::Verify(cmd) => cmd.run(output_mode),
+        AxiomCommands::Projects(cmd) => cmd.run(output_mode),
+        AxiomCommands::Version(cmd) => cmd.run(output_mode),
         AxiomCommands::Completions { shell } => {
             let mut cmd = Cargo::command();
             generate_completions(shell, &mut cmd).map(|_| ())
@@ -161,7 +173,11 @@ fn main() {
     };
 
     if let Err(err) = result {
-        if args.debug {
+        if output_mode == OutputMode::Json {
+            // In JSON mode, output error as JSON to stderr
+            let error_json = serde_json::json!({ "error": err.to_string() });
+            eprintln!("{}", serde_json::to_string_pretty(&error_json).unwrap());
+        } else if args.debug {
             // In debug mode, print the full error with backtrace
             eprintln!("Error: {err:?}");
         } else {

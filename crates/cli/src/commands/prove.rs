@@ -5,7 +5,11 @@ use clap::{Args, Subcommand};
 use comfy_table;
 use eyre::Result;
 
-use crate::{formatting::Formatter, progress::CliProgressCallback};
+use crate::{
+    formatting::Formatter,
+    output::{JsonProgressCallback, OutputMode, print_json},
+    progress::CliProgressCallback,
+};
 
 fn validate_priority(s: &str) -> Result<u8, String> {
     let priority: u8 = s.parse().map_err(|_| "Priority must be a number")?;
@@ -109,10 +113,18 @@ pub struct ProveArgs {
 }
 
 impl ProveCmd {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, output_mode: OutputMode) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let callback = CliProgressCallback::new();
-        let sdk = AxiomSdk::new(config.clone()).with_callback(callback);
+        let sdk = match output_mode {
+            OutputMode::Human => {
+                let callback = CliProgressCallback::new();
+                AxiomSdk::new(config.clone()).with_callback(callback)
+            }
+            OutputMode::Json => {
+                let callback = JsonProgressCallback;
+                AxiomSdk::new(config.clone()).with_callback(callback)
+            }
+        };
 
         match self.command {
             Some(ProveSubcommand::Status { proof_id, wait }) => {
@@ -120,7 +132,7 @@ impl ProveCmd {
                     sdk.wait_for_proof_completion(&proof_id)
                 } else {
                     let proof_status = sdk.get_proof_status(&proof_id)?;
-                    Self::print_proof_status(&proof_status);
+                    Self::print_proof_status(&proof_status, output_mode)?;
                     Ok(())
                 }
             }
@@ -133,29 +145,34 @@ impl ProveCmd {
             Some(ProveSubcommand::List { program_id }) => {
                 let proof_status_list = sdk.list_proofs(&program_id)?;
 
-                // Create a new table
-                let mut table = comfy_table::Table::new();
-                table.set_header(["ID", "State", "Proof type", "Created At"]);
+                match output_mode {
+                    OutputMode::Json => print_json(&proof_status_list)?,
+                    OutputMode::Human => {
+                        // Create a new table
+                        let mut table = comfy_table::Table::new();
+                        table.set_header(["ID", "State", "Proof type", "Created At"]);
 
-                // Add rows to the table
-                for proof_status in proof_status_list {
-                    let get_value = |s: &str| {
-                        if s.is_empty() {
-                            "-".to_string()
-                        } else {
-                            s.to_string()
+                        // Add rows to the table
+                        for proof_status in proof_status_list {
+                            let get_value = |s: &str| {
+                                if s.is_empty() {
+                                    "-".to_string()
+                                } else {
+                                    s.to_string()
+                                }
+                            };
+                            let id = get_value(&proof_status.id);
+                            let status = get_value(&proof_status.state);
+                            let proof_type = get_value(&proof_status.proof_type);
+                            let created_at = get_value(&proof_status.created_at);
+
+                            table.add_row([id, status, proof_type, created_at]);
                         }
-                    };
-                    let id = get_value(&proof_status.id);
-                    let status = get_value(&proof_status.state);
-                    let proof_type = get_value(&proof_status.proof_type);
-                    let created_at = get_value(&proof_status.created_at);
 
-                    table.add_row([id, status, proof_type, created_at]);
+                        // Print the table
+                        println!("{table}");
+                    }
                 }
-
-                // Print the table
-                println!("{table}");
                 Ok(())
             }
             Some(ProveSubcommand::Cancel { proof_id }) => {
@@ -191,35 +208,44 @@ impl ProveCmd {
         }
     }
 
-    fn print_proof_status(status: &axiom_sdk::prove::ProofStatus) {
-        Formatter::print_section("Proof Status");
-        Formatter::print_field("ID", &status.id);
-        Formatter::print_field("State", &status.state);
-        Formatter::print_field("Proof Type", &status.proof_type);
-        Formatter::print_field("Program ID", &status.program_uuid);
-        Formatter::print_field("Created By", &status.created_by);
-        Formatter::print_field("Created At", &status.created_at);
+    fn print_proof_status(
+        status: &axiom_sdk::prove::ProofStatus,
+        output_mode: OutputMode,
+    ) -> Result<()> {
+        match output_mode {
+            OutputMode::Json => print_json(status),
+            OutputMode::Human => {
+                Formatter::print_section("Proof Status");
+                Formatter::print_field("ID", &status.id);
+                Formatter::print_field("State", &status.state);
+                Formatter::print_field("Proof Type", &status.proof_type);
+                Formatter::print_field("Program ID", &status.program_uuid);
+                Formatter::print_field("Created By", &status.created_by);
+                Formatter::print_field("Created At", &status.created_at);
 
-        if let Some(launched_at) = &status.launched_at {
-            Formatter::print_field("Launched At", launched_at);
-        }
+                if let Some(launched_at) = &status.launched_at {
+                    Formatter::print_field("Launched At", launched_at);
+                }
 
-        if let Some(terminated_at) = &status.terminated_at {
-            Formatter::print_field("Terminated At", terminated_at);
-        }
+                if let Some(terminated_at) = &status.terminated_at {
+                    Formatter::print_field("Terminated At", terminated_at);
+                }
 
-        if let Some(error_message) = &status.error_message {
-            Formatter::print_field("Error", error_message);
-        }
+                if let Some(error_message) = &status.error_message {
+                    Formatter::print_field("Error", error_message);
+                }
 
-        Formatter::print_section("Configuration");
-        Formatter::print_field("Num GPUs", &status.num_gpus.to_string());
-        Formatter::print_field("Priority", &status.priority.to_string());
+                Formatter::print_section("Configuration");
+                Formatter::print_field("Num GPUs", &status.num_gpus.to_string());
+                Formatter::print_field("Priority", &status.priority.to_string());
 
-        Formatter::print_section("Statistics");
-        Formatter::print_field("Cells Used", &status.cells_used.to_string());
-        if let Some(num_instructions) = status.num_instructions {
-            Formatter::print_field("Total Cycles", &num_instructions.to_string());
+                Formatter::print_section("Statistics");
+                Formatter::print_field("Cells Used", &status.cells_used.to_string());
+                if let Some(num_instructions) = status.num_instructions {
+                    Formatter::print_field("Total Cycles", &num_instructions.to_string());
+                }
+                Ok(())
+            }
         }
     }
 }

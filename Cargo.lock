@@ -178,6 +178,7 @@ dependencies = [
  "dotenvy",
  "eyre",
  "indicatif",
+ "serde",
  "serde_json",
  "toml_edit 0.23.4",
 ]

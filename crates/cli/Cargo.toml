@@ -10,6 +10,7 @@ license.workspace = true
 axiom-sdk = { workspace = true }
 
 comfy-table = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 
 clap = { version = "4.4", features = ["derive"] }

@@ -8,7 +8,11 @@ use clap::{Parser, Subcommand};
 use comfy_table;
 use eyre::Result;
 
-use crate::{formatting::Formatter, progress::CliProgressCallback};
+use crate::{
+    formatting::Formatter,
+    output::{JsonProgressCallback, OutputMode, print_json},
+    progress::CliProgressCallback,
+};
 
 #[derive(Debug, Parser)]
 #[command(name = "build", about = "Build the project on Axiom Proving Service")]
@@ -99,10 +103,18 @@ pub struct BuildArgs {
 }
 
 impl BuildCmd {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, output_mode: OutputMode) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let callback = CliProgressCallback::new();
-        let sdk = AxiomSdk::new(config.clone()).with_callback(callback);
+        let sdk = match output_mode {
+            OutputMode::Human => {
+                let callback = CliProgressCallback::new();
+                AxiomSdk::new(config.clone()).with_callback(callback)
+            }
+            OutputMode::Json => {
+                let callback = JsonProgressCallback;
+                AxiomSdk::new(config.clone()).with_callback(callback)
+            }
+        };
 
         match self.command {
             Some(BuildSubcommand::Status { program_id, wait }) => {
@@ -110,35 +122,40 @@ impl BuildCmd {
                     sdk.wait_for_build_completion(&program_id)
                 } else {
                     let build_status = sdk.get_build_status(&program_id)?;
-                    Self::print_build_status(&build_status);
+                    Self::print_build_status(&build_status, output_mode)?;
                     Ok(())
                 }
             }
             Some(BuildSubcommand::List) => {
                 let build_status_list = sdk.list_programs()?;
 
-                // Create a new table
-                let mut table = comfy_table::Table::new();
-                table.set_header(["ID", "Status", "Created At"]);
+                match output_mode {
+                    OutputMode::Json => print_json(&build_status_list)?,
+                    OutputMode::Human => {
+                        // Create a new table
+                        let mut table = comfy_table::Table::new();
+                        table.set_header(["ID", "Status", "Created At"]);
 
-                // Add rows to the table
-                for build_status in build_status_list {
-                    let get_value = |s: &str| {
-                        if s.is_empty() {
-                            "-".to_string()
-                        } else {
-                            s.to_string()
+                        // Add rows to the table
+                        for build_status in build_status_list {
+                            let get_value = |s: &str| {
+                                if s.is_empty() {
+                                    "-".to_string()
+                                } else {
+                                    s.to_string()
+                                }
+                            };
+                            let id = get_value(&build_status.id);
+                            let status = get_value(&build_status.status);
+                            let created_at = get_value(&build_status.created_at);
+
+                            table.add_row([id, status, created_at]);
                         }
-                    };
-                    let id = get_value(&build_status.id);
-                    let status = get_value(&build_status.status);
-                    let created_at = get_value(&build_status.created_at);
 
-                    table.add_row([id, status, created_at]);
+                        // Print the table
+                        println!("{table}");
+                    }
                 }
-
-                // Print the table
-                println!("{table}");
                 Ok(())
             }
             Some(BuildSubcommand::Download {
@@ -235,30 +252,39 @@ impl BuildCmd {
         }
     }
 
-    fn print_build_status(status: &axiom_sdk::build::BuildStatus) {
-        Formatter::print_section("Build Status");
-        Formatter::print_field("ID", &status.id);
-        Formatter::print_field("Name", &status.name);
-        Formatter::print_field("Project ID", &status.project_id);
-        Formatter::print_field("Project Name", &status.project_name);
-        Formatter::print_field("Status", &status.status);
-        Formatter::print_field("Program Hash", &status.program_hash);
-        Formatter::print_field("Config ID", &status.config_uuid);
-        Formatter::print_field("Created By", &status.created_by);
-        Formatter::print_field("Created At", &status.created_at);
-        Formatter::print_field("Last Active", &status.last_active_at);
+    fn print_build_status(
+        status: &axiom_sdk::build::BuildStatus,
+        output_mode: OutputMode,
+    ) -> Result<()> {
+        match output_mode {
+            OutputMode::Json => print_json(status),
+            OutputMode::Human => {
+                Formatter::print_section("Build Status");
+                Formatter::print_field("ID", &status.id);
+                Formatter::print_field("Name", &status.name);
+                Formatter::print_field("Project ID", &status.project_id);
+                Formatter::print_field("Project Name", &status.project_name);
+                Formatter::print_field("Status", &status.status);
+                Formatter::print_field("Program Hash", &status.program_hash);
+                Formatter::print_field("Config ID", &status.config_uuid);
+                Formatter::print_field("Created By", &status.created_by);
+                Formatter::print_field("Created At", &status.created_at);
+                Formatter::print_field("Last Active", &status.last_active_at);
 
-        if let Some(launched_at) = &status.launched_at {
-            Formatter::print_field("Launched At", launched_at);
-        }
+                if let Some(launched_at) = &status.launched_at {
+                    Formatter::print_field("Launched At", launched_at);
+                }
 
-        if let Some(terminated_at) = &status.terminated_at {
-            Formatter::print_field("Terminated At", terminated_at);
-        }
+                if let Some(terminated_at) = &status.terminated_at {
+                    Formatter::print_field("Terminated At", terminated_at);
+                }
 
-        if let Some(error_message) = &status.error_message {
-            Formatter::print_field("Error", error_message);
+                if let Some(error_message) = &status.error_message {
+                    Formatter::print_field("Error", error_message);
+                }
+                Formatter::print_field("Default Num GPUs", &status.default_num_gpus.to_string());
+                Ok(())
+            }
         }
-        Formatter::print_field("Default Num GPUs", &status.default_num_gpus.to_string());
     }
 }

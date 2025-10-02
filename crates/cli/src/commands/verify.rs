@@ -4,7 +4,11 @@ use axiom_sdk::{AxiomSdk, verify::VerifySdk};
 use clap::{Args, Subcommand};
 use eyre::Result;
 
-use crate::{formatting::Formatter, progress::CliProgressCallback};
+use crate::{
+    formatting::Formatter,
+    output::{JsonProgressCallback, OutputMode, print_json},
+    progress::CliProgressCallback,
+};
 
 #[derive(Args, Debug)]
 pub struct VerifyCmd {
@@ -55,10 +59,18 @@ enum VerifySubcommand {
 }
 
 impl VerifyCmd {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, output_mode: OutputMode) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let callback = CliProgressCallback::new();
-        let sdk = AxiomSdk::new(config).with_callback(callback);
+        let sdk = match output_mode {
+            OutputMode::Human => {
+                let callback = CliProgressCallback::new();
+                AxiomSdk::new(config).with_callback(callback)
+            }
+            OutputMode::Json => {
+                let callback = JsonProgressCallback;
+                AxiomSdk::new(config).with_callback(callback)
+            }
+        };
 
         match self.command {
             VerifySubcommand::Evm {
@@ -104,23 +116,34 @@ impl VerifyCmd {
                     sdk.wait_for_verify_completion(&verify_id)
                 } else {
                     let verify_status = sdk.get_verification_result(&verify_id)?;
-                    Self::print_verify_status(&verify_status);
+                    Self::print_verify_status(&verify_status, output_mode)?;
                     Ok(())
                 }
             }
         }
     }
 
-    fn print_verify_status(status: &axiom_sdk::verify::VerifyStatus) {
-        // Just show the status information, no completion messages
-        Formatter::print_section("Verification Summary");
-        match status.result.as_str() {
-            "verified" => Formatter::print_field("Verification Result", "✓ VERIFIED"),
-            "failed" => Formatter::print_field("Verification Result", "✗ FAILED"),
-            _ => Formatter::print_field("Verification Result", &status.result.to_uppercase()),
+    fn print_verify_status(
+        status: &axiom_sdk::verify::VerifyStatus,
+        output_mode: OutputMode,
+    ) -> Result<()> {
+        match output_mode {
+            OutputMode::Json => print_json(status),
+            OutputMode::Human => {
+                // Just show the status information, no completion messages
+                Formatter::print_section("Verification Summary");
+                match status.result.as_str() {
+                    "verified" => Formatter::print_field("Verification Result", "✓ VERIFIED"),
+                    "failed" => Formatter::print_field("Verification Result", "✗ FAILED"),
+                    _ => {
+                        Formatter::print_field("Verification Result", &status.result.to_uppercase())
+                    }
+                }
+                Formatter::print_field("Verification ID", &status.id);
+                Formatter::print_field("Proof Type", &status.proof_type.to_uppercase());
+                Formatter::print_field("Created At", &status.created_at);
+                Ok(())
+            }
         }
-        Formatter::print_field("Verification ID", &status.id);
-        Formatter::print_field("Proof Type", &status.proof_type.to_uppercase());
-        Formatter::print_field("Created At", &status.created_at);
     }
 }

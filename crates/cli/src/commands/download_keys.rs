@@ -28,7 +28,8 @@ pub struct DownloadKeysCmd {
 }
 
 impl DownloadKeysCmd {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, _output_mode: crate::output::OutputMode) -> Result<()> {
+        // Download-keys doesn't benefit from JSON output - it downloads binary files
         let config = axiom_sdk::load_config()?;
         let callback = CliProgressCallback::new();
         let sdk = AxiomSdk::new(config).with_callback(callback);

@@ -13,7 +13,8 @@ pub struct RegisterCmd {
 }
 
 impl RegisterCmd {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, _output_mode: crate::output::OutputMode) -> Result<()> {
+        // Register command doesn't support JSON output - it's for setup
         execute(self.register_args)
     }
 }

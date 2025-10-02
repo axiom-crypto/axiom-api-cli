@@ -190,7 +190,8 @@ pub struct InitCmd {
 }
 
 impl InitCmd {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, _output_mode: crate::output::OutputMode) -> Result<()> {
+        // Init command doesn't support JSON output - it's interactive
         execute(self.init_args)
     }
 }

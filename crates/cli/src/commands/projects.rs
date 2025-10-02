@@ -3,7 +3,10 @@ use clap::{Args, Subcommand};
 use comfy_table::Table;
 use eyre::Result;
 
-use crate::progress::CliProgressCallback;
+use crate::{
+    output::{JsonProgressCallback, OutputMode, print_json},
+    progress::CliProgressCallback,
+};
 
 #[derive(Args, Debug)]
 pub struct ProjectsCmd {
@@ -57,74 +60,98 @@ enum ProjectsSubcommand {
 }
 
 impl ProjectsCmd {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, output_mode: OutputMode) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let callback = CliProgressCallback::new();
-        let sdk = AxiomSdk::new(config).with_callback(callback);
+        let sdk = match output_mode {
+            OutputMode::Human => {
+                let callback = CliProgressCallback::new();
+                AxiomSdk::new(config).with_callback(callback)
+            }
+            OutputMode::Json => {
+                let callback = JsonProgressCallback;
+                AxiomSdk::new(config).with_callback(callback)
+            }
+        };
 
         match self.command {
             ProjectsSubcommand::List { page, page_size } => {
                 let response = sdk.list_projects(Some(page), Some(page_size))?;
 
-                if response.items.is_empty() {
-                    println!("No projects found");
-                    return Ok(());
+                match output_mode {
+                    OutputMode::Json => print_json(&response)?,
+                    OutputMode::Human => {
+                        if response.items.is_empty() {
+                            println!("No projects found");
+                            return Ok(());
+                        }
+
+                        let mut table = Table::new();
+                        table.set_header([
+                            "ID",
+                            "Name",
+                            "Programs",
+                            "Total Proofs",
+                            "Created By",
+                            "Last Active",
+                        ]);
+
+                        for project in response.items {
+                            let last_active =
+                                project.last_active_at.as_deref().unwrap_or("-").to_string();
+                            table.add_row([
+                                project.id,
+                                project.name,
+                                project.program_count.to_string(),
+                                project.total_proofs_run.to_string(),
+                                project.created_by,
+                                last_active,
+                            ]);
+                        }
+
+                        println!("{table}");
+
+                        let pagination = &response.pagination;
+                        println!(
+                            "Showing page {} of {} (total: {} projects)",
+                            pagination.page, pagination.pages, pagination.total
+                        );
+                    }
                 }
-
-                let mut table = Table::new();
-                table.set_header([
-                    "ID",
-                    "Name",
-                    "Programs",
-                    "Total Proofs",
-                    "Created By",
-                    "Last Active",
-                ]);
-
-                for project in response.items {
-                    let last_active = project.last_active_at.as_deref().unwrap_or("-").to_string();
-                    table.add_row([
-                        project.id,
-                        project.name,
-                        project.program_count.to_string(),
-                        project.total_proofs_run.to_string(),
-                        project.created_by,
-                        last_active,
-                    ]);
-                }
-
-                println!("{table}");
-
-                let pagination = &response.pagination;
-                println!(
-                    "Showing page {} of {} (total: {} projects)",
-                    pagination.page, pagination.pages, pagination.total
-                );
 
                 Ok(())
             }
             ProjectsSubcommand::Create { name } => {
                 let response = sdk.create_project(&name)?;
 
-                println!("✓ Created project '{}' with ID: {}", name, response.id);
-                println!("✓ Saved project ID {} for future use", response.id);
+                match output_mode {
+                    OutputMode::Json => print_json(&response)?,
+                    OutputMode::Human => {
+                        println!("✓ Created project '{}' with ID: {}", name, response.id);
+                        println!("✓ Saved project ID {} for future use", response.id);
+                    }
+                }
                 Ok(())
             }
             ProjectsSubcommand::Show { project_id } => {
                 let project = sdk.get_project(&project_id)?;
 
-                println!("Project Details:");
-                println!("  ID: {}", project.id);
-                println!("  Name: {}", project.name);
-                println!("  Program Count: {}", project.program_count);
-                println!("  Total Proofs Run: {}", project.total_proofs_run);
-                println!("  Created By: {}", project.created_by);
-                println!("  Created At: {}", project.created_at);
+                match output_mode {
+                    OutputMode::Json => print_json(&project)?,
+                    OutputMode::Human => {
+                        println!("Project Details:");
+                        println!("  ID: {}", project.id);
+                        println!("  Name: {}", project.name);
+                        println!("  Program Count: {}", project.program_count);
+                        println!("  Total Proofs Run: {}", project.total_proofs_run);
+                        println!("  Created By: {}", project.created_by);
+                        println!("  Created At: {}", project.created_at);
 
-                if let Some(last_active) = project.last_active_at {
-                    println!("  Last Active At: {}", last_active);
-                } else {
-                    println!("  Last Active At: -");
+                        if let Some(last_active) = project.last_active_at {
+                            println!("  Last Active At: {}", last_active);
+                        } else {
+                            println!("  Last Active At: -");
+                        }
+                    }
                 }
 
                 Ok(())
@@ -137,26 +164,31 @@ impl ProjectsCmd {
                 let response =
                     sdk.list_project_programs(&project_id, Some(page), Some(page_size))?;
 
-                if response.items.is_empty() {
-                    println!("No programs found in project {}", project_id);
-                    return Ok(());
+                match output_mode {
+                    OutputMode::Json => print_json(&response)?,
+                    OutputMode::Human => {
+                        if response.items.is_empty() {
+                            println!("No programs found in project {}", project_id);
+                            return Ok(());
+                        }
+
+                        let mut table = Table::new();
+                        table.set_header(["Program ID", "Name", "Created At"]);
+
+                        for program in response.items {
+                            let name = program.name.unwrap_or_else(|| "-".to_string());
+                            table.add_row([program.id, name, program.created_at]);
+                        }
+
+                        println!("{table}");
+
+                        let pagination = &response.pagination;
+                        println!(
+                            "Showing page {} of {} (total: {} programs)",
+                            pagination.page, pagination.pages, pagination.total
+                        );
+                    }
                 }
-
-                let mut table = Table::new();
-                table.set_header(["Program ID", "Name", "Created At"]);
-
-                for program in response.items {
-                    let name = program.name.unwrap_or_else(|| "-".to_string());
-                    table.add_row([program.id, name, program.created_at]);
-                }
-
-                println!("{table}");
-
-                let pagination = &response.pagination;
-                println!(
-                    "Showing page {} of {} (total: {} programs)",
-                    pagination.page, pagination.pages, pagination.total
-                );
 
                 Ok(())
             }
@@ -165,10 +197,22 @@ impl ProjectsCmd {
                 to_project,
             } => {
                 sdk.move_program_to_project(&program_id, &to_project)?;
-                println!(
-                    "✓ Successfully moved program {} to project {}",
-                    program_id, to_project
-                );
+
+                match output_mode {
+                    OutputMode::Json => {
+                        print_json(&serde_json::json!({
+                            "program_id": program_id,
+                            "project_id": to_project,
+                            "status": "moved"
+                        }))?;
+                    }
+                    OutputMode::Human => {
+                        println!(
+                            "✓ Successfully moved program {} to project {}",
+                            program_id, to_project
+                        );
+                    }
+                }
                 Ok(())
             }
         }

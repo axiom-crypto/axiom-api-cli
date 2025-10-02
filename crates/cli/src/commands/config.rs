@@ -4,6 +4,8 @@ use axiom_sdk::{AxiomSdk, config::ConfigSdk};
 use clap::{Args, Subcommand};
 use eyre::Result;
 
+use crate::output::{OutputMode, print_json};
+
 #[derive(Args, Debug)]
 pub struct ConfigCmd {
     #[command(subcommand)]
@@ -36,14 +38,14 @@ enum ConfigSubcommand {
 }
 
 impl ConfigCmd {
-    pub fn run(self) -> Result<()> {
+    pub fn run(self, output_mode: OutputMode) -> Result<()> {
         let config = axiom_sdk::load_config()?;
         let sdk = AxiomSdk::new(config);
 
         match self.command {
             Some(ConfigSubcommand::Status { config_id }) => {
                 let vm_config_metadata = sdk.get_vm_config_metadata(config_id.as_deref())?;
-                Self::print_config_status(&vm_config_metadata);
+                Self::print_config_status(&vm_config_metadata, output_mode)?;
                 Ok(())
             }
             Some(ConfigSubcommand::Download {
@@ -61,16 +63,25 @@ impl ConfigCmd {
         }
     }
 
-    fn print_config_status(metadata: &axiom_sdk::config::VmConfigMetadata) {
-        use crate::formatting::Formatter;
+    fn print_config_status(
+        metadata: &axiom_sdk::config::VmConfigMetadata,
+        output_mode: OutputMode,
+    ) -> Result<()> {
+        match output_mode {
+            OutputMode::Json => print_json(metadata),
+            OutputMode::Human => {
+                use crate::formatting::Formatter;
 
-        Formatter::print_section("Config Status");
-        Formatter::print_field("ID", &metadata.id);
-        Formatter::print_field("Status", &metadata.status);
-        Formatter::print_field("OpenVM Version", &metadata.openvm_version);
-        Formatter::print_field("STARK Backend Version", &metadata.stark_backend_version);
-        Formatter::print_field("Active", &metadata.active.to_string());
-        Formatter::print_field("Created At", &metadata.created_at);
-        Formatter::print_field("App VM Commit", &metadata.app_vm_commit);
+                Formatter::print_section("Config Status");
+                Formatter::print_field("ID", &metadata.id);
+                Formatter::print_field("Status", &metadata.status);
+                Formatter::print_field("OpenVM Version", &metadata.openvm_version);
+                Formatter::print_field("STARK Backend Version", &metadata.stark_backend_version);
+                Formatter::print_field("Active", &metadata.active.to_string());
+                Formatter::print_field("Created At", &metadata.created_at);
+                Formatter::print_field("App VM Commit", &metadata.app_vm_commit);
+                Ok(())
+            }
+        }
     }
 }
