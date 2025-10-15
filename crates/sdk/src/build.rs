@@ -82,6 +82,8 @@ pub struct BuildArgs {
     pub allow_dirty: bool,
     /// Set default num gpus for this program
     pub default_num_gpus: Option<usize>,
+    /// OpenVM Rust toolchain version (e.g., "nightly-2025-02-14")
+    pub openvm_rust_toolchain: Option<String>,
 }
 
 #[derive(Debug)]
@@ -598,6 +600,9 @@ impl AxiomSdk {
         if let Some(default_num_gpus) = args.default_num_gpus {
             url.push_str(&format!("&default_num_gpus={}", default_num_gpus));
         }
+        if let Some(openvm_rust_toolchain) = &args.openvm_rust_toolchain {
+            url.push_str(&format!("&openvm_rust_toolchain={}", openvm_rust_toolchain));
+        }
 
         callback.on_header("Building Program");
 
@@ -846,8 +851,8 @@ impl AxiomSdk {
             .mime_str("application/octet-stream")?;
 
         let form = reqwest::blocking::multipart::Form::new()
-            .part("elf_file", elf_part)
-            .part("vmexe_file", vmexe_part);
+            .part("elf", elf_part)
+            .part("vmexe", vmexe_part);
 
         callback.on_progress_start("Uploading", None);
 

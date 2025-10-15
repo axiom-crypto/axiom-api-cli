@@ -96,6 +96,10 @@ pub struct BuildArgs {
     /// Specify default_num_gpus for this program
     #[clap(long)]
     default_num_gpus: Option<usize>,
+
+    /// OpenVM Rust toolchain version (e.g., nightly-2025-02-14)
+    #[clap(long, value_name = "VERSION")]
+    openvm_rust_toolchain: Option<String>,
 }
 
 impl BuildCmd {
@@ -191,6 +195,7 @@ impl BuildCmd {
                     project_name: project_name_for_creation.clone(),
                     allow_dirty: self.build_args.allow_dirty,
                     default_num_gpus: self.build_args.default_num_gpus,
+                    openvm_rust_toolchain: self.build_args.openvm_rust_toolchain,
                 };
                 let program_id = sdk.register_new_program(&program_dir, args)?;
 
