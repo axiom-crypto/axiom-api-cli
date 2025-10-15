@@ -38,6 +38,7 @@ pub trait BuildSdk {
         args: BuildArgs,
     ) -> Result<String>;
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
+    fn upload_elf(&self, program_dir: impl AsRef<Path>, args: UploadElfArgs) -> Result<String>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,6 +80,22 @@ pub struct BuildArgs {
     pub project_name: Option<String>,
     /// Allow building with uncommitted changes
     pub allow_dirty: bool,
+    /// Set default num gpus for this program
+    pub default_num_gpus: Option<usize>,
+}
+
+#[derive(Debug)]
+pub struct UploadElfArgs {
+    /// The configuration ID to use
+    pub config_id: String,
+    /// The project ID to associate with the program
+    pub project_id: Option<String>,
+    /// The project name if creating a new project
+    pub project_name: Option<String>,
+    /// The binary name
+    pub bin_name: Option<String>,
+    /// Custom program name
+    pub program_name: Option<String>,
     /// Set default num gpus for this program
     pub default_num_gpus: Option<usize>,
 }
@@ -269,6 +286,10 @@ impl BuildSdk for AxiomSdk {
 
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
         self.wait_for_build_completion_base(program_id, &*self.callback)
+    }
+
+    fn upload_elf(&self, program_dir: impl AsRef<Path>, args: UploadElfArgs) -> Result<String> {
+        self.upload_elf_base(program_dir, args, &*self.callback)
     }
 }
 
@@ -693,6 +714,176 @@ impl AxiomSdk {
         } else {
             Err(eyre::eyre!(
                 "Build request failed with status: {}",
+                response.status()
+            ))
+        }
+    }
+
+    pub fn upload_elf_base(
+        &self,
+        program_dir: impl AsRef<Path>,
+        args: UploadElfArgs,
+        callback: &dyn ProgressCallback,
+    ) -> Result<String> {
+        // Check if we're in a Rust project
+        if !is_rust_project(program_dir.as_ref()) {
+            eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
+        }
+
+        // Look for the openvm build output directory
+        let target_dir = program_dir.as_ref().join("target").join("openvm");
+        if !target_dir.exists() {
+            eyre::bail!(
+                "OpenVM build output not found. Please run 'cargo openvm build' first.\nExpected directory: {}",
+                target_dir.display()
+            );
+        }
+
+        // Find the release directory
+        let release_dir = target_dir.join("release");
+        if !release_dir.exists() {
+            eyre::bail!(
+                "OpenVM release build not found. Please run 'cargo openvm build' first.\nExpected directory: {}",
+                release_dir.display()
+            );
+        }
+
+        // Find ELF and VMEXE files
+        let elf_files: Vec<_> = std::fs::read_dir(&release_dir)?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("elf"))
+            .collect();
+
+        if elf_files.is_empty() {
+            eyre::bail!(
+                "No ELF files found in {}. Please run 'cargo openvm build' first.",
+                release_dir.display()
+            );
+        }
+
+        if elf_files.len() > 1 {
+            eyre::bail!(
+                "Multiple ELF files found. Expected exactly one ELF file in {}",
+                release_dir.display()
+            );
+        }
+
+        let elf_path = elf_files[0].path();
+        let vmexe_path = elf_path.with_extension("vmexe");
+
+        if !vmexe_path.exists() {
+            eyre::bail!(
+                "VMEXE file not found at {}. Please run 'cargo openvm build' first.",
+                vmexe_path.display()
+            );
+        }
+
+        // Find exe_commit from commit.json
+        let commit_json_path = elf_path.with_extension("commit.json");
+        if !commit_json_path.exists() {
+            eyre::bail!(
+                "Commit file not found at {}. Please run 'cargo openvm build' first.",
+                commit_json_path.display()
+            );
+        }
+
+        let commit_json = std::fs::read_to_string(&commit_json_path)?;
+        let commit_data: serde_json::Value = serde_json::from_str(&commit_json)?;
+        let exe_commit = commit_data["app_exe_commit"]
+            .as_str()
+            .ok_or_eyre("Missing 'app_exe_commit' in commit.json")?
+            .to_string();
+
+        callback.on_header("Uploading Pre-built Program");
+        callback.on_field("Config ID", &args.config_id);
+        callback.on_field("ELF", &elf_path.display().to_string());
+        callback.on_field("VMEXE", &vmexe_path.display().to_string());
+        callback.on_field("Exe Commit", &exe_commit);
+
+        if let Some(default_num_gpus) = args.default_num_gpus {
+            callback.on_field("Default Num GPUs", &default_num_gpus.to_string());
+        }
+
+        // Read files into memory
+        let elf_content = std::fs::read(&elf_path)
+            .with_context(|| format!("Failed to read ELF file: {}", elf_path.display()))?;
+        let vmexe_content = std::fs::read(&vmexe_path)
+            .with_context(|| format!("Failed to read VMEXE file: {}", vmexe_path.display()))?;
+
+        // Build URL with query parameters
+        let mut url = format!(
+            "{}/programs/upload-elf?config_id={}&exe_commit={}",
+            self.config.api_url, args.config_id, exe_commit
+        );
+
+        if let Some(project_id) = &args.project_id {
+            url.push_str(&format!("&project_id={}", project_id));
+        }
+        if let Some(project_name) = &args.project_name {
+            let encoded: String =
+                url::form_urlencoded::byte_serialize(project_name.as_bytes()).collect();
+            url.push_str(&format!("&project_name={}", encoded));
+        }
+        if let Some(bin_name) = &args.bin_name {
+            url.push_str(&format!("&bin_name={}", bin_name));
+        }
+        if let Some(program_name) = &args.program_name {
+            let encoded: String =
+                url::form_urlencoded::byte_serialize(program_name.as_bytes()).collect();
+            url.push_str(&format!("&program_name={}", encoded));
+        }
+        if let Some(default_num_gpus) = args.default_num_gpus {
+            url.push_str(&format!("&default_num_gpus={}", default_num_gpus));
+        }
+
+        // Create multipart form with files
+        let elf_part = reqwest::blocking::multipart::Part::bytes(elf_content)
+            .file_name("program.elf")
+            .mime_str("application/octet-stream")?;
+
+        let vmexe_part = reqwest::blocking::multipart::Part::bytes(vmexe_content)
+            .file_name("program.vmexe")
+            .mime_str("application/octet-stream")?;
+
+        let form = reqwest::blocking::multipart::Form::new()
+            .part("elf_file", elf_part)
+            .part("vmexe_file", vmexe_part);
+
+        callback.on_progress_start("Uploading", None);
+
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()?;
+
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
+
+        let request = add_cli_version_header(
+            client
+                .post(&url)
+                .header(API_KEY_HEADER, api_key)
+                .multipart(form),
+        );
+
+        let response = request.send()?;
+
+        callback.on_progress_finish("✓ Upload complete!");
+
+        if response.status().is_success() {
+            let body = response
+                .json::<serde_json::Value>()
+                .context("Failed to parse response as JSON")?;
+            let program_id = body["id"]
+                .as_str()
+                .ok_or_eyre("Missing 'id' field in response")?;
+            callback.on_success(&format!("Program uploaded successfully ({})", program_id));
+            Ok(program_id.to_string())
+        } else if response.status().is_client_error() {
+            let status = response.status();
+            let error_text = response.text()?;
+            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+        } else {
+            Err(eyre::eyre!(
+                "Upload request failed with status: {}",
                 response.status()
             ))
         }

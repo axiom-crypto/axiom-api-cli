@@ -12,7 +12,7 @@ mod progress;
 
 use commands::{
     BuildCmd, ConfigCmd, DownloadKeysCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd,
-    VerifyCmd, VersionCmd,
+    UploadElfCmd, VerifyCmd, VersionCmd,
 };
 
 #[derive(Parser)]
@@ -54,6 +54,9 @@ enum AxiomCommands {
     Verify(VerifyCmd),
     /// Manage projects
     Projects(ProjectsCmd),
+    /// Upload pre-built ELF and VMEXE to Axiom Proving Service
+    #[command(name = "upload-elf")]
+    UploadElf(UploadElfCmd),
     /// Display version information
     Version(VersionCmd),
     /// Generate shell completions
@@ -153,6 +156,7 @@ fn main() {
         AxiomCommands::DownloadKeys(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
         AxiomCommands::Projects(cmd) => cmd.run(),
+        AxiomCommands::UploadElf(cmd) => cmd.run(),
         AxiomCommands::Version(cmd) => cmd.run(),
         AxiomCommands::Completions { shell } => {
             let mut cmd = Cargo::command();
