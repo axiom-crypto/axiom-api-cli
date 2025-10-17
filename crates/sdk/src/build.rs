@@ -745,6 +745,7 @@ impl AxiomSdk {
         }
 
         // Find the release directory
+        // TODO: Support other profiles beyond release (e.g., dev, custom profiles)
         let release_dir = target_dir.join("release");
         if !release_dir.exists() {
             eyre::bail!(
@@ -766,14 +767,55 @@ impl AxiomSdk {
             );
         }
 
-        if elf_files.len() > 1 {
-            eyre::bail!(
-                "Multiple ELF files found. Expected exactly one ELF file in {}",
-                release_dir.display()
-            );
-        }
+        // Filter by bin_name if provided and there are multiple ELFs
+        let elf_path = if elf_files.len() > 1 {
+            if let Some(bin_name) = &args.bin_name {
+                // Filter ELF files by bin_name
+                let matching_elf = elf_files.iter().find(|entry| {
+                    entry
+                        .path()
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|name| name == bin_name)
+                        .unwrap_or(false)
+                });
 
-        let elf_path = elf_files[0].path();
+                if let Some(elf_entry) = matching_elf {
+                    elf_entry.path()
+                } else {
+                    let available: Vec<_> = elf_files
+                        .iter()
+                        .filter_map(|e| {
+                            e.path()
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .map(|s| s.to_string())
+                        })
+                        .collect();
+                    eyre::bail!(
+                        "ELF file '{}' not found. Available ELF files: {}",
+                        bin_name,
+                        available.join(", ")
+                    );
+                }
+            } else {
+                let available: Vec<_> = elf_files
+                    .iter()
+                    .filter_map(|e| {
+                        e.path()
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_string())
+                    })
+                    .collect();
+                eyre::bail!(
+                    "Multiple ELF files found. Please specify which one to upload using --bin-name. Available: {}",
+                    available.join(", ")
+                );
+            }
+        } else {
+            elf_files[0].path()
+        };
         let vmexe_path = elf_path.with_extension("vmexe");
 
         if !vmexe_path.exists() {
@@ -783,27 +825,11 @@ impl AxiomSdk {
             );
         }
 
-        // Find exe_commit from commit.json
-        let commit_json_path = elf_path.with_extension("commit.json");
-        if !commit_json_path.exists() {
-            eyre::bail!(
-                "Commit file not found at {}. Please run 'cargo openvm build' first.",
-                commit_json_path.display()
-            );
-        }
-
-        let commit_json = std::fs::read_to_string(&commit_json_path)?;
-        let commit_data: serde_json::Value = serde_json::from_str(&commit_json)?;
-        let exe_commit = commit_data["app_exe_commit"]
-            .as_str()
-            .ok_or_eyre("Missing 'app_exe_commit' in commit.json")?
-            .to_string();
-
         callback.on_header("Uploading Pre-built Program");
         callback.on_field("Config ID", &args.config_id);
         callback.on_field("ELF", &elf_path.display().to_string());
         callback.on_field("VMEXE", &vmexe_path.display().to_string());
-        callback.on_field("Exe Commit", &exe_commit);
+        callback.on_info("Note: Program hash will be computed on the backend");
 
         if let Some(default_num_gpus) = args.default_num_gpus {
             callback.on_field("Default Num GPUs", &default_num_gpus.to_string());
@@ -817,8 +843,8 @@ impl AxiomSdk {
 
         // Build URL with query parameters
         let mut url = format!(
-            "{}/programs/upload-elf?config_id={}&exe_commit={}",
-            self.config.api_url, args.config_id, exe_commit
+            "{}/programs/upload-exe?config_id={}",
+            self.config.api_url, args.config_id
         );
 
         if let Some(project_id) = &args.project_id {
