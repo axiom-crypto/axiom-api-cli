@@ -38,7 +38,7 @@ pub trait BuildSdk {
         args: BuildArgs,
     ) -> Result<String>;
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
-    fn upload_elf(&self, program_dir: impl AsRef<Path>, args: UploadElfArgs) -> Result<String>;
+    fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -87,7 +87,7 @@ pub struct BuildArgs {
 }
 
 #[derive(Debug)]
-pub struct UploadElfArgs {
+pub struct UploadExeArgs {
     /// The configuration ID to use
     pub config_id: String,
     /// The project ID to associate with the program
@@ -290,8 +290,8 @@ impl BuildSdk for AxiomSdk {
         self.wait_for_build_completion_base(program_id, &*self.callback)
     }
 
-    fn upload_elf(&self, program_dir: impl AsRef<Path>, args: UploadElfArgs) -> Result<String> {
-        self.upload_elf_base(program_dir, args, &*self.callback)
+    fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String> {
+        self.upload_exe_base(program_dir, args, &*self.callback)
     }
 }
 
@@ -724,10 +724,10 @@ impl AxiomSdk {
         }
     }
 
-    pub fn upload_elf_base(
+    pub fn upload_exe_base(
         &self,
         program_dir: impl AsRef<Path>,
-        args: UploadElfArgs,
+        args: UploadExeArgs,
         callback: &dyn ProgressCallback,
     ) -> Result<String> {
         // Check if we're in a Rust project

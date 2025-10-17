@@ -1,6 +1,6 @@
 use axiom_sdk::{
     AxiomSdk,
-    build::{BuildSdk, UploadElfArgs},
+    build::{BuildSdk, UploadExeArgs},
 };
 use clap::Parser;
 use eyre::Result;
@@ -9,10 +9,10 @@ use crate::progress::CliProgressCallback;
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "upload-elf",
-    about = "Upload pre-built ELF and VMEXE to Axiom Proving Service"
+    name = "upload-exe",
+    about = "Upload pre-built VMEXE to Axiom Proving Service"
 )]
-pub struct UploadElfCmd {
+pub struct UploadExeCmd {
     /// The configuration ID to use
     #[clap(long, value_name = "ID")]
     config_id: String,
@@ -38,7 +38,7 @@ pub struct UploadElfCmd {
     default_num_gpus: Option<usize>,
 }
 
-impl UploadElfCmd {
+impl UploadExeCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
         let callback = CliProgressCallback::new();
@@ -46,7 +46,7 @@ impl UploadElfCmd {
 
         let program_dir = std::env::current_dir()?;
 
-        let args = UploadElfArgs {
+        let args = UploadExeArgs {
             config_id: self.config_id,
             project_id: self.project_id,
             project_name: self.project_name,
@@ -55,7 +55,7 @@ impl UploadElfCmd {
             default_num_gpus: self.default_num_gpus,
         };
 
-        let program_id = sdk.upload_elf(&program_dir, args)?;
+        let program_id = sdk.upload_exe(&program_dir, args)?;
 
         // Print console URL if available
         let status = sdk.get_build_status(&program_id)?;
