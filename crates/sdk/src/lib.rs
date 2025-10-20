@@ -354,6 +354,13 @@ pub fn authenticated_put(config: &AxiomConfig, url: &str) -> Result<RequestBuild
     Ok(add_cli_version_header(client.put(url)).header(API_KEY_HEADER, api_key))
 }
 
+pub fn authenticated_delete(config: &AxiomConfig, url: &str) -> Result<RequestBuilder> {
+    let client = Client::new();
+    let api_key = config.api_key.as_ref().ok_or_eyre("API key not set")?;
+
+    Ok(add_cli_version_header(client.delete(url)).header(API_KEY_HEADER, api_key))
+}
+
 /// Calculate a human-readable duration between two RFC3339 timestamps.
 ///
 /// Returns a formatted string like "5s", "2m 30s", or "1h 15m 30s".

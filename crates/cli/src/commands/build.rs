@@ -60,6 +60,13 @@ enum BuildSubcommand {
         #[clap(long, value_name = "ID")]
         program_id: String,
     },
+
+    /// Delete a program
+    Delete {
+        /// The program ID to delete
+        #[clap(long, value_name = "ID")]
+        program_id: String,
+    },
 }
 
 #[derive(Debug, Parser)]
@@ -169,6 +176,11 @@ impl BuildCmd {
                 program_type,
             }) => sdk.download_program(&program_id, &program_type),
             Some(BuildSubcommand::Logs { program_id }) => sdk.download_build_logs(&program_id),
+            Some(BuildSubcommand::Delete { program_id }) => {
+                sdk.delete_program(&program_id)?;
+                println!("✓ Successfully deleted program {}", program_id);
+                Ok(())
+            }
             None => {
                 let program_dir = std::env::current_dir()?;
                 let config_source = match (self.build_args.config_id, self.build_args.config) {

@@ -18,8 +18,8 @@ use serde_json::Value;
 use tar::Builder;
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
-    download_file, send_request_json,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_delete,
+    authenticated_get, download_file, send_request, send_request_json,
 };
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 2048;
@@ -43,6 +43,7 @@ pub trait BuildSdk {
     ) -> Result<String>;
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
     fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String>;
+    fn delete_program(&self, program_id: &str) -> Result<()>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -300,6 +301,13 @@ impl BuildSdk for AxiomSdk {
 
     fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String> {
         self.upload_exe_base(program_dir, args, &*self.callback)
+    }
+
+    fn delete_program(&self, program_id: &str) -> Result<()> {
+        let url = format!("{}/programs/{}", self.config.api_url, program_id);
+
+        let request = authenticated_delete(&self.config, &url)?;
+        send_request(request, "Failed to delete program")
     }
 }
 

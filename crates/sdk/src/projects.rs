@@ -2,8 +2,8 @@ use eyre::Result;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AxiomSdk, authenticated_get, authenticated_post, authenticated_put, send_request,
-    send_request_json,
+    AxiomSdk, authenticated_delete, authenticated_get, authenticated_post, authenticated_put,
+    send_request, send_request_json,
 };
 
 pub trait ProjectSdk {
@@ -21,6 +21,7 @@ pub trait ProjectSdk {
         page_size: Option<u32>,
     ) -> Result<ProgramListResponse>;
     fn move_program_to_project(&self, program_id: &str, project_id: &str) -> Result<()>;
+    fn delete_project(&self, project_id: &str, force: bool) -> Result<()>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,6 +134,16 @@ impl ProjectSdk for AxiomSdk {
             .header("Content-Type", "application/json")
             .json(&request_body);
         send_request(request, "Failed to move program to project")
+    }
+
+    fn delete_project(&self, project_id: &str, force: bool) -> Result<()> {
+        let url = format!(
+            "{}/projects/{}?force={}",
+            self.config.api_url, project_id, force
+        );
+
+        let request = authenticated_delete(&self.config, &url)?;
+        send_request(request, "Failed to delete project")
     }
 }
 

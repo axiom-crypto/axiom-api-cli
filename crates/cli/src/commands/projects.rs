@@ -54,6 +54,15 @@ enum ProjectsSubcommand {
         #[arg(long, value_name = "ID")]
         to_project: String,
     },
+    /// Delete a project
+    Delete {
+        /// Project ID to delete
+        #[arg(long, value_name = "ID")]
+        project_id: String,
+        /// Force delete even if project has programs
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 impl ProjectsCmd {
@@ -169,6 +178,11 @@ impl ProjectsCmd {
                     "✓ Successfully moved program {} to project {}",
                     program_id, to_project
                 );
+                Ok(())
+            }
+            ProjectsSubcommand::Delete { project_id, force } => {
+                sdk.delete_project(&project_id, force)?;
+                println!("✓ Successfully deleted project {}", project_id);
                 Ok(())
             }
         }
