@@ -28,7 +28,11 @@ const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
 pub trait BuildSdk {
-    fn list_programs(&self) -> Result<Vec<BuildStatus>>;
+    fn list_programs(
+        &self,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<ProgramListResponse>;
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
     fn download_build_logs(&self, program_id: &str) -> Result<()>;
@@ -60,6 +64,20 @@ pub struct BuildStatus {
     pub project_id: String,
     pub project_name: String,
     pub default_num_gpus: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProgramListResponse {
+    pub items: Vec<BuildStatus>,
+    pub pagination: PaginationInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginationInfo {
+    pub total: u32,
+    pub page: u32,
+    pub page_size: u32,
+    pub pages: u32,
 }
 
 #[derive(Debug)]
@@ -139,30 +157,20 @@ impl<R: Read> Read for CountingReader<R> {
 }
 
 impl BuildSdk for AxiomSdk {
-    fn list_programs(&self) -> Result<Vec<BuildStatus>> {
-        let url = format!("{}/programs", self.config.api_url);
+    fn list_programs(
+        &self,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<ProgramListResponse> {
+        let page = page.unwrap_or(1);
+        let page_size = page_size.unwrap_or(20);
+        let url = format!(
+            "{}/programs?page={}&page_size={}",
+            self.config.api_url, page, page_size
+        );
 
         let request = authenticated_get(&self.config, &url)?;
-        let body: Value = send_request_json(request, "Failed to list programs")?;
-
-        // Extract the items array from the response
-        if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
-            if items.is_empty() {
-                self.callback.on_info("No programs found");
-                return Ok(vec![]);
-            }
-
-            let mut programs = vec![];
-
-            for item in items {
-                let build_status = serde_json::from_value(item.clone())?;
-                programs.push(build_status);
-            }
-
-            Ok(programs)
-        } else {
-            Err(eyre::eyre!("Unexpected response format: {}", body))
-        }
+        send_request_json(request, "Failed to list programs")
     }
 
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus> {
