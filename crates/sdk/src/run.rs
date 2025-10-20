@@ -18,6 +18,8 @@ pub trait RunSdk {
     fn execute_program(&self, args: RunArgs) -> Result<String>;
     fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()>;
     fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String>;
+    fn list_executions(&self, program_id: &str) -> Result<Vec<ExecutionStatus>>;
+    fn get_execution_logs(&self, execution_id: &str) -> Result<()>;
 }
 
 #[derive(Debug)]
@@ -124,6 +126,65 @@ impl RunSdk for AxiomSdk {
         }
 
         None
+    }
+
+    fn list_executions(&self, program_id: &str) -> Result<Vec<ExecutionStatus>> {
+        let url = format!(
+            "{}/executions?program_id={}",
+            self.config.api_url, program_id
+        );
+        let client = Client::new();
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
+
+        let response = add_cli_version_header(client.get(url).header(API_KEY_HEADER, api_key))
+            .send()
+            .context("Failed to send list request")?;
+
+        if response.status().is_success() {
+            let body: Value = response.json()?;
+            let items = body["items"]
+                .as_array()
+                .ok_or_eyre("Expected 'items' array in response")?;
+
+            let executions: Vec<ExecutionStatus> = items
+                .iter()
+                .map(|item| serde_json::from_value(item.clone()))
+                .collect::<Result<Vec<_>, _>>()?;
+
+            Ok(executions)
+        } else if response.status().is_client_error() {
+            let status = response.status();
+            let error_text = response.text()?;
+            Err(eyre::eyre!(
+                "Cannot list executions: {} (status: {})",
+                error_text,
+                status
+            ))
+        } else {
+            Err(eyre::eyre!(
+                "List request failed with status: {}",
+                response.status()
+            ))
+        }
+    }
+
+    fn get_execution_logs(&self, execution_id: &str) -> Result<()> {
+        use crate::download_file;
+
+        let url = format!("{}/executions/{}/logs", self.config.api_url, execution_id);
+        let request = crate::authenticated_get(&self.config, &url)?;
+
+        let execution_dir = format!("axiom-artifacts/execution-{}", execution_id);
+        std::fs::create_dir_all(&execution_dir).context(format!(
+            "Failed to create execution directory: {}",
+            execution_dir
+        ))?;
+
+        let filename = std::path::PathBuf::from(format!("{}/logs.txt", execution_dir));
+        download_file(request, &filename, "Failed to download execution logs")?;
+        self.callback
+            .on_success(&format!("✓ {}", filename.display()));
+        Ok(())
     }
 }
 
