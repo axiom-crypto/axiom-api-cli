@@ -196,8 +196,6 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
-            self.callback
-                .on_success(&format!("{}", output_path.display()));
             Ok(())
         } else {
             let status = response.status();
@@ -233,8 +231,6 @@ impl ProveSdk for AxiomSdk {
             )
             .context("Failed to write response to file")?;
 
-            self.callback
-                .on_success(&format!("{}", output_path.display()));
             Ok(())
         } else {
             let status = response.status();

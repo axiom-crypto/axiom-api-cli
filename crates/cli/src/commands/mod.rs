@@ -6,6 +6,7 @@ pub mod projects;
 pub mod prove;
 pub mod register;
 pub mod run;
+pub mod upload_exe;
 pub mod verify;
 pub mod version;
 
@@ -17,5 +18,6 @@ pub use projects::ProjectsCmd;
 pub use prove::ProveCmd;
 pub use register::RegisterCmd;
 pub use run::RunCmd;
+pub use upload_exe::UploadExeCmd;
 pub use verify::VerifyCmd;
 pub use version::VersionCmd;

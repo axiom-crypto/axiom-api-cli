@@ -38,6 +38,7 @@ pub trait BuildSdk {
         args: BuildArgs,
     ) -> Result<String>;
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
+    fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,6 +80,24 @@ pub struct BuildArgs {
     pub project_name: Option<String>,
     /// Allow building with uncommitted changes
     pub allow_dirty: bool,
+    /// Set default num gpus for this program
+    pub default_num_gpus: Option<usize>,
+    /// OpenVM Rust toolchain version (e.g., "nightly-2025-02-14")
+    pub openvm_rust_toolchain: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct UploadExeArgs {
+    /// The configuration ID to use
+    pub config_id: String,
+    /// The project ID to associate with the program
+    pub project_id: Option<String>,
+    /// The project name if creating a new project
+    pub project_name: Option<String>,
+    /// The binary name
+    pub bin_name: Option<String>,
+    /// Custom program name
+    pub program_name: Option<String>,
     /// Set default num gpus for this program
     pub default_num_gpus: Option<usize>,
 }
@@ -269,6 +288,10 @@ impl BuildSdk for AxiomSdk {
 
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()> {
         self.wait_for_build_completion_base(program_id, &*self.callback)
+    }
+
+    fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String> {
+        self.upload_exe_base(program_dir, args, &*self.callback)
     }
 }
 
@@ -577,6 +600,9 @@ impl AxiomSdk {
         if let Some(default_num_gpus) = args.default_num_gpus {
             url.push_str(&format!("&default_num_gpus={}", default_num_gpus));
         }
+        if let Some(openvm_rust_toolchain) = &args.openvm_rust_toolchain {
+            url.push_str(&format!("&openvm_rust_toolchain={}", openvm_rust_toolchain));
+        }
 
         callback.on_header("Building Program");
 
@@ -693,6 +719,202 @@ impl AxiomSdk {
         } else {
             Err(eyre::eyre!(
                 "Build request failed with status: {}",
+                response.status()
+            ))
+        }
+    }
+
+    pub fn upload_exe_base(
+        &self,
+        program_dir: impl AsRef<Path>,
+        args: UploadExeArgs,
+        callback: &dyn ProgressCallback,
+    ) -> Result<String> {
+        // Check if we're in a Rust project
+        if !is_rust_project(program_dir.as_ref()) {
+            eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
+        }
+
+        // Look for the openvm build output directory
+        let target_dir = program_dir.as_ref().join("target").join("openvm");
+        if !target_dir.exists() {
+            eyre::bail!(
+                "OpenVM build output not found. Please run 'cargo openvm build' first.\nExpected directory: {}",
+                target_dir.display()
+            );
+        }
+
+        // Find the release directory
+        // TODO: Support other profiles beyond release (e.g., dev, custom profiles)
+        let release_dir = target_dir.join("release");
+        if !release_dir.exists() {
+            eyre::bail!(
+                "OpenVM release build not found. Please run 'cargo openvm build' first.\nExpected directory: {}",
+                release_dir.display()
+            );
+        }
+
+        // Find ELF and VMEXE files
+        let elf_files: Vec<_> = std::fs::read_dir(&release_dir)?
+            .filter_map(Result::ok)
+            .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("elf"))
+            .collect();
+
+        if elf_files.is_empty() {
+            eyre::bail!(
+                "No ELF files found in {}. Please run 'cargo openvm build' first.",
+                release_dir.display()
+            );
+        }
+
+        // Filter by bin_name if provided and there are multiple ELFs
+        let elf_path = if elf_files.len() > 1 {
+            if let Some(bin_name) = &args.bin_name {
+                // Filter ELF files by bin_name
+                let matching_elf = elf_files.iter().find(|entry| {
+                    entry
+                        .path()
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(|name| name == bin_name)
+                        .unwrap_or(false)
+                });
+
+                if let Some(elf_entry) = matching_elf {
+                    elf_entry.path()
+                } else {
+                    let available: Vec<_> = elf_files
+                        .iter()
+                        .filter_map(|e| {
+                            e.path()
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .map(|s| s.to_string())
+                        })
+                        .collect();
+                    eyre::bail!(
+                        "ELF file '{}' not found. Available ELF files: {}",
+                        bin_name,
+                        available.join(", ")
+                    );
+                }
+            } else {
+                let available: Vec<_> = elf_files
+                    .iter()
+                    .filter_map(|e| {
+                        e.path()
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .map(|s| s.to_string())
+                    })
+                    .collect();
+                eyre::bail!(
+                    "Multiple ELF files found. Please specify which one to upload using --bin-name. Available: {}",
+                    available.join(", ")
+                );
+            }
+        } else {
+            elf_files[0].path()
+        };
+        let vmexe_path = elf_path.with_extension("vmexe");
+
+        if !vmexe_path.exists() {
+            eyre::bail!(
+                "VMEXE file not found at {}. Please run 'cargo openvm build' first.",
+                vmexe_path.display()
+            );
+        }
+
+        callback.on_header("Uploading Pre-built Program");
+        callback.on_field("Config ID", &args.config_id);
+        callback.on_field("ELF", &elf_path.display().to_string());
+        callback.on_field("VMEXE", &vmexe_path.display().to_string());
+        callback.on_info("Note: Program hash will be computed on the backend");
+
+        if let Some(default_num_gpus) = args.default_num_gpus {
+            callback.on_field("Default Num GPUs", &default_num_gpus.to_string());
+        }
+
+        // Read files into memory
+        let elf_content = std::fs::read(&elf_path)
+            .with_context(|| format!("Failed to read ELF file: {}", elf_path.display()))?;
+        let vmexe_content = std::fs::read(&vmexe_path)
+            .with_context(|| format!("Failed to read VMEXE file: {}", vmexe_path.display()))?;
+
+        // Build URL with query parameters
+        let mut url = format!(
+            "{}/programs/upload-exe?config_id={}",
+            self.config.api_url, args.config_id
+        );
+
+        if let Some(project_id) = &args.project_id {
+            url.push_str(&format!("&project_id={}", project_id));
+        }
+        if let Some(project_name) = &args.project_name {
+            let encoded: String =
+                url::form_urlencoded::byte_serialize(project_name.as_bytes()).collect();
+            url.push_str(&format!("&project_name={}", encoded));
+        }
+        if let Some(bin_name) = &args.bin_name {
+            url.push_str(&format!("&bin_name={}", bin_name));
+        }
+        if let Some(program_name) = &args.program_name {
+            let encoded: String =
+                url::form_urlencoded::byte_serialize(program_name.as_bytes()).collect();
+            url.push_str(&format!("&program_name={}", encoded));
+        }
+        if let Some(default_num_gpus) = args.default_num_gpus {
+            url.push_str(&format!("&default_num_gpus={}", default_num_gpus));
+        }
+
+        // Create multipart form with files
+        let elf_part = reqwest::blocking::multipart::Part::bytes(elf_content)
+            .file_name("program.elf")
+            .mime_str("application/octet-stream")?;
+
+        let vmexe_part = reqwest::blocking::multipart::Part::bytes(vmexe_content)
+            .file_name("program.vmexe")
+            .mime_str("application/octet-stream")?;
+
+        let form = reqwest::blocking::multipart::Form::new()
+            .part("elf", elf_part)
+            .part("vmexe", vmexe_part);
+
+        callback.on_progress_start("Uploading", None);
+
+        let client = Client::builder()
+            .timeout(std::time::Duration::from_secs(300))
+            .build()?;
+
+        let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
+
+        let request = add_cli_version_header(
+            client
+                .post(&url)
+                .header(API_KEY_HEADER, api_key)
+                .multipart(form),
+        );
+
+        let response = request.send()?;
+
+        callback.on_progress_finish("✓ Upload complete!");
+
+        if response.status().is_success() {
+            let body = response
+                .json::<serde_json::Value>()
+                .context("Failed to parse response as JSON")?;
+            let program_id = body["id"]
+                .as_str()
+                .ok_or_eyre("Missing 'id' field in response")?;
+            callback.on_success(&format!("Program uploaded successfully ({})", program_id));
+            Ok(program_id.to_string())
+        } else if response.status().is_client_error() {
+            let status = response.status();
+            let error_text = response.text()?;
+            Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+        } else {
+            Err(eyre::eyre!(
+                "Upload request failed with status: {}",
                 response.status()
             ))
         }
