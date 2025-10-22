@@ -78,4 +78,4 @@
    cargo axiom verify status --verify-id <ID>
    ```
 
-For more details, see the [Axiom API Documentation](https://proving-api-docs.axiom.xyz/api-reference/axiom-cli).
+For more details, see the [Axiom API Documentation](https://docs.axiom.xyz).
