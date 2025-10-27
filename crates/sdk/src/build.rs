@@ -89,7 +89,7 @@ pub struct BuildArgs {
 #[derive(Debug)]
 pub struct UploadExeArgs {
     /// The configuration ID to use
-    pub config_id: String,
+    pub config_id: Option<String>,
     /// The project ID to associate with the program
     pub project_id: Option<String>,
     /// The project name if creating a new project
@@ -825,8 +825,14 @@ impl AxiomSdk {
             );
         }
 
+        // Use provided config_id or fall back to config file default
+        let config_id = args
+            .config_id
+            .or_else(|| self.config.config_id.clone())
+            .ok_or_eyre("No config_id provided and no default config_id in ~/.axiom/config.json")?;
+
         callback.on_header("Uploading Pre-built Program");
-        callback.on_field("Config ID", &args.config_id);
+        callback.on_field("Config ID", &config_id);
         callback.on_field("ELF", &elf_path.display().to_string());
         callback.on_field("VMEXE", &vmexe_path.display().to_string());
         callback.on_info("Note: Program hash will be computed on the backend");
@@ -844,7 +850,7 @@ impl AxiomSdk {
         // Build URL with query parameters
         let mut url = format!(
             "{}/programs/upload-exe?config_id={}",
-            self.config.api_url, args.config_id
+            self.config.api_url, config_id
         );
 
         if let Some(project_id) = &args.project_id {
