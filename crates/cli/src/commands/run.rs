@@ -21,6 +21,10 @@ enum RunSubcommand {
         /// The execution ID to check status for
         #[clap(long, value_name = "ID")]
         execution_id: String,
+
+        /// Wait for the execution to complete
+        #[clap(long)]
+        wait: bool,
     },
 
     /// List all executions for a program
@@ -64,10 +68,14 @@ impl RunCmd {
         let sdk = AxiomSdk::new(config).with_callback(callback);
 
         match self.command {
-            Some(RunSubcommand::Status { execution_id }) => {
-                let execution_status = sdk.get_execution_status(&execution_id)?;
-                Self::print_execution_status(&execution_status);
-                Ok(())
+            Some(RunSubcommand::Status { execution_id, wait }) => {
+                if wait {
+                    sdk.wait_for_execution_completion(&execution_id)
+                } else {
+                    let execution_status = sdk.get_execution_status(&execution_id)?;
+                    Self::print_execution_status(&execution_status);
+                    Ok(())
+                }
             }
             Some(RunSubcommand::List { program_id }) => {
                 let execution_status_list = sdk.list_executions(&program_id)?;
