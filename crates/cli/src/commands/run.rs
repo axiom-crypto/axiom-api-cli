@@ -1,5 +1,6 @@
 use axiom_sdk::{AxiomSdk, input::Input, run::RunSdk};
 use clap::{Args, Subcommand};
+use comfy_table;
 use eyre::Result;
 
 use crate::{formatting::Formatter, progress::CliProgressCallback};
@@ -18,6 +19,20 @@ enum RunSubcommand {
     /// Check the status of an execution
     Status {
         /// The execution ID to check status for
+        #[clap(long, value_name = "ID")]
+        execution_id: String,
+    },
+
+    /// List all executions for a program
+    List {
+        /// The ID of the program to list executions for
+        #[arg(long, value_name = "ID")]
+        program_id: String,
+    },
+
+    /// Download logs for an execution
+    Logs {
+        /// The execution ID to download logs for
         #[clap(long, value_name = "ID")]
         execution_id: String,
     },
@@ -54,6 +69,35 @@ impl RunCmd {
                 Self::print_execution_status(&execution_status);
                 Ok(())
             }
+            Some(RunSubcommand::List { program_id }) => {
+                let execution_status_list = sdk.list_executions(&program_id)?;
+
+                // Create a new table
+                let mut table = comfy_table::Table::new();
+                table.set_header(["ID", "Status", "Mode", "Created At"]);
+
+                // Add rows to the table
+                for execution_status in execution_status_list {
+                    let get_value = |s: &str| {
+                        if s.is_empty() {
+                            "-".to_string()
+                        } else {
+                            s.to_string()
+                        }
+                    };
+                    let id = get_value(&execution_status.id);
+                    let status = get_value(&execution_status.status);
+                    let mode = get_value(&execution_status.mode);
+                    let created_at = get_value(&execution_status.created_at);
+
+                    table.add_row([id, status, mode, created_at]);
+                }
+
+                // Print the table
+                println!("{table}");
+                Ok(())
+            }
+            Some(RunSubcommand::Logs { execution_id }) => sdk.get_execution_logs(&execution_id),
             None => {
                 use crate::progress::CliProgressCallback;
                 let callback = CliProgressCallback::new();
