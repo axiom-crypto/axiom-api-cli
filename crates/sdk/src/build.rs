@@ -560,6 +560,7 @@ impl AxiomSdk {
             args.keep_tarball.unwrap_or(false),
             &exclude_patterns,
             &include_dirs,
+            args.openvm_rust_toolchain.as_deref(),
         )?;
         let tar_path = &tar_file.path;
 
@@ -1049,6 +1050,7 @@ fn create_tar_archive(
     keep_tarball: bool,
     exclude_patterns: &[String],
     include_dirs: &[String],
+    openvm_rust_toolchain: Option<&str>,
 ) -> Result<TarFile> {
     let tar_path = program_dir.as_ref().join("program.tar.gz");
     let tar_file = File::create(&tar_path)?;
@@ -1084,48 +1086,79 @@ fn create_tar_archive(
         std::fs::remove_dir_all(&axiom_cargo_home).ok();
     }
 
-    // Get the required rust version from rust-toolchain.toml
-    let toolchain_file_content = include_str!("../../../rust-toolchain.toml");
-    let doc = toolchain_file_content
-        .parse::<toml_edit::Document<_>>()
-        .context("Failed to parse rust-toolchain.toml")?;
-    let required_version_str = doc["toolchain"]["channel"]
-        .as_str()
-        .ok_or_eyre("Could not find 'toolchain.channel' in rust-toolchain.toml")?;
+    // Only set custom toolchain if user specified one, otherwise let OpenVM use its default
+    if let Some(custom_toolchain) = openvm_rust_toolchain {
+        // Run cargo fetch with custom toolchain for all three fetch operations
+        // We use manual commands instead of cargo_command to ensure the custom toolchain is used
 
-    // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
-    // Fetch 1: target = x86 linux which is the cloud machine
-    let status = std::process::Command::new("cargo")
-        .env("CARGO_HOME", &axiom_cargo_home)
-        .arg(format!("+{}", required_version_str))
-        .arg("fetch")
-        .arg("--target")
-        .arg("x86_64-unknown-linux-gnu")
-        .status()
-        .context("Failed to run 'cargo fetch'")?;
-    if !status.success() {
-        eyre::bail!("Failed to fetch cargo dependencies");
-    }
+        // Fetch 1: target = x86 linux which is the cloud machine
+        let status = std::process::Command::new("cargo")
+            .env("CARGO_HOME", &axiom_cargo_home)
+            .arg(format!("+{}", custom_toolchain))
+            .arg("fetch")
+            .arg("--target")
+            .arg("x86_64-unknown-linux-gnu")
+            .status()
+            .context("Failed to run 'cargo fetch'")?;
+        if !status.success() {
+            eyre::bail!("Failed to fetch cargo dependencies");
+        }
 
-    // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
-    // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
-    let status = std::process::Command::new("cargo")
-        .env("CARGO_HOME", &axiom_cargo_home)
-        .arg(format!("+{}", required_version_str))
-        .arg("fetch")
-        .status()
-        .context("Failed to run 'cargo fetch'")?;
-    if !status.success() {
-        eyre::bail!("Failed to fetch cargo dependencies");
-    }
+        // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
+        // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
+        let status = std::process::Command::new("cargo")
+            .env("CARGO_HOME", &axiom_cargo_home)
+            .arg(format!("+{}", custom_toolchain))
+            .arg("fetch")
+            .status()
+            .context("Failed to run 'cargo fetch'")?;
+        if !status.success() {
+            eyre::bail!("Failed to fetch cargo dependencies");
+        }
 
-    // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
-    let status = cargo_command("fetch", &[])
-        .env("CARGO_HOME", &axiom_cargo_home)
-        .status()
-        .context("Failed to run 'cargo fetch'")?;
-    if !status.success() {
-        eyre::bail!("Failed to fetch cargo dependencies");
+        // Fetch 3: Run cargo fetch for guest target (risc0) with build-std
+        // This replicates what cargo_command does but with our custom toolchain
+        let status = std::process::Command::new("cargo")
+            .env("CARGO_HOME", &axiom_cargo_home)
+            .arg(format!("+{}", custom_toolchain))
+            .arg("fetch")
+            .arg("--target")
+            .arg("riscv32im-risc0-zkvm-elf")
+            .args(["-Z", "build-std=alloc,core,proc_macro,panic_abort,std"])
+            .args(["-Z", "build-std-features=compiler-builtins-mem"])
+            .status()
+            .context("Failed to run 'cargo fetch' for guest target")?;
+        if !status.success() {
+            eyre::bail!("Failed to fetch cargo dependencies for guest target");
+        }
+    } else {
+        // Use OpenVM's default toolchain by calling cargo_command without override
+        // Fetch 1: target = x86 linux which is the cloud machine
+        let status = cargo_command("fetch", &["--target", "x86_64-unknown-linux-gnu"])
+            .env("CARGO_HOME", &axiom_cargo_home)
+            .status()
+            .context("Failed to run 'cargo fetch'")?;
+        if !status.success() {
+            eyre::bail!("Failed to fetch cargo dependencies");
+        }
+
+        // Fetch 2: Use local target
+        let status = cargo_command("fetch", &[])
+            .env("CARGO_HOME", &axiom_cargo_home)
+            .status()
+            .context("Failed to run 'cargo fetch'")?;
+        if !status.success() {
+            eyre::bail!("Failed to fetch cargo dependencies");
+        }
+
+        // Fetch 3: Run cargo fetch for host dependencies (std stuffs)
+        let status = cargo_command("fetch", &[])
+            .env("CARGO_HOME", &axiom_cargo_home)
+            .status()
+            .context("Failed to run 'cargo fetch'")?;
+        if !status.success() {
+            eyre::bail!("Failed to fetch cargo dependencies");
+        }
     }
 
     std::env::set_current_dir(&git_root)?;
