@@ -10,7 +10,7 @@ use std::{
 
 use eyre::{Context, OptionExt, Result, eyre};
 use flate2::{Compression, write::GzEncoder};
-use openvm_build::cargo_command;
+use openvm_build::{cargo_command, get_rustup_toolchain_name};
 use reqwest::blocking::Client;
 use scopeguard::defer;
 use serde::{Deserialize, Serialize};
@@ -608,9 +608,12 @@ impl AxiomSdk {
         if let Some(default_num_gpus) = args.default_num_gpus {
             url.push_str(&format!("&default_num_gpus={}", default_num_gpus));
         }
-        if let Some(openvm_rust_toolchain) = &args.openvm_rust_toolchain {
-            url.push_str(&format!("&openvm_rust_toolchain={}", openvm_rust_toolchain));
-        }
+        // Always pass the toolchain version - either from args or from openvm-build default
+        let toolchain = args.openvm_rust_toolchain.clone().unwrap_or_else(|| {
+            // Use the same toolchain that was used for cargo fetch
+            get_rustup_toolchain_name()
+        });
+        url.push_str(&format!("&openvm_rust_toolchain={}", toolchain));
 
         callback.on_header("Building Program");
 
