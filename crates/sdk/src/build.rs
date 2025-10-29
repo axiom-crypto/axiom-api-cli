@@ -10,7 +10,7 @@ use std::{
 
 use eyre::{Context, OptionExt, Result, eyre};
 use flate2::{Compression, write::GzEncoder};
-use openvm_build::cargo_command;
+use openvm_build::{cargo_command, get_rustup_toolchain_name};
 use reqwest::blocking::Client;
 use scopeguard::defer;
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,11 @@ const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
 
 pub trait BuildSdk {
-    fn list_programs(&self) -> Result<Vec<BuildStatus>>;
+    fn list_programs(
+        &self,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<ProgramListResponse>;
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
     fn download_build_logs(&self, program_id: &str) -> Result<()>;
@@ -62,6 +66,20 @@ pub struct BuildStatus {
     pub default_num_gpus: usize,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProgramListResponse {
+    pub items: Vec<BuildStatus>,
+    pub pagination: PaginationInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PaginationInfo {
+    pub total: u32,
+    pub page: u32,
+    pub page_size: u32,
+    pub pages: u32,
+}
+
 #[derive(Debug)]
 pub struct BuildArgs {
     /// The configuration source to use for the build
@@ -89,7 +107,7 @@ pub struct BuildArgs {
 #[derive(Debug)]
 pub struct UploadExeArgs {
     /// The configuration ID to use
-    pub config_id: String,
+    pub config_id: Option<String>,
     /// The project ID to associate with the program
     pub project_id: Option<String>,
     /// The project name if creating a new project
@@ -139,30 +157,20 @@ impl<R: Read> Read for CountingReader<R> {
 }
 
 impl BuildSdk for AxiomSdk {
-    fn list_programs(&self) -> Result<Vec<BuildStatus>> {
-        let url = format!("{}/programs", self.config.api_url);
+    fn list_programs(
+        &self,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<ProgramListResponse> {
+        let page = page.unwrap_or(1);
+        let page_size = page_size.unwrap_or(20);
+        let url = format!(
+            "{}/programs?page={}&page_size={}",
+            self.config.api_url, page, page_size
+        );
 
         let request = authenticated_get(&self.config, &url)?;
-        let body: Value = send_request_json(request, "Failed to list programs")?;
-
-        // Extract the items array from the response
-        if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
-            if items.is_empty() {
-                self.callback.on_info("No programs found");
-                return Ok(vec![]);
-            }
-
-            let mut programs = vec![];
-
-            for item in items {
-                let build_status = serde_json::from_value(item.clone())?;
-                programs.push(build_status);
-            }
-
-            Ok(programs)
-        } else {
-            Err(eyre::eyre!("Unexpected response format: {}", body))
-        }
+        send_request_json(request, "Failed to list programs")
     }
 
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus> {
@@ -600,9 +608,12 @@ impl AxiomSdk {
         if let Some(default_num_gpus) = args.default_num_gpus {
             url.push_str(&format!("&default_num_gpus={}", default_num_gpus));
         }
-        if let Some(openvm_rust_toolchain) = &args.openvm_rust_toolchain {
-            url.push_str(&format!("&openvm_rust_toolchain={}", openvm_rust_toolchain));
-        }
+        // Always pass the toolchain version - either from args or from openvm-build default
+        let toolchain = args.openvm_rust_toolchain.clone().unwrap_or_else(|| {
+            // Use the same toolchain that was used for cargo fetch
+            get_rustup_toolchain_name()
+        });
+        url.push_str(&format!("&openvm_rust_toolchain={}", toolchain));
 
         callback.on_header("Building Program");
 
@@ -825,8 +836,14 @@ impl AxiomSdk {
             );
         }
 
+        // Use provided config_id or fall back to config file default
+        let config_id = args
+            .config_id
+            .or_else(|| self.config.config_id.clone())
+            .ok_or_eyre("No config_id provided and no default config_id in ~/.axiom/config.json")?;
+
         callback.on_header("Uploading Pre-built Program");
-        callback.on_field("Config ID", &args.config_id);
+        callback.on_field("Config ID", &config_id);
         callback.on_field("ELF", &elf_path.display().to_string());
         callback.on_field("VMEXE", &vmexe_path.display().to_string());
         callback.on_info("Note: Program hash will be computed on the backend");
@@ -844,7 +861,7 @@ impl AxiomSdk {
         // Build URL with query parameters
         let mut url = format!(
             "{}/programs/upload-exe?config_id={}",
-            self.config.api_url, args.config_id
+            self.config.api_url, config_id
         );
 
         if let Some(project_id) = &args.project_id {

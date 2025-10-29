@@ -15,7 +15,7 @@ use crate::progress::CliProgressCallback;
 pub struct UploadExeCmd {
     /// The configuration ID to use
     #[clap(long, value_name = "ID")]
-    config_id: String,
+    config_id: Option<String>,
 
     /// The project ID to associate with the program
     #[arg(long, value_name = "ID")]
@@ -36,6 +36,10 @@ pub struct UploadExeCmd {
     /// Default number of GPUs for this program
     #[clap(long)]
     default_num_gpus: Option<usize>,
+
+    /// Run in detached mode (don't wait for completion)
+    #[clap(long)]
+    detach: bool,
 }
 
 impl UploadExeCmd {
@@ -69,6 +73,13 @@ impl UploadExeCmd {
             println!("Console: {}", console_url);
         }
 
-        Ok(())
+        if !self.detach {
+            sdk.wait_for_build_completion(&program_id)
+        } else {
+            println!(
+                "To check the build status, run: cargo axiom build status --program-id {program_id}"
+            );
+            Ok(())
+        }
     }
 }
