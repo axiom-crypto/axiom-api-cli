@@ -1046,14 +1046,6 @@ fn get_git_commit_sha(git_root: impl AsRef<Path>) -> Result<String> {
     }
 }
 
-fn get_fetch_command(openvm_rust_toolchain: Option<String>) -> std::process::Command {
-    let mut fetch_command = std::process::Command::new("cargo");
-    if let Some(openvm_rust_toolchain) = openvm_rust_toolchain {
-        fetch_command.env("OPENVM_RUST_TOOLCHAIN", openvm_rust_toolchain);
-    }
-    fetch_command
-}
-
 // The tarball contains everything in the git root of the guest program that's tracked by git.
 // Additionally, it does `cargo fetch` to pre-fetch dependencies so private dependencies are included.
 fn create_tar_archive(
@@ -1108,7 +1100,7 @@ fn create_tar_archive(
 
     // Run cargo fetch with CARGO_HOME set to axiom_cargo_home
     // Fetch 1: target = x86 linux which is the cloud machine
-    let status = get_fetch_command(openvm_rust_toolchain.clone())
+    let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
         .arg(format!("+{}", required_version_str))
         .arg("fetch")
@@ -1122,7 +1114,7 @@ fn create_tar_archive(
 
     // Fetch 2: Use local target as Cargo might have some dependencies for the local machine that's different from the cloud machine
     // if local is not linux x86. And even though they are not needed in compilation, cargo tries to download them first.
-    let status = get_fetch_command(openvm_rust_toolchain)
+    let status = std::process::Command::new("cargo")
         .env("CARGO_HOME", &axiom_cargo_home)
         .arg(format!("+{}", required_version_str))
         .arg("fetch")
@@ -1133,6 +1125,20 @@ fn create_tar_archive(
     }
 
     // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
+    if let Some(openvm_rust_toolchain) = openvm_rust_toolchain {
+        if let Ok(cur) = std::env::var("OPENVM_RUST_TOOLCHAIN") {
+            if cur != openvm_rust_toolchain {
+                eyre::bail!(
+                    "OPENVM_RUST_TOOLCHAIN is already set to {}, inconsistent with the provided openvm_rust_toolchain {}",
+                    cur,
+                    openvm_rust_toolchain
+                );
+            }
+        }
+        unsafe {
+            std::env::set_var("OPENVM_RUST_TOOLCHAIN", &openvm_rust_toolchain);
+        }
+    }
     let status = cargo_command("fetch", &[])
         .env("CARGO_HOME", &axiom_cargo_home)
         .status()
