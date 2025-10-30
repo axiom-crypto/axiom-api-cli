@@ -72,6 +72,14 @@ enum ProveSubcommand {
         /// The ID of the program to list proofs for
         #[arg(long, value_name = "ID")]
         program_id: String,
+
+        /// Page number (default: 1)
+        #[arg(long, default_value = "1")]
+        page: u32,
+
+        /// Page size (default: 20)
+        #[arg(long, default_value = "20")]
+        page_size: u32,
     },
     /// Cancel a running proof
     Cancel {
@@ -130,15 +138,24 @@ impl ProveCmd {
                 output,
             }) => sdk.get_generated_proof(&proof_id, &proof_type, output),
             Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
-            Some(ProveSubcommand::List { program_id }) => {
-                let proof_status_list = sdk.list_proofs(&program_id)?;
+            Some(ProveSubcommand::List {
+                program_id,
+                page,
+                page_size,
+            }) => {
+                let response = sdk.list_proofs(&program_id, Some(page), Some(page_size))?;
+
+                if response.items.is_empty() {
+                    println!("No proofs found");
+                    return Ok(());
+                }
 
                 // Create a new table
                 let mut table = comfy_table::Table::new();
                 table.set_header(["ID", "State", "Proof type", "Created At"]);
 
                 // Add rows to the table
-                for proof_status in proof_status_list {
+                for proof_status in response.items {
                     let get_value = |s: &str| {
                         if s.is_empty() {
                             "-".to_string()
@@ -156,6 +173,13 @@ impl ProveCmd {
 
                 // Print the table
                 println!("{table}");
+
+                let pagination = &response.pagination;
+                println!(
+                    "Showing page {} of {} (total: {} proofs)",
+                    pagination.page, pagination.pages, pagination.total
+                );
+
                 Ok(())
             }
             Some(ProveSubcommand::Cancel { proof_id }) => {
