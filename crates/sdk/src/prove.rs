@@ -14,7 +14,12 @@ use crate::{
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
 
 pub trait ProveSdk {
-    fn list_proofs(&self, program_id: &str) -> Result<Vec<ProofStatus>>;
+    fn list_proofs(
+        &self,
+        program_id: &str,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<ProofListResponse>;
     fn get_proof_status(&self, proof_id: &str) -> Result<ProofStatus>;
     fn get_generated_proof(
         &self,
@@ -67,30 +72,36 @@ pub struct ProofStatus {
     pub priority: u8,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProofListResponse {
+    pub items: Vec<ProofStatus>,
+    pub pagination: ProofPaginationInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProofPaginationInfo {
+    pub total: u32,
+    pub page: u32,
+    pub page_size: u32,
+    pub pages: u32,
+}
+
 impl ProveSdk for AxiomSdk {
-    fn list_proofs(&self, program_id: &str) -> Result<Vec<ProofStatus>> {
-        let url = format!("{}/proofs?program_id={}", self.config.api_url, program_id);
+    fn list_proofs(
+        &self,
+        program_id: &str,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<ProofListResponse> {
+        let page = page.unwrap_or(1);
+        let page_size = page_size.unwrap_or(20);
+        let url = format!(
+            "{}/proofs?program_id={}&page={}&page_size={}",
+            self.config.api_url, program_id, page, page_size
+        );
 
         let request = authenticated_get(&self.config, &url)?;
-        let body: Value = send_request_json(request, "Failed to list proofs")?;
-
-        // Extract the items array from the response
-        if let Some(items) = body.get("items").and_then(|v| v.as_array()) {
-            if items.is_empty() {
-                return Ok(vec![]);
-            }
-
-            let mut proofs = vec![];
-
-            for item in items {
-                let proof_status = serde_json::from_value(item.clone())?;
-                proofs.push(proof_status);
-            }
-
-            Ok(proofs)
-        } else {
-            Err(eyre::eyre!("Unexpected response format: {}", body))
-        }
+        send_request_json(request, "Failed to list proofs")
     }
 
     fn get_proof_status(&self, proof_id: &str) -> Result<ProofStatus> {

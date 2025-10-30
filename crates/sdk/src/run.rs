@@ -18,7 +18,12 @@ pub trait RunSdk {
     fn execute_program(&self, args: RunArgs) -> Result<String>;
     fn wait_for_execution_completion(&self, execution_id: &str) -> Result<()>;
     fn save_execution_results(&self, execution_status: &ExecutionStatus) -> Option<String>;
-    fn list_executions(&self, program_id: &str) -> Result<Vec<ExecutionStatus>>;
+    fn list_executions(
+        &self,
+        program_id: &str,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<ExecutionListResponse>;
     fn get_execution_logs(&self, execution_id: &str) -> Result<()>;
 }
 
@@ -55,6 +60,20 @@ pub struct ExecutionStatus {
     pub num_segments: Option<usize>,
     pub total_cycle: Option<u64>,
     pub total_tick: Option<u64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExecutionListResponse {
+    pub items: Vec<ExecutionStatus>,
+    pub pagination: ExecutionPaginationInfo,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ExecutionPaginationInfo {
+    pub total: u32,
+    pub page: u32,
+    pub page_size: u32,
+    pub pages: u32,
 }
 
 impl RunSdk for AxiomSdk {
@@ -128,10 +147,17 @@ impl RunSdk for AxiomSdk {
         None
     }
 
-    fn list_executions(&self, program_id: &str) -> Result<Vec<ExecutionStatus>> {
+    fn list_executions(
+        &self,
+        program_id: &str,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<ExecutionListResponse> {
+        let page = page.unwrap_or(1);
+        let page_size = page_size.unwrap_or(20);
         let url = format!(
-            "{}/executions?program_id={}",
-            self.config.api_url, program_id
+            "{}/executions?program_id={}&page={}&page_size={}",
+            self.config.api_url, program_id, page, page_size
         );
         let client = Client::new();
         let api_key = self.config.api_key.as_ref().ok_or_eyre("API key not set")?;
@@ -141,17 +167,8 @@ impl RunSdk for AxiomSdk {
             .context("Failed to send list request")?;
 
         if response.status().is_success() {
-            let body: Value = response.json()?;
-            let items = body["items"]
-                .as_array()
-                .ok_or_eyre("Expected 'items' array in response")?;
-
-            let executions: Vec<ExecutionStatus> = items
-                .iter()
-                .map(|item| serde_json::from_value(item.clone()))
-                .collect::<Result<Vec<_>, _>>()?;
-
-            Ok(executions)
+            let body: ExecutionListResponse = response.json()?;
+            Ok(body)
         } else if response.status().is_client_error() {
             let status = response.status();
             let error_text = response.text()?;
