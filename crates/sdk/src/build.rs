@@ -183,6 +183,20 @@ impl BuildSdk for AxiomSdk {
     }
 
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()> {
+        // Handle "all" artifact type by downloading each type sequentially
+        if program_type == "all" {
+            let artifact_types = ["exe", "elf", "source", "app_exe_commit"];
+            for artifact_type in artifact_types {
+                if let Err(e) = self.download_program(program_id, artifact_type) {
+                    self.callback.on_error(&format!(
+                        "Warning: Failed to download {}: {}",
+                        artifact_type, e
+                    ));
+                }
+            }
+            return Ok(());
+        }
+
         let url = format!(
             "{}/programs/{}/download/{}",
             self.config.api_url, program_id, program_type
@@ -361,26 +375,12 @@ impl AxiomSdk {
                     callback.on_field("Cells Used", &build_status.cells_used.to_string());
                     callback.on_field("Proofs Run", &build_status.proofs_run.to_string());
 
-                    // Download artifacts automatically
-                    callback.on_section("Downloading Artifacts");
-
-                    // Download ELF
-                    callback.on_info("Downloading ELF...");
-                    if let Err(e) = self.download_program(&build_status.id, "elf") {
-                        callback.on_error(&format!("Warning: Failed to download ELF: {}", e));
-                    }
-
-                    // Download EXE
-                    callback.on_info("Downloading EXE...");
-                    if let Err(e) = self.download_program(&build_status.id, "exe") {
-                        callback.on_error(&format!("Warning: Failed to download EXE: {}", e));
-                    }
-
-                    // Download logs
-                    callback.on_info("Downloading logs...");
-                    if let Err(e) = self.download_build_logs(&build_status.id) {
-                        callback.on_error(&format!("Warning: Failed to download logs: {}", e));
-                    }
+                    // Hint about downloading artifacts
+                    println!();
+                    callback.on_info(&format!(
+                        "To download artifacts, run: cargo axiom build download --program-id {} --artifact all",
+                        &build_status.id
+                    ));
 
                     return Ok(());
                 }
