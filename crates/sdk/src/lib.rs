@@ -417,7 +417,35 @@ pub fn send_request(request_builder: RequestBuilder, error_context: &str) -> Res
     handle_response(response)
 }
 
+/// Check for update warning header from server and display it prominently
+fn check_update_warning(response: &Response) {
+    if let Some(update_header) = response.headers().get("X-CLI-Update") {
+        if let Ok(warning) = update_header.to_str() {
+            // Parse format: "SEVERITY|message"
+            if let Some((severity, message)) = warning.split_once('|') {
+                match severity {
+                    "ERROR" => {
+                        // Red/bold for critical updates
+                        eprintln!("\n\x1b[1;31m{}\x1b[0m\n", "=".repeat(80));
+                        eprintln!("\x1b[1;31m{}\x1b[0m", message);
+                        eprintln!("\x1b[1;31m{}\x1b[0m\n", "=".repeat(80));
+                    }
+                    "WARNING" => {
+                        // Yellow for recommended updates
+                        eprintln!("\n\x1b[1;33m{}\x1b[0m", message);
+                        eprintln!();
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
 fn handle_json_response<T: DeserializeOwned>(response: Response) -> Result<T> {
+    // Check for update warnings first
+    check_update_warning(&response);
+
     if response.status().is_success() {
         let result: T = response.json()?;
         Ok(result)
@@ -434,6 +462,9 @@ fn handle_json_response<T: DeserializeOwned>(response: Response) -> Result<T> {
 }
 
 fn handle_response(response: Response) -> Result<()> {
+    // Check for update warnings first
+    check_update_warning(&response);
+
     if response.status().is_success() {
         Ok(())
     } else if response.status().is_client_error() {
@@ -456,6 +487,9 @@ pub fn download_file(
     let response = request_builder
         .send()
         .with_context(|| error_context.to_string())?;
+
+    // Check for update warnings first
+    check_update_warning(&response);
 
     if response.status().is_success() {
         let mut file = std::fs::File::create(output_path).context(format!(
