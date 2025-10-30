@@ -1,6 +1,5 @@
 pub mod build;
 pub mod config;
-pub mod download_keys;
 pub mod init;
 pub mod projects;
 pub mod prove;
@@ -12,7 +11,6 @@ pub mod version;
 
 pub use build::BuildCmd;
 pub use config::ConfigCmd;
-pub use download_keys::DownloadKeysCmd;
 pub use init::InitCmd;
 pub use projects::ProjectsCmd;
 pub use prove::ProveCmd;

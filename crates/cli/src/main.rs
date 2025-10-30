@@ -11,8 +11,8 @@ mod formatting;
 mod progress;
 
 use commands::{
-    BuildCmd, ConfigCmd, DownloadKeysCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd,
-    UploadExeCmd, VerifyCmd, VersionCmd,
+    BuildCmd, ConfigCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd, UploadExeCmd,
+    VerifyCmd, VersionCmd,
 };
 
 #[derive(Parser)]
@@ -47,9 +47,6 @@ enum AxiomCommands {
     Run(RunCmd),
     /// Manage VM configuration artifacts
     Config(ConfigCmd),
-    /// Download proving keys
-    #[command(name = "download-keys")]
-    DownloadKeys(DownloadKeysCmd),
     /// Verify a proof using the Axiom Verifying Service
     Verify(VerifyCmd),
     /// Manage projects
@@ -153,7 +150,6 @@ fn main() {
         AxiomCommands::Prove(cmd) => cmd.run(),
         AxiomCommands::Run(cmd) => cmd.run(),
         AxiomCommands::Config(cmd) => cmd.run(),
-        AxiomCommands::DownloadKeys(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
         AxiomCommands::Projects(cmd) => cmd.run(),
         AxiomCommands::UploadExe(cmd) => cmd.run(),
