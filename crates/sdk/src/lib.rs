@@ -47,7 +47,7 @@ impl std::str::FromStr for ProofType {
     }
 }
 
-pub const DEFAULT_CONFIG_ID: &str = "cfg_01k3hpxxwex2e3msmg92n6qkjr";
+pub const DEFAULT_CONFIG_ID: &str = "cfg_01k3w1spnpnxzry017g5jzcy97";
 pub const STAGING_DEFAULT_CONFIG_ID: &str = "cfg_01k43tmxayxwktkbh5wqsv10em";
 
 /// Trait for handling progress reporting and user feedback during SDK operations.
