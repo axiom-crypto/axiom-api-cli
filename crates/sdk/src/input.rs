@@ -1,16 +1,55 @@
 //! Whole file is copied from cargo-openvm
-use std::{path::PathBuf, str::FromStr};
+use std::{fs, path::PathBuf, str::FromStr};
+
+use eyre::Context;
+use serde_json::json;
+
+use crate::validate_input_json;
 
 /// Input can be either:
 /// (1) one single hex string
 /// (2) A JSON file containing an array of hex strings.
+/// (3) A JSON value directly provided.
 /// Each hex string (either in the file or the direct input) is either:
 /// - Hex strings of bytes, which is prefixed with 0x01
 /// - Hex strings of native field elements (represented as u32, little endian), prefixed with 0x02
 #[derive(Debug, Clone)]
 pub enum Input {
     FilePath(PathBuf),
+    Value(serde_json::Value),
     HexBytes(Vec<u8>),
+}
+
+impl Input {
+    pub fn to_input_json(&self) -> eyre::Result<serde_json::Value> {
+        let value = match self {
+            Input::FilePath(path) => {
+                // Read the file content directly as JSON
+                let file_content = fs::read_to_string(path)
+                    .context(format!("Failed to read input file: {}", path.display()))?;
+                let input_json = serde_json::from_str(&file_content).context(format!(
+                    "Failed to parse input file as JSON: {}",
+                    path.display()
+                ))?;
+                validate_input_json(&input_json)?;
+                input_json
+            }
+            Input::Value(input_json) => {
+                validate_input_json(input_json)?;
+                input_json.clone()
+            }
+            Input::HexBytes(s) => {
+                if !matches!(s.first(), Some(x) if x == &0x01 || x == &0x02) {
+                    eyre::bail!(
+                        "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
+                    );
+                }
+                let hex_string = format!("0x{}", hex::encode(s));
+                json!({ "input": [hex_string] })
+            }
+        };
+        Ok(value)
+    }
 }
 
 impl FromStr for Input {
