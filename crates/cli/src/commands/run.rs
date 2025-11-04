@@ -32,6 +32,14 @@ enum RunSubcommand {
         /// The ID of the program to list executions for
         #[arg(long, value_name = "ID")]
         program_id: String,
+
+        /// Page number (default: 1)
+        #[arg(long, default_value = "1")]
+        page: u32,
+
+        /// Page size (default: 20)
+        #[arg(long, default_value = "20")]
+        page_size: u32,
     },
 
     /// Download logs for an execution
@@ -77,15 +85,24 @@ impl RunCmd {
                     Ok(())
                 }
             }
-            Some(RunSubcommand::List { program_id }) => {
-                let execution_status_list = sdk.list_executions(&program_id)?;
+            Some(RunSubcommand::List {
+                program_id,
+                page,
+                page_size,
+            }) => {
+                let response = sdk.list_executions(&program_id, Some(page), Some(page_size))?;
+
+                if response.items.is_empty() {
+                    println!("No executions found");
+                    return Ok(());
+                }
 
                 // Create a new table
                 let mut table = comfy_table::Table::new();
                 table.set_header(["ID", "Status", "Mode", "Created At"]);
 
                 // Add rows to the table
-                for execution_status in execution_status_list {
+                for execution_status in response.items {
                     let get_value = |s: &str| {
                         if s.is_empty() {
                             "-".to_string()
@@ -103,6 +120,13 @@ impl RunCmd {
 
                 // Print the table
                 println!("{table}");
+
+                let pagination = &response.pagination;
+                println!(
+                    "Showing page {} of {} (total: {} executions)",
+                    pagination.page, pagination.pages, pagination.total
+                );
+
                 Ok(())
             }
             Some(RunSubcommand::Logs { execution_id }) => sdk.get_execution_logs(&execution_id),
