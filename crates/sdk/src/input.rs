@@ -1,6 +1,5 @@
 //! Whole file is copied from cargo-openvm
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{path::PathBuf, str::FromStr};
 
 /// Input can be either:
 /// (1) one single hex string

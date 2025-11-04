@@ -1,6 +1,5 @@
 use std::fs;
 
-use crate::input::Input;
 use eyre::{Context, OptionExt, Result};
 use hex;
 use reqwest::blocking::Client;
@@ -8,7 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, validate_input_json,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, input::Input,
+    validate_input_json,
 };
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;

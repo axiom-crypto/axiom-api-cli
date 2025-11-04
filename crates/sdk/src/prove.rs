@@ -1,6 +1,5 @@
 use std::{fs, io::copy, path::PathBuf};
 
-use crate::input::Input;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -8,7 +7,8 @@ use serde_json::{Value, json};
 
 use crate::{
     API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, add_cli_version_header,
-    authenticated_get, authenticated_post, download_file, send_request_json, validate_input_json,
+    authenticated_get, authenticated_post, download_file, input::Input, send_request_json,
+    validate_input_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
