@@ -168,13 +168,14 @@ impl RunSdk for AxiomSdk {
         let url = format!("{}/executions/{}/logs", self.config.api_url, execution_id);
         let request = crate::authenticated_get(&self.config, &url)?;
 
-        let execution_dir = format!("axiom-artifacts/execution-{}", execution_id);
+        let execution_dir =
+            std::path::PathBuf::from("axiom-artifacts").join(format!("execution-{}", execution_id));
         std::fs::create_dir_all(&execution_dir).context(format!(
             "Failed to create execution directory: {}",
-            execution_dir
+            execution_dir.display()
         ))?;
 
-        let filename = std::path::PathBuf::from(format!("{}/logs.txt", execution_dir));
+        let filename = execution_dir.join("logs.txt");
         download_file(
             request,
             Some(filename.clone()),

@@ -56,17 +56,13 @@ impl ConfigCmd {
                         .as_deref()
                         .or(config.config_id.as_deref())
                         .unwrap_or("default");
-                    let config_dir = format!("axiom-artifacts/configs/{}", config_id_str);
+                    let config_dir = std::path::PathBuf::from("axiom-artifacts")
+                        .join("configs")
+                        .join(config_id_str);
                     if evm_verifier {
-                        Some(std::path::PathBuf::from(format!(
-                            "{}/evm_verifier.json",
-                            config_dir
-                        )))
+                        Some(config_dir.join("evm_verifier.json"))
                     } else {
-                        Some(std::path::PathBuf::from(format!(
-                            "{}/config.toml",
-                            config_dir
-                        )))
+                        Some(config_dir.join("config.toml"))
                     }
                 });
 

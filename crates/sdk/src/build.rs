@@ -227,21 +227,27 @@ impl BuildSdk for AxiomSdk {
 
         if status.is_success() {
             // Create organized directory structure
-            let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
-            std::fs::create_dir_all(&build_dir)
-                .context(format!("Failed to create build directory: {}", build_dir))?;
+            let build_dir = std::path::PathBuf::from("axiom-artifacts")
+                .join(format!("program-{}", program_id))
+                .join("artifacts");
+            std::fs::create_dir_all(&build_dir).context(format!(
+                "Failed to create build directory: {}",
+                build_dir.display()
+            ))?;
 
             // Create output filename based on artifact type
             let ext = if program_type == "source" {
-                "tar.gz".to_string()
+                "tar.gz"
             } else {
-                program_type.to_string()
+                program_type
             };
-            let filename = format!("{}/program.{}", build_dir, ext);
+            let filename = build_dir.join(format!("program.{}", ext));
 
             // Write the response body to a file using streaming
-            let mut file = File::create(&filename)
-                .context(format!("Failed to create output file: {filename}"))?;
+            let mut file = File::create(&filename).context(format!(
+                "Failed to create output file: {}",
+                filename.display()
+            ))?;
 
             let content_length = response.content_length();
             let mut response = response;
@@ -272,7 +278,7 @@ impl BuildSdk for AxiomSdk {
             }
 
             self.callback.on_progress_finish("✓ Download complete");
-            self.callback.on_success(&filename.to_string());
+            self.callback.on_success(&format!("{}", filename.display()));
             Ok(())
         } else if status.is_client_error() {
             let error_text = response
@@ -299,11 +305,15 @@ impl BuildSdk for AxiomSdk {
 
     fn download_build_logs(&self, program_id: &str) -> Result<()> {
         let url = format!("{}/programs/{}/logs", self.config.api_url, program_id);
-        let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
-        std::fs::create_dir_all(&build_dir)
-            .context(format!("Failed to create build directory: {}", build_dir))?;
+        let build_dir = std::path::PathBuf::from("axiom-artifacts")
+            .join(format!("program-{}", program_id))
+            .join("artifacts");
+        std::fs::create_dir_all(&build_dir).context(format!(
+            "Failed to create build directory: {}",
+            build_dir.display()
+        ))?;
 
-        let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
+        let filename = build_dir.join("logs.txt");
         let response = authenticated_get(&self.config, &url)?;
         download_file(
             response,

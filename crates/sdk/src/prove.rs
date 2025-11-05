@@ -344,29 +344,30 @@ impl AxiomSdk {
                         callback.on_section("Saving Results");
 
                         // Use same directory structure as download: program-{uuid}/proofs/{proof_id}/
-                        let proof_dir = format!(
-                            "axiom-artifacts/program-{}/proofs/{}",
-                            proof_status.program_uuid, proof_status.id
-                        );
+                        let proof_dir = PathBuf::from("axiom-artifacts")
+                            .join(format!("program-{}", proof_status.program_uuid))
+                            .join("proofs")
+                            .join(&proof_status.id);
                         if let Err(e) = fs::create_dir_all(&proof_dir) {
                             callback.on_warning(&format!(
                                 "Failed to create directory {}: {}",
-                                proof_dir, e
+                                proof_dir.display(),
+                                e
                             ));
                         } else {
                             // Use same naming convention as download: {proof_type}-proof.json
                             let proof_path =
-                                format!("{}/{}-proof.json", proof_dir, proof_status.proof_type);
+                                proof_dir.join(format!("{}-proof.json", proof_status.proof_type));
                             match self.get_generated_proof(
                                 &proof_status.id,
                                 &proof_status.proof_type.parse()?,
-                                Some(PathBuf::from(&proof_path)),
+                                Some(proof_path.clone()),
                             ) {
                                 Ok(_) => {
                                     callback.on_success(&format!(
                                         "{} proof saved to {}",
                                         proof_status.proof_type.to_uppercase(),
-                                        proof_path
+                                        proof_path.display()
                                     ));
                                 }
                                 Err(e) => {
@@ -374,13 +375,14 @@ impl AxiomSdk {
                                 }
                             }
 
-                            let logs_path = format!("{}/logs.txt", proof_dir);
-                            match self.save_proof_logs_to_path(
-                                &proof_status.id,
-                                PathBuf::from(&logs_path),
-                            ) {
+                            let logs_path = proof_dir.join("logs.txt");
+                            match self.save_proof_logs_to_path(&proof_status.id, logs_path.clone())
+                            {
                                 Ok(_) => {
-                                    callback.on_success(&format!("Logs saved to {}", logs_path));
+                                    callback.on_success(&format!(
+                                        "Logs saved to {}",
+                                        logs_path.display()
+                                    ));
                                 }
                                 Err(e) => {
                                     callback.on_warning(&format!("Failed to save logs: {}", e));
