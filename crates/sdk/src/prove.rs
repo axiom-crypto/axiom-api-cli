@@ -30,7 +30,7 @@ pub trait ProveSdk {
     ) -> Result<()>;
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String>;
-    fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()>;
+    fn wait_for_proof_completion(&self, proof_id: &str, save: bool) -> Result<ProofStatus>;
     fn cancel_proof(&self, proof_id: &str) -> Result<String>;
     fn wait_for_proof_cancellation(&self, proof_id: &str) -> Result<()>;
 }
@@ -246,8 +246,8 @@ impl ProveSdk for AxiomSdk {
         self.generate_new_proof_base(args, &*self.callback)
     }
 
-    fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
-        self.wait_for_proof_completion_base(proof_id, &*self.callback)
+    fn wait_for_proof_completion(&self, proof_id: &str, save: bool) -> Result<ProofStatus> {
+        self.wait_for_proof_completion_base(proof_id, save, &*self.callback)
     }
 
     fn cancel_proof(&self, proof_id: &str) -> Result<String> {
@@ -342,8 +342,9 @@ impl AxiomSdk {
     pub fn wait_for_proof_completion_base(
         &self,
         proof_id: &str,
+        save: bool,
         callback: &dyn ProgressCallback,
-    ) -> Result<()> {
+    ) -> Result<ProofStatus> {
         use std::time::Duration;
 
         let mut spinner_started = false;
@@ -398,46 +399,48 @@ impl AxiomSdk {
                         callback.on_field("Total Cycles", &num_instructions.to_string());
                     }
 
-                    // Add spacing after statistics and add saving section
-                    callback.on_section("Saving Results");
+                    if save {
+                        // Add spacing after statistics and add saving section
+                        callback.on_section("Saving Results");
 
-                    // Use same directory structure as download: program-{uuid}/proofs/{proof_id}/
-                    let proof_dir = format!(
-                        "axiom-artifacts/program-{}/proofs/{}",
-                        proof_status.program_uuid, proof_status.id
-                    );
-                    std::fs::create_dir_all(&proof_dir).ok();
+                        // Use same directory structure as download: program-{uuid}/proofs/{proof_id}/
+                        let proof_dir = format!(
+                            "axiom-artifacts/program-{}/proofs/{}",
+                            proof_status.program_uuid, proof_status.id
+                        );
+                        fs::create_dir_all(&proof_dir).ok();
 
-                    // Use same naming convention as download: {proof_type}-proof.json
-                    let proof_path =
-                        format!("{}/{}-proof.json", proof_dir, proof_status.proof_type);
-                    if self
-                        .save_proof_to_path(
-                            &proof_status.id,
-                            &proof_status.proof_type.parse()?,
-                            std::path::PathBuf::from(&proof_path),
-                        )
-                        .is_ok()
-                    {
-                        callback.on_success(&format!(
-                            "{} proof saved to {}",
-                            proof_status.proof_type.to_uppercase(),
-                            proof_path
-                        ));
+                        // Use same naming convention as download: {proof_type}-proof.json
+                        let proof_path =
+                            format!("{}/{}-proof.json", proof_dir, proof_status.proof_type);
+                        if self
+                            .save_proof_to_path(
+                                &proof_status.id,
+                                &proof_status.proof_type.parse()?,
+                                std::path::PathBuf::from(&proof_path),
+                            )
+                            .is_ok()
+                        {
+                            callback.on_success(&format!(
+                                "{} proof saved to {}",
+                                proof_status.proof_type.to_uppercase(),
+                                proof_path
+                            ));
+                        }
+
+                        let logs_path = format!("{}/logs.txt", proof_dir);
+                        if self
+                            .save_proof_logs_to_path(
+                                &proof_status.id,
+                                std::path::PathBuf::from(&logs_path),
+                            )
+                            .is_ok()
+                        {
+                            callback.on_success(&format!("Logs saved to {}", logs_path));
+                        }
                     }
 
-                    let logs_path = format!("{}/logs.txt", proof_dir);
-                    if self
-                        .save_proof_logs_to_path(
-                            &proof_status.id,
-                            std::path::PathBuf::from(&logs_path),
-                        )
-                        .is_ok()
-                    {
-                        callback.on_success(&format!("Logs saved to {}", logs_path));
-                    }
-
-                    return Ok(());
+                    return Ok(proof_status);
                 }
                 "Failed" => {
                     if spinner_started {
@@ -454,7 +457,7 @@ impl AxiomSdk {
                     } else {
                         callback.on_info("Proof generation was canceled");
                     }
-                    return Ok(());
+                    return Ok(proof_status);
                 }
                 "Canceling" => {
                     if !spinner_started {

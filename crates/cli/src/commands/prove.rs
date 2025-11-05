@@ -45,6 +45,10 @@ enum ProveSubcommand {
         /// Wait for the proof to complete
         #[clap(long)]
         wait: bool,
+
+        /// Don't save the proof artifact on completion
+        #[clap(long)]
+        no_save: bool,
     },
     /// Download logs for a proof
     Logs {
@@ -115,14 +119,18 @@ impl ProveCmd {
         let sdk = AxiomSdk::new(config.clone()).with_callback(callback);
 
         match self.command {
-            Some(ProveSubcommand::Status { proof_id, wait }) => {
+            Some(ProveSubcommand::Status {
+                proof_id,
+                wait,
+                no_save,
+            }) => {
                 if wait {
-                    sdk.wait_for_proof_completion(&proof_id)
+                    sdk.wait_for_proof_completion(&proof_id, !no_save)?;
                 } else {
                     let proof_status = sdk.get_proof_status(&proof_id)?;
                     Self::print_proof_status(&proof_status);
-                    Ok(())
                 }
+                Ok(())
             }
             Some(ProveSubcommand::Download {
                 proof_id,
@@ -180,13 +188,13 @@ impl ProveCmd {
                 let proof_id = sdk.generate_new_proof(args)?;
 
                 if !self.prove_args.detach {
-                    sdk.wait_for_proof_completion(&proof_id)
+                    sdk.wait_for_proof_completion(&proof_id, true)?;
                 } else {
                     println!(
                         "To check the proof status, run: cargo axiom prove status --proof-id {proof_id}"
                     );
-                    Ok(())
                 }
+                Ok(())
             }
         }
     }
