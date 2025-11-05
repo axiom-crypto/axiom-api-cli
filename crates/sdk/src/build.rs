@@ -35,6 +35,7 @@ pub trait BuildSdk {
         page_size: Option<u32>,
     ) -> Result<ProgramListResponse>;
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
+    fn get_app_exe_commit(&self, program_id: &str) -> Result<Vec<u8>>;
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
     fn download_build_logs(&self, program_id: &str) -> Result<()>;
     fn register_new_program(
@@ -187,6 +188,18 @@ impl BuildSdk for AxiomSdk {
         let body: Value = send_request_json(request, "Failed to get build status")?;
         let build_status = serde_json::from_value(body)?;
         Ok(build_status)
+    }
+
+    fn get_app_exe_commit(&self, program_id: &str) -> Result<Vec<u8>> {
+        let url = format!(
+            "{}/programs/{}/download/app_exe_commit",
+            self.config.api_url, program_id
+        );
+        let app_exe_commit = authenticated_get(&self.config, &url)?
+            .send()?
+            .error_for_status()?
+            .text()?;
+        hex::decode(app_exe_commit).context("Failed to decode app_exe_commit hex string")
     }
 
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()> {
