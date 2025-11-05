@@ -148,7 +148,6 @@ impl ProgressCallback for NoopCallback {
     fn on_clear_line_and_reset(&self) {}
 }
 
-
 pub struct AxiomSdk {
     pub config: AxiomConfig,
     callback: Box<dyn ProgressCallback>,
@@ -465,10 +464,8 @@ pub fn download_file(
         if let Some(output_path) = output {
             // Ensure parent directory exists
             if let Some(parent) = output_path.parent() {
-                std::fs::create_dir_all(parent).context(format!(
-                    "Failed to create directory: {}",
-                    parent.display()
-                ))?;
+                std::fs::create_dir_all(parent)
+                    .context(format!("Failed to create directory: {}", parent.display()))?;
             }
             let mut file = std::fs::File::create(&output_path).context(format!(
                 "Failed to create output file: {}",

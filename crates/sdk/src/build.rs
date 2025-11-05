@@ -35,7 +35,10 @@ pub trait BuildSdk {
         page_size: Option<u32>,
     ) -> Result<ProgramListResponse>;
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
+
+    /// Get the app EXE commitment hash for a program
     fn get_app_exe_commit(&self, program_id: &str) -> Result<Vec<u8>>;
+
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
     fn download_build_logs(&self, program_id: &str) -> Result<()>;
     fn register_new_program(
@@ -45,6 +48,8 @@ pub trait BuildSdk {
     ) -> Result<String>;
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
     fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String>;
+
+    /// Upload pre-built ELF and VMEXE from memory
     fn upload_exe_raw(
         &self,
         elf: impl Into<Cow<'static, [u8]>>,

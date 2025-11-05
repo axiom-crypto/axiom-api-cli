@@ -15,12 +15,16 @@ use crate::validate_input_json;
 /// - Hex strings of native field elements (represented as u32, little endian), prefixed with 0x02
 #[derive(Debug, Clone)]
 pub enum Input {
+    /// Path to a JSON file containing input data
     FilePath(PathBuf),
+    /// JSON value provided directly (for programmatic use)
     Value(serde_json::Value),
+    /// Raw hex-encoded bytes
     HexBytes(Vec<u8>),
 }
 
 impl Input {
+    /// Convert input to validated JSON format for API submission
     pub fn to_input_json(&self) -> eyre::Result<serde_json::Value> {
         let value = match self {
             Input::FilePath(path) => {
