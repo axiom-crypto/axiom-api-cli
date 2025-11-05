@@ -287,7 +287,11 @@ impl BuildSdk for AxiomSdk {
 
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
         let response = authenticated_get(&self.config, &url)?;
-        download_file(response, &filename, "Failed to download build logs")?;
+        download_file(
+            response,
+            filename.clone().into(),
+            "Failed to download build logs",
+        )?;
         self.callback
             .on_success(&format!("✓ {}", filename.display()));
         Ok(())

@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::OnceLock};
 
+use bytes::Bytes;
 use dirs::home_dir;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::{Client, RequestBuilder, Response};
@@ -145,6 +146,61 @@ impl ProgressCallback for NoopCallback {
     fn on_progress_finish(&self, _message: &str) {}
     fn on_clear_line(&self) {}
     fn on_clear_line_and_reset(&self) {}
+}
+
+#[derive(Debug, Clone, Default)]
+pub enum SaveOption {
+    #[default]
+    DefaultPath,
+    Path(PathBuf),
+    DoNotSave,
+}
+
+impl SaveOption {
+    pub fn saves(&self) -> bool {
+        !matches!(self, SaveOption::DoNotSave)
+    }
+
+    pub fn try_resolve_default_with<E, F>(self, f: F) -> Result<Self, E>
+    where
+        F: FnOnce() -> Result<PathBuf, E>,
+    {
+        match self {
+            SaveOption::DefaultPath => f().map(SaveOption::Path),
+            other => Ok(other),
+        }
+    }
+
+    pub fn unwrap(&self) -> PathBuf {
+        match self {
+            SaveOption::Path(p) => p.clone(),
+            SaveOption::DefaultPath => panic!("Called unwrap on DefaultPath"),
+            SaveOption::DoNotSave => panic!("Called unwrap on DoNotSave"),
+        }
+    }
+
+    pub fn unwrap_or_else<F: FnOnce() -> PathBuf>(&self, f: F) -> PathBuf {
+        match self {
+            SaveOption::Path(p) => p.clone(),
+            SaveOption::DefaultPath => f(),
+            SaveOption::DoNotSave => panic!("Called unwrap_or_else on DoNotSave"),
+        }
+    }
+}
+
+impl From<PathBuf> for SaveOption {
+    fn from(path: PathBuf) -> Self {
+        SaveOption::Path(path)
+    }
+}
+
+impl From<Option<PathBuf>> for SaveOption {
+    fn from(opt: Option<PathBuf>) -> Self {
+        match opt {
+            Some(p) => SaveOption::Path(p),
+            None => SaveOption::DefaultPath,
+        }
+    }
 }
 
 pub struct AxiomSdk {
@@ -450,25 +506,30 @@ fn handle_response(response: Response) -> Result<()> {
 
 pub fn download_file(
     request_builder: RequestBuilder,
-    output_path: &std::path::Path,
+    output: SaveOption,
     error_context: &str,
-) -> Result<()> {
+) -> Result<Bytes> {
     let response = request_builder
         .send()
         .with_context(|| error_context.to_string())?;
 
     if response.status().is_success() {
-        let mut file = std::fs::File::create(output_path).context(format!(
+        let content = response.bytes().context("Failed to read response body")?;
+
+        if !output.saves() {
+            return Ok(content);
+        }
+
+        let output_path = output.unwrap();
+        let mut file = std::fs::File::create(output_path.as_path()).context(format!(
             "Failed to create output file: {}",
             output_path.display()
         ))?;
 
-        let content = response.bytes().context("Failed to read response body")?;
-
         std::io::copy(&mut content.as_ref(), &mut file)
             .context("Failed to write response to file")?;
 
-        Ok(())
+        Ok(content)
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;

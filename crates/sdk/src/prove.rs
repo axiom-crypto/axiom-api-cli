@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, add_cli_version_header,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, SaveOption, add_cli_version_header,
     authenticated_get, authenticated_post, download_file, input::Input, send_request_json,
 };
 
@@ -16,14 +16,13 @@ const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
 pub trait ProveSdk {
     fn list_proofs(&self, program_id: &str) -> Result<Vec<ProofStatus>>;
     fn get_proof_status(&self, proof_id: &str) -> Result<ProofStatus>;
-    fn get_generated_proof(&self, proof_id: &str, proof_type: &ProofType) -> Result<Bytes>;
     fn get_proof_logs(&self, proof_id: &str) -> Result<()>;
-    fn save_proof_to_path(
+    fn get_generated_proof(
         &self,
         proof_id: &str,
         proof_type: &ProofType,
-        output_path: Option<PathBuf>,
-    ) -> Result<()>;
+        output: SaveOption,
+    ) -> Result<Bytes>;
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String>;
     fn wait_for_proof_completion(&self, proof_id: &str, save: bool) -> Result<ProofStatus>;
@@ -97,22 +96,6 @@ impl ProveSdk for AxiomSdk {
         Ok(proof_status)
     }
 
-    fn get_generated_proof(&self, proof_id: &str, proof_type: &ProofType) -> Result<Bytes> {
-        let url = format!(
-            "{}/proofs/{}/proof/{}",
-            self.config.api_url, proof_id, proof_type
-        );
-
-        let proof = authenticated_get(&self.config, &url)?
-            .send()
-            .context("Failed to download proof")?
-            .error_for_status()
-            .context("Http error")?
-            .bytes()
-            .context("Failed to read proof bytes")?;
-        Ok(proof)
-    }
-
     fn get_proof_logs(&self, proof_id: &str) -> Result<()> {
         // First get proof status to extract program_uuid
         let proof_status = self.get_proof_status(proof_id)?;
@@ -130,18 +113,22 @@ impl ProveSdk for AxiomSdk {
         // Create file path in the proof directory
         let output_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
         let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &output_path, "Failed to download proof logs")?;
+        download_file(
+            request,
+            output_path.clone().into(),
+            "Failed to download proof logs",
+        )?;
         self.callback
             .on_success(&format!("{}", output_path.display()));
         Ok(())
     }
 
-    fn save_proof_to_path(
+    fn get_generated_proof(
         &self,
         proof_id: &str,
         proof_type: &ProofType,
-        output_path: Option<PathBuf>,
-    ) -> Result<()> {
+        output: SaveOption,
+    ) -> Result<Bytes> {
         // First get proof status to extract program_uuid
         let proof_status = self.get_proof_status(proof_id)?;
 
@@ -151,25 +138,27 @@ impl ProveSdk for AxiomSdk {
         );
 
         // Determine output file path
-        let output_path = match output_path {
-            Some(path) => path,
-            None => {
-                // Create organized directory structure using program_uuid from response
-                let proof_dir = format!(
-                    "axiom-artifacts/program-{}/proofs/{}",
-                    proof_status.program_uuid, proof_id
-                );
-                fs::create_dir_all(&proof_dir)
-                    .context(format!("Failed to create proof directory: {}", proof_dir))?;
-                PathBuf::from(format!("{}/{}-proof.json", proof_dir, proof_type))
-            }
-        };
+        let output = output.try_resolve_default_with(|| -> Result<_> {
+            // Create organized directory structure using program_uuid from response
+            let proof_dir = format!(
+                "axiom-artifacts/program-{}/proofs/{}",
+                proof_status.program_uuid, proof_id
+            );
+            fs::create_dir_all(&proof_dir)
+                .context(format!("Failed to create proof directory: {}", proof_dir))?;
+            Ok(PathBuf::from(format!(
+                "{}/{}-proof.json",
+                proof_dir, proof_type
+            )))
+        })?;
 
         let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &output_path, "Failed to download proof")?;
-        self.callback
-            .on_success(&format!("{}", output_path.display()));
-        Ok(())
+        let proof = download_file(request, output.clone(), "Failed to download proof")?;
+        if output.saves() {
+            self.callback
+                .on_success(&format!("{}", output.unwrap().display()));
+        }
+        Ok(proof)
     }
 
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()> {
@@ -383,10 +372,10 @@ impl AxiomSdk {
                         let proof_path =
                             format!("{}/{}-proof.json", proof_dir, proof_status.proof_type);
                         if self
-                            .save_proof_to_path(
+                            .get_generated_proof(
                                 &proof_status.id,
                                 &proof_status.proof_type.parse()?,
-                                Some(PathBuf::from(&proof_path)),
+                                PathBuf::from(&proof_path).into(),
                             )
                             .is_ok()
                         {

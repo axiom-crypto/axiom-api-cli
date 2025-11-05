@@ -175,7 +175,11 @@ impl RunSdk for AxiomSdk {
         ))?;
 
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", execution_dir));
-        download_file(request, &filename, "Failed to download execution logs")?;
+        download_file(
+            request,
+            filename.clone().into(),
+            "Failed to download execution logs",
+        )?;
         self.callback
             .on_success(&format!("✓ {}", filename.display()));
         Ok(())
