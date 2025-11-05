@@ -199,7 +199,7 @@ impl BuildSdk for AxiomSdk {
             .send()?
             .error_for_status()?
             .text()?;
-        hex::decode(app_exe_commit).context("Failed to decode app_exe_commit hex string")
+        hex::decode(app_exe_commit.trim()).context("Failed to decode app_exe_commit hex string")
     }
 
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()> {
