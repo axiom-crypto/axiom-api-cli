@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, SaveOption, add_cli_version_header,
+    API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, add_cli_version_header,
     authenticated_get, authenticated_post, download_file, input::Input, send_request_json,
 };
 
@@ -21,7 +21,7 @@ pub trait ProveSdk {
         &self,
         proof_id: &str,
         proof_type: &ProofType,
-        output: SaveOption,
+        output: Option<PathBuf>,
     ) -> Result<Bytes>;
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String>;
@@ -127,36 +127,18 @@ impl ProveSdk for AxiomSdk {
         &self,
         proof_id: &str,
         proof_type: &ProofType,
-        output: SaveOption,
+        output: Option<PathBuf>,
     ) -> Result<Bytes> {
-        // First get proof status to extract program_uuid
-        let proof_status = self.get_proof_status(proof_id)?;
-
         let url = format!(
             "{}/proofs/{}/proof/{}",
             self.config.api_url, proof_id, proof_type
         );
 
-        // Determine output file path
-        let output = output.try_resolve_default_with(|| -> Result<_> {
-            // Create organized directory structure using program_uuid from response
-            let proof_dir = format!(
-                "axiom-artifacts/program-{}/proofs/{}",
-                proof_status.program_uuid, proof_id
-            );
-            fs::create_dir_all(&proof_dir)
-                .context(format!("Failed to create proof directory: {}", proof_dir))?;
-            Ok(PathBuf::from(format!(
-                "{}/{}-proof.json",
-                proof_dir, proof_type
-            )))
-        })?;
-
         let request = authenticated_get(&self.config, &url)?;
         let proof = download_file(request, output.clone(), "Failed to download proof")?;
-        if output.saves() {
+        if let Some(output_path) = &output {
             self.callback
-                .on_success(&format!("{}", output.unwrap().display()));
+                .on_success(&format!("{}", output_path.display()));
         }
         Ok(proof)
     }
@@ -366,32 +348,38 @@ impl AxiomSdk {
                             "axiom-artifacts/program-{}/proofs/{}",
                             proof_status.program_uuid, proof_status.id
                         );
-                        fs::create_dir_all(&proof_dir).ok();
-
-                        // Use same naming convention as download: {proof_type}-proof.json
-                        let proof_path =
-                            format!("{}/{}-proof.json", proof_dir, proof_status.proof_type);
-                        if self
-                            .get_generated_proof(
+                        if let Err(e) = fs::create_dir_all(&proof_dir) {
+                            callback.on_warning(&format!("Failed to create directory {}: {}", proof_dir, e));
+                        } else {
+                            // Use same naming convention as download: {proof_type}-proof.json
+                            let proof_path =
+                                format!("{}/{}-proof.json", proof_dir, proof_status.proof_type);
+                            match self.get_generated_proof(
                                 &proof_status.id,
                                 &proof_status.proof_type.parse()?,
-                                PathBuf::from(&proof_path).into(),
-                            )
-                            .is_ok()
-                        {
-                            callback.on_success(&format!(
-                                "{} proof saved to {}",
-                                proof_status.proof_type.to_uppercase(),
-                                proof_path
-                            ));
-                        }
+                                Some(PathBuf::from(&proof_path)),
+                            ) {
+                                Ok(_) => {
+                                    callback.on_success(&format!(
+                                        "{} proof saved to {}",
+                                        proof_status.proof_type.to_uppercase(),
+                                        proof_path
+                                    ));
+                                }
+                                Err(e) => {
+                                    callback.on_warning(&format!("Failed to save proof: {}", e));
+                                }
+                            }
 
-                        let logs_path = format!("{}/logs.txt", proof_dir);
-                        if self
-                            .save_proof_logs_to_path(&proof_status.id, PathBuf::from(&logs_path))
-                            .is_ok()
-                        {
-                            callback.on_success(&format!("Logs saved to {}", logs_path));
+                            let logs_path = format!("{}/logs.txt", proof_dir);
+                            match self.save_proof_logs_to_path(&proof_status.id, PathBuf::from(&logs_path)) {
+                                Ok(_) => {
+                                    callback.on_success(&format!("Logs saved to {}", logs_path));
+                                }
+                                Err(e) => {
+                                    callback.on_warning(&format!("Failed to save logs: {}", e));
+                                }
+                            }
                         }
                     }
 

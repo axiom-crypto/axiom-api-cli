@@ -302,7 +302,7 @@ impl BuildSdk for AxiomSdk {
         let response = authenticated_get(&self.config, &url)?;
         download_file(
             response,
-            filename.clone().into(),
+            Some(filename.clone()),
             "Failed to download build logs",
         )?;
         self.callback

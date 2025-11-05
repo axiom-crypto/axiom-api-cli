@@ -148,60 +148,6 @@ impl ProgressCallback for NoopCallback {
     fn on_clear_line_and_reset(&self) {}
 }
 
-#[derive(Debug, Clone, Default)]
-pub enum SaveOption {
-    #[default]
-    DefaultPath,
-    Path(PathBuf),
-    DoNotSave,
-}
-
-impl SaveOption {
-    pub fn saves(&self) -> bool {
-        !matches!(self, SaveOption::DoNotSave)
-    }
-
-    pub fn try_resolve_default_with<E, F>(self, f: F) -> Result<Self, E>
-    where
-        F: FnOnce() -> Result<PathBuf, E>,
-    {
-        match self {
-            SaveOption::DefaultPath => f().map(SaveOption::Path),
-            other => Ok(other),
-        }
-    }
-
-    pub fn unwrap(&self) -> PathBuf {
-        match self {
-            SaveOption::Path(p) => p.clone(),
-            SaveOption::DefaultPath => panic!("Called unwrap on DefaultPath"),
-            SaveOption::DoNotSave => panic!("Called unwrap on DoNotSave"),
-        }
-    }
-
-    pub fn unwrap_or_else<F: FnOnce() -> PathBuf>(&self, f: F) -> PathBuf {
-        match self {
-            SaveOption::Path(p) => p.clone(),
-            SaveOption::DefaultPath => f(),
-            SaveOption::DoNotSave => panic!("Called unwrap_or_else on DoNotSave"),
-        }
-    }
-}
-
-impl From<PathBuf> for SaveOption {
-    fn from(path: PathBuf) -> Self {
-        SaveOption::Path(path)
-    }
-}
-
-impl From<Option<PathBuf>> for SaveOption {
-    fn from(opt: Option<PathBuf>) -> Self {
-        match opt {
-            Some(p) => SaveOption::Path(p),
-            None => SaveOption::DefaultPath,
-        }
-    }
-}
 
 pub struct AxiomSdk {
     pub config: AxiomConfig,
@@ -506,7 +452,7 @@ fn handle_response(response: Response) -> Result<()> {
 
 pub fn download_file(
     request_builder: RequestBuilder,
-    output: SaveOption,
+    output: Option<PathBuf>,
     error_context: &str,
 ) -> Result<Bytes> {
     let response = request_builder
@@ -516,18 +462,22 @@ pub fn download_file(
     if response.status().is_success() {
         let content = response.bytes().context("Failed to read response body")?;
 
-        if !output.saves() {
-            return Ok(content);
+        if let Some(output_path) = output {
+            // Ensure parent directory exists
+            if let Some(parent) = output_path.parent() {
+                std::fs::create_dir_all(parent).context(format!(
+                    "Failed to create directory: {}",
+                    parent.display()
+                ))?;
+            }
+            let mut file = std::fs::File::create(&output_path).context(format!(
+                "Failed to create output file: {}",
+                output_path.display()
+            ))?;
+
+            std::io::copy(&mut content.as_ref(), &mut file)
+                .context("Failed to write response to file")?;
         }
-
-        let output_path = output.unwrap();
-        let mut file = std::fs::File::create(output_path.as_path()).context(format!(
-            "Failed to create output file: {}",
-            output_path.display()
-        ))?;
-
-        std::io::copy(&mut content.as_ref(), &mut file)
-            .context("Failed to write response to file")?;
 
         Ok(content)
     } else if response.status().is_client_error() {

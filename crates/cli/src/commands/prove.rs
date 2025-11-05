@@ -137,7 +137,18 @@ impl ProveCmd {
                 proof_type,
                 output,
             }) => {
-                sdk.get_generated_proof(&proof_id, &proof_type, output.into())?;
+                let output_path = output.or_else(|| {
+                    let proof_status = sdk.get_proof_status(&proof_id).ok()?;
+                    let proof_dir = format!(
+                        "axiom-artifacts/program-{}/proofs/{}",
+                        proof_status.program_uuid, proof_id
+                    );
+                    Some(std::path::PathBuf::from(format!(
+                        "{}/{}-proof.json",
+                        proof_dir, proof_type
+                    )))
+                });
+                sdk.get_generated_proof(&proof_id, &proof_type, output_path)?;
                 Ok(())
             }
             Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),

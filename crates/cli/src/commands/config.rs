@@ -38,7 +38,7 @@ enum ConfigSubcommand {
 impl ConfigCmd {
     pub fn run(self) -> Result<()> {
         let config = axiom_sdk::load_config()?;
-        let sdk = AxiomSdk::new(config);
+        let sdk = AxiomSdk::new(config.clone());
 
         match self.command {
             Some(ConfigSubcommand::Status { config_id }) => {
@@ -51,10 +51,22 @@ impl ConfigCmd {
                 evm_verifier,
                 output,
             }) => {
+                let output_path = output.or_else(|| {
+                    let config_id_str = config_id.as_deref()
+                        .or(config.config_id.as_deref())
+                        .unwrap_or("default");
+                    let config_dir = format!("axiom-artifacts/configs/{}", config_id_str);
+                    if evm_verifier {
+                        Some(std::path::PathBuf::from(format!("{}/evm_verifier.json", config_dir)))
+                    } else {
+                        Some(std::path::PathBuf::from(format!("{}/config.toml", config_dir)))
+                    }
+                });
+
                 if evm_verifier {
-                    sdk.get_evm_verifier(config_id.as_deref(), output.into())?;
+                    sdk.get_evm_verifier(config_id.as_deref(), output_path)?;
                 } else {
-                    sdk.download_config(config_id.as_deref(), output.into())?;
+                    sdk.download_config(config_id.as_deref(), output_path)?;
                 }
                 Ok(())
             }
