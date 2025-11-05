@@ -137,7 +137,24 @@ impl ProveCmd {
                 proof_type,
                 output,
             }) => {
-                sdk.get_generated_proof(&proof_id, &proof_type, output.into())?;
+                let output_path = output.or_else(|| match sdk.get_proof_status(&proof_id) {
+                    Ok(proof_status) => {
+                        let proof_dir = std::path::PathBuf::from("axiom-artifacts")
+                            .join(format!("program-{}", proof_status.program_uuid))
+                            .join("proofs")
+                            .join(&proof_id);
+                        Some(proof_dir.join(format!("{}-proof.json", proof_type)))
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Could not fetch proof status: {}", e);
+                        eprintln!("Using fallback path for proof output");
+                        let proof_dir = std::path::PathBuf::from("axiom-artifacts")
+                            .join("proofs")
+                            .join(&proof_id);
+                        Some(proof_dir.join(format!("{}-proof.json", proof_type)))
+                    }
+                });
+                sdk.get_generated_proof(&proof_id, &proof_type, output_path)?;
                 Ok(())
             }
             Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
