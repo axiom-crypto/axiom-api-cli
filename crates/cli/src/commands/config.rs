@@ -4,6 +4,8 @@ use axiom_sdk::{AxiomSdk, config::ConfigSdk};
 use clap::{Args, Subcommand};
 use eyre::Result;
 
+use crate::progress::CliProgressCallback;
+
 #[derive(Args, Debug)]
 pub struct ConfigCmd {
     #[command(subcommand)]
@@ -23,6 +25,28 @@ enum ConfigSubcommand {
         evm_verifier: bool,
 
         /// Optional output file path (defaults to artifact name in current directory)
+        #[clap(long, value_name = "FILE")]
+        output: Option<PathBuf>,
+    },
+
+    /// Download proving keys
+    #[command(name = "download-keys")]
+    DownloadKeys {
+        /// The config ID to download public key for
+        #[clap(long, value_name = "ID")]
+        config_id: Option<String>,
+
+        /// The type of key to download
+        #[clap(long = "type", value_parser = [
+            "app_pk",
+            "agg_pk",
+            "halo2_pk",
+            "app_vk",
+            "agg_vk",
+        ])]
+        key_type: String,
+
+        /// Optional output file path (defaults to key_type name in current directory)
         #[clap(long, value_name = "FILE")]
         output: Option<PathBuf>,
     },
@@ -56,6 +80,26 @@ impl ConfigCmd {
                 } else {
                     sdk.download_config(config_id.as_deref(), output)
                 }
+            }
+            Some(ConfigSubcommand::DownloadKeys {
+                config_id,
+                key_type,
+                output,
+            }) => {
+                let callback = CliProgressCallback::new();
+                let sdk = sdk.with_callback(callback);
+
+                let pk_downloader = sdk.get_proving_keys(config_id.as_deref(), &key_type)?;
+
+                let output_path = match output {
+                    Some(path) => path.to_string_lossy().to_string(),
+                    None => format!("{}.bin", key_type),
+                };
+
+                pk_downloader
+                    .download_pk_with_callback(&output_path, &CliProgressCallback::new())?;
+                println!("✓ Downloaded to: {}", output_path);
+                Ok(())
             }
             None => Err(eyre::eyre!("A subcommand is required for config")),
         }
