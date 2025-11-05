@@ -136,7 +136,7 @@ impl ProveCmd {
                 proof_id,
                 proof_type,
                 output,
-            }) => sdk.get_generated_proof(&proof_id, &proof_type, output),
+            }) => sdk.save_proof_to_path(&proof_id, &proof_type, output),
             Some(ProveSubcommand::Logs { proof_id }) => sdk.get_proof_logs(&proof_id),
             Some(ProveSubcommand::List { program_id }) => {
                 let proof_status_list = sdk.list_proofs(&program_id)?;
