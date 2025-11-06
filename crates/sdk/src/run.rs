@@ -1,15 +1,9 @@
-use std::fs;
-
-use crate::input::Input;
 use eyre::{Context, OptionExt, Result};
-use hex;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, validate_input_json,
-};
+use crate::{API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, input::Input};
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -198,7 +192,11 @@ impl RunSdk for AxiomSdk {
         ))?;
 
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", execution_dir));
-        download_file(request, &filename, "Failed to download execution logs")?;
+        download_file(
+            request,
+            filename.clone().into(),
+            "Failed to download execution logs",
+        )?;
         self.callback
             .on_success(&format!("✓ {}", filename.display()));
         Ok(())
@@ -223,30 +221,7 @@ impl AxiomSdk {
 
         // Create the request body based on input
         let body = match &args.input {
-            Some(input) => {
-                match input {
-                    Input::FilePath(path) => {
-                        // Read the file content directly as JSON
-                        let file_content = fs::read_to_string(path)
-                            .context(format!("Failed to read input file: {}", path.display()))?;
-                        let input_json = serde_json::from_str(&file_content).context(format!(
-                            "Failed to parse input file as JSON: {}",
-                            path.display()
-                        ))?;
-                        validate_input_json(&input_json)?;
-                        input_json
-                    }
-                    Input::HexBytes(s) => {
-                        if !matches!(s.first(), Some(x) if x == &0x01 || x == &0x02) {
-                            eyre::bail!(
-                                "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
-                            );
-                        }
-                        let hex_string = format!("0x{}", hex::encode(s));
-                        json!({ "input": [hex_string] })
-                    }
-                }
-            }
+            Some(input) => input.to_input_json()?,
             None => json!({ "input": [] }), // Empty JSON if no input provided
         };
 

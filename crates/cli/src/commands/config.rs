@@ -76,10 +76,11 @@ impl ConfigCmd {
                 output,
             }) => {
                 if evm_verifier {
-                    sdk.get_evm_verifier(config_id.as_deref(), output)
+                    sdk.get_evm_verifier(config_id.as_deref(), output.into())?;
                 } else {
-                    sdk.download_config(config_id.as_deref(), output)
+                    sdk.download_config(config_id.as_deref(), output.into())?;
                 }
+                Ok(())
             }
             Some(ConfigSubcommand::DownloadKeys {
                 config_id,

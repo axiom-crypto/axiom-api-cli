@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fs::File,
     io::{Read, Write},
     path::Path,
@@ -34,6 +35,7 @@ pub trait BuildSdk {
         page_size: Option<u32>,
     ) -> Result<ProgramListResponse>;
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
+    fn get_app_exe_commit(&self, program_id: &str) -> Result<Vec<u8>>;
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
     fn download_build_logs(&self, program_id: &str) -> Result<()>;
     fn register_new_program(
@@ -43,6 +45,12 @@ pub trait BuildSdk {
     ) -> Result<String>;
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
     fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String>;
+    fn upload_exe_raw(
+        &self,
+        elf: impl Into<Cow<'static, [u8]>>,
+        vmexe: impl Into<Cow<'static, [u8]>>,
+        args: UploadExeArgs,
+    ) -> Result<String>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -182,6 +190,18 @@ impl BuildSdk for AxiomSdk {
         Ok(build_status)
     }
 
+    fn get_app_exe_commit(&self, program_id: &str) -> Result<Vec<u8>> {
+        let url = format!(
+            "{}/programs/{}/download/app_exe_commit",
+            self.config.api_url, program_id
+        );
+        let app_exe_commit = authenticated_get(&self.config, &url)?
+            .send()?
+            .error_for_status()?
+            .text()?;
+        hex::decode(app_exe_commit.trim()).context("Failed to decode app_exe_commit hex string")
+    }
+
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()> {
         // Handle "all" artifact type by downloading each type sequentially
         if program_type == "all" {
@@ -294,7 +314,11 @@ impl BuildSdk for AxiomSdk {
 
         let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
         let response = authenticated_get(&self.config, &url)?;
-        download_file(response, &filename, "Failed to download build logs")?;
+        download_file(
+            response,
+            filename.clone().into(),
+            "Failed to download build logs",
+        )?;
         self.callback
             .on_success(&format!("✓ {}", filename.display()));
         Ok(())
@@ -314,6 +338,15 @@ impl BuildSdk for AxiomSdk {
 
     fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String> {
         self.upload_exe_base(program_dir, args, &*self.callback)
+    }
+
+    fn upload_exe_raw(
+        &self,
+        elf: impl Into<Cow<'static, [u8]>>,
+        vmexe: impl Into<Cow<'static, [u8]>>,
+        args: UploadExeArgs,
+    ) -> Result<String> {
+        self.upload_exe_raw_base(elf, vmexe, args, &*self.callback)
     }
 }
 
@@ -836,14 +869,7 @@ impl AxiomSdk {
             );
         }
 
-        // Use provided config_id or fall back to config file default
-        let config_id = args
-            .config_id
-            .or_else(|| self.config.config_id.clone())
-            .ok_or_eyre("No config_id provided and no default config_id in ~/.axiom/config.json")?;
-
         callback.on_header("Uploading Pre-built Program");
-        callback.on_field("Config ID", &config_id);
         callback.on_field("ELF", &elf_path.display().to_string());
         callback.on_field("VMEXE", &vmexe_path.display().to_string());
         callback.on_info("Note: Program hash will be computed on the backend");
@@ -857,6 +883,24 @@ impl AxiomSdk {
             .with_context(|| format!("Failed to read ELF file: {}", elf_path.display()))?;
         let vmexe_content = std::fs::read(&vmexe_path)
             .with_context(|| format!("Failed to read VMEXE file: {}", vmexe_path.display()))?;
+
+        self.upload_exe_raw_base(elf_content, vmexe_content, args, callback)
+    }
+
+    pub fn upload_exe_raw_base(
+        &self,
+        elf: impl Into<Cow<'static, [u8]>>,
+        vmexe: impl Into<Cow<'static, [u8]>>,
+        args: UploadExeArgs,
+        callback: &dyn ProgressCallback,
+    ) -> Result<String> {
+        // Use provided config_id or fall back to config file default
+        let config_id = args
+            .config_id
+            .as_deref()
+            .or(self.config.config_id.as_deref())
+            .ok_or_eyre("No config_id provided and no default config_id in ~/.axiom/config.json")?;
+        callback.on_field("Config ID", config_id);
 
         // Build URL with query parameters
         let mut url = format!(
@@ -885,11 +929,11 @@ impl AxiomSdk {
         }
 
         // Create multipart form with files
-        let elf_part = reqwest::blocking::multipart::Part::bytes(elf_content)
+        let elf_part = reqwest::blocking::multipart::Part::bytes(elf)
             .file_name("program.elf")
             .mime_str("application/octet-stream")?;
 
-        let vmexe_part = reqwest::blocking::multipart::Part::bytes(vmexe_content)
+        let vmexe_part = reqwest::blocking::multipart::Part::bytes(vmexe)
             .file_name("program.vmexe")
             .mime_str("application/octet-stream")?;
 
