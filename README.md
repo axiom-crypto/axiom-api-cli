@@ -1,5 +1,7 @@
 # <img src="./favicon.ico" alt="Axiom Proving CLI" width="32" height="32" /> Axiom CLI Guide
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/axiom-crypto/axiom-api-cli)
+
 ## Setup
 
 1. Install the Axiom CLI:
