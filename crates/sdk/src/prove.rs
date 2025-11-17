@@ -1,6 +1,6 @@
 use std::{fs, io::copy, path::PathBuf};
 
-use crate::input::Input;
+use bytes::Bytes;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::{
     API_KEY_HEADER, AxiomSdk, ProgressCallback, ProofType, add_cli_version_header,
-    authenticated_get, authenticated_post, download_file, send_request_json, validate_input_json,
+    authenticated_get, authenticated_post, download_file, input::Input, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -21,22 +21,16 @@ pub trait ProveSdk {
         page_size: Option<u32>,
     ) -> Result<ProofListResponse>;
     fn get_proof_status(&self, proof_id: &str) -> Result<ProofStatus>;
+    fn get_proof_logs(&self, proof_id: &str) -> Result<()>;
     fn get_generated_proof(
         &self,
         proof_id: &str,
         proof_type: &ProofType,
         output: Option<PathBuf>,
-    ) -> Result<()>;
-    fn get_proof_logs(&self, proof_id: &str) -> Result<()>;
-    fn save_proof_to_path(
-        &self,
-        proof_id: &str,
-        proof_type: &ProofType,
-        output_path: PathBuf,
-    ) -> Result<()>;
+    ) -> Result<Bytes>;
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()>;
     fn generate_new_proof(&self, args: ProveArgs) -> Result<String>;
-    fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()>;
+    fn wait_for_proof_completion(&self, proof_id: &str, save: bool) -> Result<ProofStatus>;
     fn cancel_proof(&self, proof_id: &str) -> Result<String>;
     fn wait_for_proof_cancellation(&self, proof_id: &str) -> Result<()>;
 }
@@ -113,42 +107,6 @@ impl ProveSdk for AxiomSdk {
         Ok(proof_status)
     }
 
-    fn get_generated_proof(
-        &self,
-        proof_id: &str,
-        proof_type: &ProofType,
-        output: Option<PathBuf>,
-    ) -> Result<()> {
-        // First get proof status to extract program_uuid
-        let proof_status = self.get_proof_status(proof_id)?;
-
-        let url = format!(
-            "{}/proofs/{}/proof/{}",
-            self.config.api_url, proof_id, proof_type
-        );
-
-        // Determine output file path
-        let output_path = match output {
-            Some(path) => path,
-            None => {
-                // Create organized directory structure using program_uuid from response
-                let proof_dir = format!(
-                    "axiom-artifacts/program-{}/proofs/{}",
-                    proof_status.program_uuid, proof_id
-                );
-                std::fs::create_dir_all(&proof_dir)
-                    .context(format!("Failed to create proof directory: {}", proof_dir))?;
-                PathBuf::from(format!("{}/{}-proof.json", proof_dir, proof_type))
-            }
-        };
-
-        let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &output_path, "Failed to download proof")?;
-        self.callback
-            .on_success(&format!("{}", output_path.display()));
-        Ok(())
-    }
-
     fn get_proof_logs(&self, proof_id: &str) -> Result<()> {
         // First get proof status to extract program_uuid
         let proof_status = self.get_proof_status(proof_id)?;
@@ -160,59 +118,40 @@ impl ProveSdk for AxiomSdk {
             "axiom-artifacts/program-{}/proofs/{}",
             proof_status.program_uuid, proof_id
         );
-        std::fs::create_dir_all(&proof_dir)
+        fs::create_dir_all(&proof_dir)
             .context(format!("Failed to create proof directory: {}", proof_dir))?;
 
         // Create file path in the proof directory
         let output_path = PathBuf::from(format!("{}/logs.txt", proof_dir));
         let request = authenticated_get(&self.config, &url)?;
-        download_file(request, &output_path, "Failed to download proof logs")?;
+        download_file(
+            request,
+            output_path.clone().into(),
+            "Failed to download proof logs",
+        )?;
         self.callback
             .on_success(&format!("{}", output_path.display()));
         Ok(())
     }
 
-    fn save_proof_to_path(
+    fn get_generated_proof(
         &self,
         proof_id: &str,
         proof_type: &ProofType,
-        output_path: PathBuf,
-    ) -> Result<()> {
+        output: Option<PathBuf>,
+    ) -> Result<Bytes> {
         let url = format!(
-            "{}/proofs/{proof_id}/proof/{proof_type}",
-            self.config.api_url,
+            "{}/proofs/{}/proof/{}",
+            self.config.api_url, proof_id, proof_type
         );
 
-        let client = Client::new();
-        let api_key = self
-            .config
-            .api_key
-            .as_ref()
-            .ok_or(eyre::eyre!("API key not set"))?;
-
-        let response = add_cli_version_header(client.get(url).header(API_KEY_HEADER, api_key))
-            .send()
-            .context("Failed to send download request")?;
-
-        if response.status().is_success() {
-            let mut file = fs::File::create(&output_path)
-                .context(format!("Failed to create output file: {output_path:?}"))?;
-
-            copy(
-                &mut response
-                    .bytes()
-                    .context("Failed to read response body")?
-                    .as_ref(),
-                &mut file,
-            )
-            .context("Failed to write response to file")?;
-
-            Ok(())
-        } else {
-            let status = response.status();
-            let error_text = response.text()?;
-            Err(eyre::eyre!("Download failed ({}): {}", status, error_text))
+        let request = authenticated_get(&self.config, &url)?;
+        let proof = download_file(request, output.clone(), "Failed to download proof")?;
+        if let Some(output_path) = &output {
+            self.callback
+                .on_success(&format!("{}", output_path.display()));
         }
+        Ok(proof)
     }
 
     fn save_proof_logs_to_path(&self, proof_id: &str, output_path: PathBuf) -> Result<()> {
@@ -258,8 +197,8 @@ impl ProveSdk for AxiomSdk {
         self.generate_new_proof_base(args, &*self.callback)
     }
 
-    fn wait_for_proof_completion(&self, proof_id: &str) -> Result<()> {
-        self.wait_for_proof_completion_base(proof_id, &*self.callback)
+    fn wait_for_proof_completion(&self, proof_id: &str, save: bool) -> Result<ProofStatus> {
+        self.wait_for_proof_completion_base(proof_id, save, &*self.callback)
     }
 
     fn cancel_proof(&self, proof_id: &str) -> Result<String> {
@@ -335,25 +274,7 @@ impl AxiomSdk {
 
         // Create the request body based on input
         let body = match &args.input {
-            Some(Input::FilePath(path)) => {
-                let file_content = fs::read_to_string(path)
-                    .context(format!("Failed to read input file: {}", path.display()))?;
-                let input_json = serde_json::from_str(&file_content).context(format!(
-                    "Failed to parse input file as JSON: {}",
-                    path.display()
-                ))?;
-                validate_input_json(&input_json)?;
-                input_json
-            }
-            Some(Input::HexBytes(s)) => {
-                if !matches!(s.first(), Some(x) if x == &0x01 || x == &0x02) {
-                    eyre::bail!(
-                        "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
-                    );
-                }
-                let hex_string = format!("0x{}", hex::encode(s));
-                json!({ "input": [hex_string] })
-            }
+            Some(input) => input.to_input_json()?,
             None => json!({ "input": [] }),
         };
 
@@ -372,8 +293,9 @@ impl AxiomSdk {
     pub fn wait_for_proof_completion_base(
         &self,
         proof_id: &str,
+        save: bool,
         callback: &dyn ProgressCallback,
-    ) -> Result<()> {
+    ) -> Result<ProofStatus> {
         use std::time::Duration;
 
         let mut spinner_started = false;
@@ -428,46 +350,59 @@ impl AxiomSdk {
                         callback.on_field("Total Cycles", &num_instructions.to_string());
                     }
 
-                    // Add spacing after statistics and add saving section
-                    callback.on_section("Saving Results");
+                    if save {
+                        // Add spacing after statistics and add saving section
+                        callback.on_section("Saving Results");
 
-                    // Use same directory structure as download: program-{uuid}/proofs/{proof_id}/
-                    let proof_dir = format!(
-                        "axiom-artifacts/program-{}/proofs/{}",
-                        proof_status.program_uuid, proof_status.id
-                    );
-                    std::fs::create_dir_all(&proof_dir).ok();
+                        // Use same directory structure as download: program-{uuid}/proofs/{proof_id}/
+                        let proof_dir = PathBuf::from("axiom-artifacts")
+                            .join(format!("program-{}", proof_status.program_uuid))
+                            .join("proofs")
+                            .join(&proof_status.id);
+                        if let Err(e) = fs::create_dir_all(&proof_dir) {
+                            callback.on_warning(&format!(
+                                "Failed to create directory {}: {}",
+                                proof_dir.display(),
+                                e
+                            ));
+                        } else {
+                            // Use same naming convention as download: {proof_type}-proof.json
+                            let proof_path =
+                                proof_dir.join(format!("{}-proof.json", proof_status.proof_type));
+                            match self.get_generated_proof(
+                                &proof_status.id,
+                                &proof_status.proof_type.parse()?,
+                                Some(proof_path.clone()),
+                            ) {
+                                Ok(_) => {
+                                    callback.on_success(&format!(
+                                        "{} proof saved to {}",
+                                        proof_status.proof_type.to_uppercase(),
+                                        proof_path.display()
+                                    ));
+                                }
+                                Err(e) => {
+                                    callback.on_warning(&format!("Failed to save proof: {}", e));
+                                }
+                            }
 
-                    // Use same naming convention as download: {proof_type}-proof.json
-                    let proof_path =
-                        format!("{}/{}-proof.json", proof_dir, proof_status.proof_type);
-                    if self
-                        .save_proof_to_path(
-                            &proof_status.id,
-                            &proof_status.proof_type.parse()?,
-                            std::path::PathBuf::from(&proof_path),
-                        )
-                        .is_ok()
-                    {
-                        callback.on_success(&format!(
-                            "{} proof saved to {}",
-                            proof_status.proof_type.to_uppercase(),
-                            proof_path
-                        ));
+                            let logs_path = proof_dir.join("logs.txt");
+                            match self.save_proof_logs_to_path(&proof_status.id, logs_path.clone())
+                            {
+                                Ok(_) => {
+                                    callback.on_success(&format!(
+                                        "Logs saved to {}",
+                                        logs_path.display()
+                                    ));
+                                }
+                                Err(e) => {
+                                    callback.on_warning(&format!("Failed to save logs: {}", e));
+                                }
+                            }
+                        }
                     }
 
-                    let logs_path = format!("{}/logs.txt", proof_dir);
-                    if self
-                        .save_proof_logs_to_path(
-                            &proof_status.id,
-                            std::path::PathBuf::from(&logs_path),
-                        )
-                        .is_ok()
-                    {
-                        callback.on_success(&format!("Logs saved to {}", logs_path));
-                    }
-
-                    return Ok(());
+                    return Ok(proof_status);
                 }
                 "Failed" => {
                     if spinner_started {
@@ -484,7 +419,7 @@ impl AxiomSdk {
                     } else {
                         callback.on_info("Proof generation was canceled");
                     }
-                    return Ok(());
+                    return Ok(proof_status);
                 }
                 "Canceling" => {
                     if !spinner_started {

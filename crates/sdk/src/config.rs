@@ -4,6 +4,7 @@ use std::{
     path::PathBuf,
 };
 
+use bytes::Bytes;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -14,9 +15,9 @@ use crate::{API_KEY_HEADER, AxiomConfig, AxiomSdk, add_cli_version_header, get_c
 pub trait ConfigSdk {
     fn get_vm_config_metadata(&self, config_id: Option<&str>) -> Result<VmConfigMetadata>;
     fn get_proving_keys(&self, config_id: Option<&str>, key_type: &str) -> Result<PkDownloader>;
-    fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
-    fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
-    fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()>;
+    fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<Bytes>;
+    fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<Bytes>;
+    fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<Bytes>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -183,57 +184,39 @@ impl ConfigSdk for AxiomSdk {
         }
     }
 
-    fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+    fn get_evm_verifier(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<Bytes> {
         let config_id_str = get_config_id(config_id, &self.config)?;
         self.callback.on_info(&format!(
             "Downloading evm_verifier for config ID: {config_id_str}"
         ));
         let result = download_artifact(&self.config, config_id, "evm_verifier", output.clone());
-        if result.is_ok() {
-            let output_path = output.unwrap_or_else(|| {
-                PathBuf::from(format!(
-                    "axiom-artifacts/configs/{}/evm_verifier.json",
-                    config_id_str
-                ))
-            });
+        if let (Some(output_path), Ok(_)) = (&output, &result) {
             self.callback
                 .on_success(&format!("Successfully downloaded to {output_path:?}"));
         }
         result
     }
 
-    fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+    fn get_vm_commitment(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<Bytes> {
         let config_id_str = get_config_id(config_id, &self.config)?;
         self.callback.on_info(&format!(
             "Downloading app_vm_commit for config ID: {config_id_str}"
         ));
         let result = download_artifact(&self.config, config_id, "app_vm_commit", output.clone());
-        if result.is_ok() {
-            let output_path = output.unwrap_or_else(|| {
-                PathBuf::from(format!(
-                    "axiom-artifacts/configs/{}/app_vm_commit",
-                    config_id_str
-                ))
-            });
+        if let (Some(output_path), Ok(_)) = (&output, &result) {
             self.callback
                 .on_success(&format!("Successfully downloaded to {output_path:?}"));
         }
         result
     }
 
-    fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<()> {
+    fn download_config(&self, config_id: Option<&str>, output: Option<PathBuf>) -> Result<Bytes> {
         let config_id_str = get_config_id(config_id, &self.config)?;
         self.callback.on_info(&format!(
             "Downloading config for config ID: {config_id_str}"
         ));
         let result = download_artifact(&self.config, config_id, "config", output.clone());
-        if result.is_ok() {
-            let output_path = output.unwrap_or_else(|| {
-                PathBuf::from(format!(
-                    "axiom-artifacts/configs/{}/config.toml",
-                    config_id_str
-                ))
-            });
+        if let (Some(output_path), Ok(_)) = (&output, &result) {
             self.callback
                 .on_success(&format!("Successfully downloaded to {output_path:?}"));
         }
@@ -246,29 +229,10 @@ fn download_artifact(
     config_id: Option<&str>,
     artifact_type: &str,
     output: Option<PathBuf>,
-) -> Result<()> {
+) -> Result<Bytes> {
     // Load configuration
     let config_id = get_config_id(config_id, config)?;
     let url = format!("{}/configs/{}/{}", config.api_url, config_id, artifact_type);
-
-    // Determine output path
-    let output_path = match output {
-        Some(path) => path,
-        None => {
-            // Create organized directory structure
-            let config_dir = format!("axiom-artifacts/configs/{}", config_id);
-            std::fs::create_dir_all(&config_dir)
-                .context(format!("Failed to create config directory: {}", config_dir))?;
-
-            if artifact_type == "evm_verifier" {
-                PathBuf::from(format!("{}/evm_verifier.json", config_dir))
-            } else if artifact_type == "config" {
-                PathBuf::from(format!("{}/config.toml", config_dir))
-            } else {
-                PathBuf::from(format!("{}/{}", config_dir, artifact_type))
-            }
-        }
-    };
 
     // Make the GET request
     let client = Client::new();
@@ -280,13 +244,20 @@ fn download_artifact(
 
     // Check if the request was successful
     if response.status().is_success() {
-        let mut file = File::create(&output_path)
-            .context(format!("Failed to create output file: {output_path:?}"))?;
+        let bytes = response.bytes()?;
 
-        copy(&mut response.bytes()?.as_ref(), &mut file)
-            .context("Failed to write response to file")?;
+        if let Some(output_path) = output {
+            // Ensure parent directory exists
+            if let Some(parent) = output_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .context(format!("Failed to create directory: {}", parent.display()))?;
+            }
+            let mut file = File::create(&output_path)
+                .context(format!("Failed to create output file: {output_path:?}"))?;
+            copy(&mut bytes.as_ref(), &mut file).context("Failed to write response to file")?;
+        }
 
-        Ok(())
+        Ok(bytes)
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;

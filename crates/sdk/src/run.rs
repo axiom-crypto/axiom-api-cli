@@ -1,15 +1,9 @@
-use std::fs;
-
-use crate::input::Input;
 use eyre::{Context, OptionExt, Result};
-use hex;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, validate_input_json,
-};
+use crate::{API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, input::Input};
 
 const EXECUTION_POLLING_INTERVAL_SECS: u64 = 10;
 
@@ -191,14 +185,19 @@ impl RunSdk for AxiomSdk {
         let url = format!("{}/executions/{}/logs", self.config.api_url, execution_id);
         let request = crate::authenticated_get(&self.config, &url)?;
 
-        let execution_dir = format!("axiom-artifacts/execution-{}", execution_id);
+        let execution_dir =
+            std::path::PathBuf::from("axiom-artifacts").join(format!("execution-{}", execution_id));
         std::fs::create_dir_all(&execution_dir).context(format!(
             "Failed to create execution directory: {}",
-            execution_dir
+            execution_dir.display()
         ))?;
 
-        let filename = std::path::PathBuf::from(format!("{}/logs.txt", execution_dir));
-        download_file(request, &filename, "Failed to download execution logs")?;
+        let filename = execution_dir.join("logs.txt");
+        download_file(
+            request,
+            Some(filename.clone()),
+            "Failed to download execution logs",
+        )?;
         self.callback
             .on_success(&format!("✓ {}", filename.display()));
         Ok(())
@@ -223,30 +222,7 @@ impl AxiomSdk {
 
         // Create the request body based on input
         let body = match &args.input {
-            Some(input) => {
-                match input {
-                    Input::FilePath(path) => {
-                        // Read the file content directly as JSON
-                        let file_content = fs::read_to_string(path)
-                            .context(format!("Failed to read input file: {}", path.display()))?;
-                        let input_json = serde_json::from_str(&file_content).context(format!(
-                            "Failed to parse input file as JSON: {}",
-                            path.display()
-                        ))?;
-                        validate_input_json(&input_json)?;
-                        input_json
-                    }
-                    Input::HexBytes(s) => {
-                        if !matches!(s.first(), Some(x) if x == &0x01 || x == &0x02) {
-                            eyre::bail!(
-                                "Hex string must start with '01'(bytes) or '02'(field elements). See the OpenVM book for more details. https://docs.openvm.dev/book/writing-apps/overview/#inputs"
-                            );
-                        }
-                        let hex_string = format!("0x{}", hex::encode(s));
-                        json!({ "input": [hex_string] })
-                    }
-                }
-            }
+            Some(input) => input.to_input_json()?,
             None => json!({ "input": [] }), // Empty JSON if no input provided
         };
 

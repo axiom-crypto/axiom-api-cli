@@ -1,5 +1,6 @@
 use std::{path::PathBuf, sync::OnceLock};
 
+use bytes::Bytes;
 use dirs::home_dir;
 use eyre::{Context, OptionExt, Result};
 use reqwest::blocking::{Client, RequestBuilder, Response};
@@ -450,25 +451,32 @@ fn handle_response(response: Response) -> Result<()> {
 
 pub fn download_file(
     request_builder: RequestBuilder,
-    output_path: &std::path::Path,
+    output: Option<PathBuf>,
     error_context: &str,
-) -> Result<()> {
+) -> Result<Bytes> {
     let response = request_builder
         .send()
         .with_context(|| error_context.to_string())?;
 
     if response.status().is_success() {
-        let mut file = std::fs::File::create(output_path).context(format!(
-            "Failed to create output file: {}",
-            output_path.display()
-        ))?;
-
         let content = response.bytes().context("Failed to read response body")?;
 
-        std::io::copy(&mut content.as_ref(), &mut file)
-            .context("Failed to write response to file")?;
+        if let Some(output_path) = output {
+            // Ensure parent directory exists
+            if let Some(parent) = output_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .context(format!("Failed to create directory: {}", parent.display()))?;
+            }
+            let mut file = std::fs::File::create(&output_path).context(format!(
+                "Failed to create output file: {}",
+                output_path.display()
+            ))?;
 
-        Ok(())
+            std::io::copy(&mut content.as_ref(), &mut file)
+                .context("Failed to write response to file")?;
+        }
+
+        Ok(content)
     } else if response.status().is_client_error() {
         let status = response.status();
         let error_text = response.text()?;
