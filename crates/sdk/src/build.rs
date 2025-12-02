@@ -1125,6 +1125,8 @@ fn create_tar_archive(
     }
 
     // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
+    // Save original env var to restore after fetch
+    let original_openvm_rust_toolchain = std::env::var("OPENVM_RUST_TOOLCHAIN").ok();
     if let Some(openvm_rust_toolchain) = openvm_rust_toolchain {
         if let Ok(cur) = std::env::var("OPENVM_RUST_TOOLCHAIN") {
             if cur != openvm_rust_toolchain {
@@ -1143,6 +1145,13 @@ fn create_tar_archive(
         .env("CARGO_HOME", &axiom_cargo_home)
         .status()
         .context("Failed to run 'cargo fetch'")?;
+    // Restore original env var
+    unsafe {
+        match original_openvm_rust_toolchain {
+            Some(val) => std::env::set_var("OPENVM_RUST_TOOLCHAIN", val),
+            None => std::env::remove_var("OPENVM_RUST_TOOLCHAIN"),
+        }
+    }
     if !status.success() {
         eyre::bail!("Failed to fetch cargo dependencies");
     }
