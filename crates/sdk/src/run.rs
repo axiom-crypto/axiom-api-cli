@@ -138,10 +138,10 @@ impl RunSdk for AxiomSdk {
             "public_values": execution_status.public_values
         });
 
-        if let Ok(results_json) = serde_json::to_string_pretty(&results) {
-            if std::fs::write(&results_path, results_json).is_ok() {
-                return Some(results_path);
-            }
+        if let Ok(results_json) = serde_json::to_string_pretty(&results)
+            && std::fs::write(&results_path, results_json).is_ok()
+        {
+            return Some(results_path);
         }
 
         None
@@ -384,22 +384,22 @@ impl AxiomSdk {
                     }
 
                     // Legacy tick count (keeping for compatibility, but not for pure mode)
-                    if execution_status.mode != "pure" {
-                        if let Some(total_tick) = execution_status.total_tick {
-                            if !has_stats {
-                                callback.on_section("Execution Statistics");
-                            }
-                            callback.on_field("Total Ticks", &total_tick.to_string());
+                    if execution_status.mode != "pure"
+                        && let Some(total_tick) = execution_status.total_tick
+                    {
+                        if !has_stats {
+                            callback.on_section("Execution Statistics");
                         }
+                        callback.on_field("Total Ticks", &total_tick.to_string());
                     }
 
                     // Format public values more nicely (match CLI format)
-                    if let Some(public_values) = &execution_status.public_values {
-                        if !public_values.is_null() {
-                            callback.on_section("Public Values");
-                            if let Ok(compact) = serde_json::to_string(public_values) {
-                                println!("  {}", compact);
-                            }
+                    if let Some(public_values) = &execution_status.public_values
+                        && !public_values.is_null()
+                    {
+                        callback.on_section("Public Values");
+                        if let Ok(compact) = serde_json::to_string(public_values) {
+                            println!("  {}", compact);
                         }
                     }
 
@@ -477,10 +477,10 @@ impl AxiomSdk {
             "public_values": execution_status.public_values
         });
 
-        if let Ok(results_json) = serde_json::to_string_pretty(&results) {
-            if std::fs::write(&results_path, results_json).is_ok() {
-                return Some(results_path);
-            }
+        if let Ok(results_json) = serde_json::to_string_pretty(&results)
+            && std::fs::write(&results_path, results_json).is_ok()
+        {
+            return Some(results_path);
         }
 
         None

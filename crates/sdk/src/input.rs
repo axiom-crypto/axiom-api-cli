@@ -31,7 +31,7 @@ impl FromStr for Input {
 pub fn decode_hex_string(s: &str) -> eyre::Result<Vec<u8>> {
     // Remove 0x prefix if present (exactly once)
     let s = s.strip_prefix("0x").unwrap_or(s);
-    if s.len() % 2 != 0 {
+    if !s.len().is_multiple_of(2) {
         eyre::bail!("The hex string must be of even length");
     }
     if !s.chars().all(|c| c.is_ascii_hexdigit()) {

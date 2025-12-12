@@ -274,10 +274,10 @@ impl ProveSdk for AxiomSdk {
         if response.status().is_success() {
             // Try to get response message, fallback to default
             let response_text = response.text().unwrap_or_else(|_| "{}".to_string());
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_text) {
-                if let Some(message) = json.get("message").and_then(|m| m.as_str()) {
-                    return Ok(message.to_string());
-                }
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&response_text)
+                && let Some(message) = json.get("message").and_then(|m| m.as_str())
+            {
+                return Ok(message.to_string());
             }
             Ok("Cancellation request submitted successfully".to_string())
         } else {
