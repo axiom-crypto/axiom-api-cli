@@ -7,15 +7,15 @@
 1. Install the Axiom CLI:
 
    ```
-   cargo +1.86 install --locked --git https://github.com/axiom-crypto/axiom-api-cli.git --tag v1.0.7 cargo-axiom
+   cargo +1.90 install --locked --git https://github.com/axiom-crypto/axiom-api-cli.git --tag v1.0.9 cargo-axiom
    ```
 
    Or from source:
 
    ```bash
-   git clone https://github.com/axiom-crypto/axiom-api-cli --tag v1.0.7
+   git clone https://github.com/axiom-crypto/axiom-api-cli --tag v1.0.9
    cd axiom-api-cli/crates/cli
-   cargo +1.86 install --locked --force --path .
+   cargo +1.90 install --locked --force --path .
    ```
 
 2. Initialize with your API key:
