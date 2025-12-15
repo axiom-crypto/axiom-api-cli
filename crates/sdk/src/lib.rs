@@ -59,22 +59,35 @@ pub const STAGING_DEFAULT_CONFIG_ID: &str = "cfg_01k43tmxayxwktkbh5wqsv10em";
 /// # Examples
 ///
 /// ```
-/// use axiom_sdk::{ProgressCallback, NoopCallback};
+/// use axiom_sdk::{NoopCallback, ProgressCallback};
 ///
 /// // Use the no-op callback for silent operation
-/// let callback = NoopCallback;
+/// let _callback = NoopCallback;
 ///
 /// // Or implement your own callback for custom behavior
 /// struct MyCallback;
 /// impl ProgressCallback for MyCallback {
+///     fn on_header(&self, _text: &str) {}
 ///     fn on_success(&self, text: &str) {
 ///         println!("✓ {}", text);
 ///     }
+///     fn on_info(&self, _text: &str) {}
+///     fn on_warning(&self, _text: &str) {}
 ///     fn on_error(&self, text: &str) {
 ///         eprintln!("✗ {}", text);
 ///     }
-///     // ... implement other methods as needed
+///     fn on_section(&self, _title: &str) {}
+///     fn on_field(&self, _key: &str, _value: &str) {}
+///     fn on_status(&self, _text: &str) {}
+///     fn on_progress_start(&self, _message: &str, _total: Option<u64>) {}
+///     fn on_progress_update(&self, _current: u64) {}
+///     fn on_progress_update_message(&self, _message: &str) {}
+///     fn on_progress_finish(&self, _message: &str) {}
+///     fn on_clear_line(&self) {}
+///     fn on_clear_line_and_reset(&self) {}
 /// }
+///
+/// let _callback = MyCallback;
 /// ```
 pub trait ProgressCallback {
     /// Called to display a header/title for a new operation section
