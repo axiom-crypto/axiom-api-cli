@@ -96,7 +96,7 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "axiom-sdk"
-version = "1.0.7"
+version = "1.0.10"
 dependencies = [
  "bytes",
  "cargo_metadata 0.21.0",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-axiom"
-version = "1.0.7"
+version = "1.0.10"
 dependencies = [
  "axiom-sdk",
  "cargo_metadata 0.21.0",
@@ -1195,8 +1195,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-build"
-version = "1.4.2"
-source = "git+https://github.com/openvm-org/openvm.git?tag=v1.4.2#e30b1148a23a34b6ec5db97ef88eecfaf41fc9d7"
+version = "1.4.3"
+source = "git+https://github.com/openvm-org/openvm.git?tag=v1.4.3#e8feb93717200e6f334b4f368dd2d0a143f69436"
 dependencies = [
  "cargo_metadata 0.18.1",
  "eyre",
@@ -1208,7 +1208,7 @@ dependencies = [
 [[package]]
 name = "openvm-custom-insn"
 version = "0.1.0"
-source = "git+https://github.com/openvm-org/openvm.git?tag=v1.4.2#e30b1148a23a34b6ec5db97ef88eecfaf41fc9d7"
+source = "git+https://github.com/openvm-org/openvm.git?tag=v1.4.3#e8feb93717200e6f334b4f368dd2d0a143f69436"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1217,8 +1217,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-platform"
-version = "1.4.2"
-source = "git+https://github.com/openvm-org/openvm.git?tag=v1.4.2#e30b1148a23a34b6ec5db97ef88eecfaf41fc9d7"
+version = "1.4.3"
+source = "git+https://github.com/openvm-org/openvm.git?tag=v1.4.3#e8feb93717200e6f334b4f368dd2d0a143f69436"
 dependencies = [
  "openvm-custom-insn",
  "openvm-rv32im-guest",
@@ -1226,8 +1226,8 @@ dependencies = [
 
 [[package]]
 name = "openvm-rv32im-guest"
-version = "1.4.2"
-source = "git+https://github.com/openvm-org/openvm.git?tag=v1.4.2#e30b1148a23a34b6ec5db97ef88eecfaf41fc9d7"
+version = "1.4.3"
+source = "git+https://github.com/openvm-org/openvm.git?tag=v1.4.3#e8feb93717200e6f334b4f368dd2d0a143f69436"
 dependencies = [
  "openvm-custom-insn",
  "p3-field",
