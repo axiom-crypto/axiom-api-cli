@@ -1,4 +1,5 @@
 use std::{
+    borrow::Cow,
     fs::File,
     io::{Read, Write},
     path::Path,
@@ -34,6 +35,10 @@ pub trait BuildSdk {
         page_size: Option<u32>,
     ) -> Result<ProgramListResponse>;
     fn get_build_status(&self, program_id: &str) -> Result<BuildStatus>;
+
+    /// Get the app EXE commitment hash for a program
+    fn get_app_exe_commit(&self, program_id: &str) -> Result<Vec<u8>>;
+
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
     fn download_build_logs(&self, program_id: &str) -> Result<()>;
     fn register_new_program(
@@ -43,6 +48,14 @@ pub trait BuildSdk {
     ) -> Result<String>;
     fn wait_for_build_completion(&self, program_id: &str) -> Result<()>;
     fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String>;
+
+    /// Upload pre-built ELF and VMEXE from memory
+    fn upload_exe_raw(
+        &self,
+        elf: impl Into<Cow<'static, [u8]>>,
+        vmexe: impl Into<Cow<'static, [u8]>>,
+        args: UploadExeArgs,
+    ) -> Result<String>;
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -182,6 +195,18 @@ impl BuildSdk for AxiomSdk {
         Ok(build_status)
     }
 
+    fn get_app_exe_commit(&self, program_id: &str) -> Result<Vec<u8>> {
+        let url = format!(
+            "{}/programs/{}/download/app_exe_commit",
+            self.config.api_url, program_id
+        );
+        let app_exe_commit = authenticated_get(&self.config, &url)?
+            .send()?
+            .error_for_status()?
+            .text()?;
+        hex::decode(app_exe_commit.trim()).context("Failed to decode app_exe_commit hex string")
+    }
+
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()> {
         // Handle "all" artifact type by downloading each type sequentially
         if program_type == "all" {
@@ -216,21 +241,27 @@ impl BuildSdk for AxiomSdk {
 
         if status.is_success() {
             // Create organized directory structure
-            let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
-            std::fs::create_dir_all(&build_dir)
-                .context(format!("Failed to create build directory: {}", build_dir))?;
+            let build_dir = std::path::PathBuf::from("axiom-artifacts")
+                .join(format!("program-{}", program_id))
+                .join("artifacts");
+            std::fs::create_dir_all(&build_dir).context(format!(
+                "Failed to create build directory: {}",
+                build_dir.display()
+            ))?;
 
             // Create output filename based on artifact type
             let ext = if program_type == "source" {
-                "tar.gz".to_string()
+                "tar.gz"
             } else {
-                program_type.to_string()
+                program_type
             };
-            let filename = format!("{}/program.{}", build_dir, ext);
+            let filename = build_dir.join(format!("program.{}", ext));
 
             // Write the response body to a file using streaming
-            let mut file = File::create(&filename)
-                .context(format!("Failed to create output file: {filename}"))?;
+            let mut file = File::create(&filename).context(format!(
+                "Failed to create output file: {}",
+                filename.display()
+            ))?;
 
             let content_length = response.content_length();
             let mut response = response;
@@ -261,7 +292,7 @@ impl BuildSdk for AxiomSdk {
             }
 
             self.callback.on_progress_finish("✓ Download complete");
-            self.callback.on_success(&filename.to_string());
+            self.callback.on_success(&format!("{}", filename.display()));
             Ok(())
         } else if status.is_client_error() {
             let error_text = response
@@ -288,13 +319,21 @@ impl BuildSdk for AxiomSdk {
 
     fn download_build_logs(&self, program_id: &str) -> Result<()> {
         let url = format!("{}/programs/{}/logs", self.config.api_url, program_id);
-        let build_dir = format!("axiom-artifacts/program-{}/artifacts", program_id);
-        std::fs::create_dir_all(&build_dir)
-            .context(format!("Failed to create build directory: {}", build_dir))?;
+        let build_dir = std::path::PathBuf::from("axiom-artifacts")
+            .join(format!("program-{}", program_id))
+            .join("artifacts");
+        std::fs::create_dir_all(&build_dir).context(format!(
+            "Failed to create build directory: {}",
+            build_dir.display()
+        ))?;
 
-        let filename = std::path::PathBuf::from(format!("{}/logs.txt", build_dir));
+        let filename = build_dir.join("logs.txt");
         let response = authenticated_get(&self.config, &url)?;
-        download_file(response, &filename, "Failed to download build logs")?;
+        download_file(
+            response,
+            Some(filename.clone()),
+            "Failed to download build logs",
+        )?;
         self.callback
             .on_success(&format!("✓ {}", filename.display()));
         Ok(())
@@ -314,6 +353,15 @@ impl BuildSdk for AxiomSdk {
 
     fn upload_exe(&self, program_dir: impl AsRef<Path>, args: UploadExeArgs) -> Result<String> {
         self.upload_exe_base(program_dir, args, &*self.callback)
+    }
+
+    fn upload_exe_raw(
+        &self,
+        elf: impl Into<Cow<'static, [u8]>>,
+        vmexe: impl Into<Cow<'static, [u8]>>,
+        args: UploadExeArgs,
+    ) -> Result<String> {
+        self.upload_exe_raw_base(elf, vmexe, args, &*self.callback)
     }
 }
 
@@ -836,14 +884,7 @@ impl AxiomSdk {
             );
         }
 
-        // Use provided config_id or fall back to config file default
-        let config_id = args
-            .config_id
-            .or_else(|| self.config.config_id.clone())
-            .ok_or_eyre("No config_id provided and no default config_id in ~/.axiom/config.json")?;
-
         callback.on_header("Uploading Pre-built Program");
-        callback.on_field("Config ID", &config_id);
         callback.on_field("ELF", &elf_path.display().to_string());
         callback.on_field("VMEXE", &vmexe_path.display().to_string());
         callback.on_info("Note: Program hash will be computed on the backend");
@@ -857,6 +898,24 @@ impl AxiomSdk {
             .with_context(|| format!("Failed to read ELF file: {}", elf_path.display()))?;
         let vmexe_content = std::fs::read(&vmexe_path)
             .with_context(|| format!("Failed to read VMEXE file: {}", vmexe_path.display()))?;
+
+        self.upload_exe_raw_base(elf_content, vmexe_content, args, callback)
+    }
+
+    pub fn upload_exe_raw_base(
+        &self,
+        elf: impl Into<Cow<'static, [u8]>>,
+        vmexe: impl Into<Cow<'static, [u8]>>,
+        args: UploadExeArgs,
+        callback: &dyn ProgressCallback,
+    ) -> Result<String> {
+        // Use provided config_id or fall back to config file default
+        let config_id = args
+            .config_id
+            .as_deref()
+            .or(self.config.config_id.as_deref())
+            .ok_or_eyre("No config_id provided and no default config_id in ~/.axiom/config.json")?;
+        callback.on_field("Config ID", config_id);
 
         // Build URL with query parameters
         let mut url = format!(
@@ -885,11 +944,11 @@ impl AxiomSdk {
         }
 
         // Create multipart form with files
-        let elf_part = reqwest::blocking::multipart::Part::bytes(elf_content)
+        let elf_part = reqwest::blocking::multipart::Part::bytes(elf)
             .file_name("program.elf")
             .mime_str("application/octet-stream")?;
 
-        let vmexe_part = reqwest::blocking::multipart::Part::bytes(vmexe_content)
+        let vmexe_part = reqwest::blocking::multipart::Part::bytes(vmexe)
             .file_name("program.vmexe")
             .mime_str("application/octet-stream")?;
 
