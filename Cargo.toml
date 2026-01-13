@@ -1,5 +1,5 @@
 [workspace.package]
-version = "1.0.7"
+version = "1.0.10"
 edition = "2024"
 authors = ["Axiom Team"]
 license = "MIT"
@@ -10,7 +10,7 @@ resolver = "3"
 
 [workspace.dependencies]
 # OpenVM
-openvm-build = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.2", default-features = false }
+openvm-build = { git = "https://github.com/openvm-org/openvm.git", tag = "v1.4.3", default-features = false }
 
 # Axiom Proving API
 cargo-axiom = { path = "crates/cli", default-features = false }
