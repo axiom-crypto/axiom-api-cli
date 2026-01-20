@@ -608,6 +608,7 @@ impl AxiomSdk {
             args.keep_tarball.unwrap_or(false),
             &exclude_patterns,
             &include_dirs,
+            args.openvm_rust_toolchain.clone(),
         )?;
         let tar_path = &tar_file.path;
 
@@ -1111,6 +1112,7 @@ fn create_tar_archive(
     keep_tarball: bool,
     exclude_patterns: &[String],
     include_dirs: &[String],
+    openvm_rust_toolchain: Option<String>,
 ) -> Result<TarFile> {
     let tar_path = program_dir.as_ref().join("program.tar.gz");
     let tar_file = File::create(&tar_path)?;
@@ -1182,10 +1184,33 @@ fn create_tar_archive(
     }
 
     // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
+    // Save original env var to restore after fetch
+    let original_openvm_rust_toolchain = std::env::var("OPENVM_RUST_TOOLCHAIN").ok();
+    if let Some(openvm_rust_toolchain) = openvm_rust_toolchain {
+        if let Ok(cur) = std::env::var("OPENVM_RUST_TOOLCHAIN") {
+            if cur != openvm_rust_toolchain {
+                eyre::bail!(
+                    "OPENVM_RUST_TOOLCHAIN is already set to {}, inconsistent with the provided openvm_rust_toolchain {}",
+                    cur,
+                    openvm_rust_toolchain
+                );
+            }
+        }
+        unsafe {
+            std::env::set_var("OPENVM_RUST_TOOLCHAIN", &openvm_rust_toolchain);
+        }
+    }
     let status = cargo_command("fetch", &[])
         .env("CARGO_HOME", &axiom_cargo_home)
         .status()
         .context("Failed to run 'cargo fetch'")?;
+    // Restore original env var
+    unsafe {
+        match original_openvm_rust_toolchain {
+            Some(val) => std::env::set_var("OPENVM_RUST_TOOLCHAIN", val),
+            None => std::env::remove_var("OPENVM_RUST_TOOLCHAIN"),
+        }
+    }
     if !status.success() {
         eyre::bail!("Failed to fetch cargo dependencies");
     }
