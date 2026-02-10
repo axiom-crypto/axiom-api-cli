@@ -8,8 +8,7 @@ const MAIN_RS_PREPEND: &str = r#"openvm::init!();
 
 "#;
 
-const OPENVM_STANDARD_TOML_URL: &str =
-    "https://raw.githubusercontent.com/openvm-org/openvm/main/crates/sdk/src/config/v1.5/openvm_standard.toml";
+const OPENVM_STANDARD_TOML_URL: &str = "https://raw.githubusercontent.com/openvm-org/openvm/main/crates/sdk/src/config/v1.5/openvm_standard.toml";
 
 fn fetch_openvm_toml_template() -> Result<String> {
     let output = Command::new("curl")
