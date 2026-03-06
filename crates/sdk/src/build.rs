@@ -608,6 +608,7 @@ impl AxiomSdk {
             args.keep_tarball.unwrap_or(false),
             &exclude_patterns,
             &include_dirs,
+            args.openvm_rust_toolchain.clone(),
         )?;
         let tar_path = &tar_file.path;
 
@@ -1111,6 +1112,7 @@ fn create_tar_archive(
     keep_tarball: bool,
     exclude_patterns: &[String],
     include_dirs: &[String],
+    openvm_rust_toolchain: Option<String>,
 ) -> Result<TarFile> {
     let tar_path = program_dir.as_ref().join("program.tar.gz");
     let tar_file = File::create(&tar_path)?;
@@ -1182,7 +1184,11 @@ fn create_tar_archive(
     }
 
     // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
-    let status = cargo_command("fetch", &[])
+    let mut cmd = cargo_command("fetch", &[]);
+    if let Some(ref tc) = openvm_rust_toolchain {
+        cmd.env("OPENVM_RUST_TOOLCHAIN", tc);
+    }
+    let status = cmd
         .env("CARGO_HOME", &axiom_cargo_home)
         .status()
         .context("Failed to run 'cargo fetch'")?;
