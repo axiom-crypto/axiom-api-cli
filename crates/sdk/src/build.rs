@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     fs::File,
-    io::{Read, Write},
+    io::Read,
     path::Path,
     sync::{
         Arc,
@@ -19,8 +19,8 @@ use serde_json::Value;
 use tar::Builder;
 
 use crate::{
-    API_KEY_HEADER, AxiomSdk, ProgressCallback, add_cli_version_header, authenticated_get,
-    download_file, send_request_json,
+    API_KEY_HEADER, AxiomSdk, CountingReader, ProgressCallback, add_cli_version_header,
+    authenticated_get, send_request_json,
 };
 
 pub const MAX_PROGRAM_SIZE_MB: u64 = 2048;
@@ -153,22 +153,6 @@ impl Drop for TarFile {
     }
 }
 
-struct CountingReader<R: Read> {
-    inner: R,
-    progress: Arc<AtomicU64>,
-}
-
-impl<R: Read> Read for CountingReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let bytes_read = self.inner.read(buf)?;
-        if bytes_read > 0 {
-            self.progress
-                .fetch_add(bytes_read as u64, Ordering::Relaxed);
-        }
-        Ok(bytes_read)
-    }
-}
-
 impl BuildSdk for AxiomSdk {
     fn list_programs(
         &self,
@@ -266,30 +250,18 @@ impl BuildSdk for AxiomSdk {
             let content_length = response.content_length();
             let mut response = response;
 
-            if let Some(total) = content_length {
-                self.callback
-                    .on_progress_start(&format!("Downloading {}", program_type), Some(total));
-            } else {
-                self.callback
-                    .on_progress_start(&format!("Downloading {}", program_type), None);
-            }
+            self.callback.on_progress_start(
+                &format!("Downloading {program_type}"),
+                content_length,
+                crate::TransferDirection::Download,
+            );
 
-            if content_length.is_some() {
-                let mut buffer = vec![0u8; 1024 * 1024];
-                let mut downloaded = 0u64;
-
-                loop {
-                    let bytes_read = response.read(&mut buffer)?;
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    file.write_all(&buffer[..bytes_read])?;
-                    downloaded += bytes_read as u64;
-                    self.callback.on_progress_update(downloaded);
-                }
-            } else {
-                std::io::copy(&mut response, &mut file)?;
-            }
+            crate::stream_response_to_file(
+                &mut response,
+                &mut file,
+                &*self.callback,
+                content_length.is_some(),
+            )?;
 
             self.callback.on_progress_finish("✓ Download complete");
             self.callback.on_success(&format!("{}", filename.display()));
@@ -329,9 +301,9 @@ impl BuildSdk for AxiomSdk {
 
         let filename = build_dir.join("logs.txt");
         let response = authenticated_get(&self.config, &url)?;
-        download_file(
+        crate::download_file_streaming(
             response,
-            Some(filename.clone()),
+            filename.clone(),
             "Failed to download build logs",
         )?;
         self.callback
@@ -373,7 +345,7 @@ impl AxiomSdk {
     ) -> Result<()> {
         use std::time::Duration;
 
-        callback.on_progress_start("Checking build status...", None);
+        callback.on_spinner_start("Checking build status...");
 
         loop {
             let response = authenticated_get(
@@ -679,7 +651,11 @@ impl AxiomSdk {
         }
 
         // Start progress tracking for upload
-        callback.on_progress_start("Uploading", Some(metadata.len()));
+        callback.on_progress_start(
+            "Uploading",
+            Some(metadata.len()),
+            crate::TransferDirection::Upload,
+        );
 
         // Use a counting reader and perform the request in a background thread while
         // polling progress from the main thread to update the callback.
@@ -957,7 +933,9 @@ impl AxiomSdk {
             .part("elf", elf_part)
             .part("vmexe", vmexe_part);
 
-        callback.on_progress_start("Uploading", None);
+        // No CountingReader here — bytes are sent in one shot, so a spinner is
+        // more honest than a progress bar that would jump from 0% to 100%.
+        callback.on_spinner_start("Uploading");
 
         let client = Client::builder()
             .timeout(std::time::Duration::from_secs(300))

@@ -1,8 +1,4 @@
-use std::{
-    fs::File,
-    io::{Read, Write, copy},
-    path::PathBuf,
-};
+use std::{fs::File, io::copy, path::PathBuf};
 
 use bytes::Bytes;
 use eyre::{Context, OptionExt, Result};
@@ -61,29 +57,19 @@ impl PkDownloader {
         if response.status().is_success() {
             let content_length = response.content_length();
 
-            if let Some(total) = content_length {
-                callback.on_progress_start("Downloading proving key", Some(total));
-            } else {
-                callback.on_progress_start("Downloading proving key", None);
-            }
+            callback.on_progress_start(
+                "Downloading proving key",
+                content_length,
+                crate::TransferDirection::Download,
+            );
 
             let mut file = File::create(output_path)?;
-            if content_length.is_some() {
-                let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
-                let mut downloaded = 0u64;
-
-                loop {
-                    let bytes_read = response.read(&mut buffer)?;
-                    if bytes_read == 0 {
-                        break;
-                    }
-                    file.write_all(&buffer[..bytes_read])?;
-                    downloaded += bytes_read as u64;
-                    callback.on_progress_update(downloaded);
-                }
-            } else {
-                copy(&mut response, &mut file)?;
-            }
+            crate::stream_response_to_file(
+                &mut response,
+                &mut file,
+                callback,
+                content_length.is_some(),
+            )?;
             callback.on_progress_finish("✓ Key downloaded successfully");
             Ok(())
         } else if response.status().is_client_error() {

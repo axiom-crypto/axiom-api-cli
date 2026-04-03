@@ -1,6 +1,6 @@
 use std::sync::Mutex;
 
-use axiom_sdk::ProgressCallback;
+use axiom_sdk::{ProgressCallback, TransferDirection};
 use indicatif::ProgressBar;
 
 use crate::formatting::Formatter;
@@ -50,16 +50,20 @@ impl ProgressCallback for CliProgressCallback {
         Formatter::print_status(text);
     }
 
-    fn on_progress_start(&self, message: &str, total: Option<u64>) {
+    fn on_progress_start(&self, message: &str, total: Option<u64>, direction: TransferDirection) {
         let pb = if let Some(total_bytes) = total {
-            if message.contains("Downloading") || message.contains("download") {
-                Formatter::create_download_progress(total_bytes)
-            } else {
-                Formatter::create_upload_progress(total_bytes)
+            match direction {
+                TransferDirection::Download => Formatter::create_download_progress(total_bytes),
+                TransferDirection::Upload => Formatter::create_upload_progress(total_bytes),
             }
         } else {
             Formatter::create_spinner(message)
         };
+        *self.progress_bar.lock().unwrap() = Some(pb);
+    }
+
+    fn on_spinner_start(&self, message: &str) {
+        let pb = Formatter::create_spinner(message);
         *self.progress_bar.lock().unwrap() = Some(pb);
     }
 

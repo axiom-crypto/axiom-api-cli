@@ -318,7 +318,7 @@ impl AxiomSdk {
                 }
                 "processing" => {
                     if !spinner_started {
-                        callback.on_progress_start("Verifying proof", None);
+                        callback.on_spinner_start("Verifying proof");
                         spinner_started = true;
                     }
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
@@ -326,7 +326,7 @@ impl AxiomSdk {
                 _ => {
                     let status_message = format!("Verification status: {}", verify_status.result);
                     if !spinner_started {
-                        callback.on_progress_start(&status_message, None);
+                        callback.on_spinner_start(&status_message);
                         spinner_started = true;
                     } else {
                         callback.on_progress_update_message(&status_message);
@@ -397,7 +397,7 @@ impl AxiomSdk {
                 }
                 "processing" => {
                     if !spinner_started {
-                        callback.on_progress_start("Verifying proof", None);
+                        callback.on_spinner_start("Verifying proof");
                         spinner_started = true;
                     }
                     std::thread::sleep(Duration::from_secs(VERIFICATION_POLLING_INTERVAL_SECS));
@@ -405,7 +405,7 @@ impl AxiomSdk {
                 _ => {
                     let status_message = format!("Verification status: {}", verify_status.result);
                     if !spinner_started {
-                        callback.on_progress_start(&status_message, None);
+                        callback.on_spinner_start(&status_message);
                         spinner_started = true;
                     } else {
                         callback.on_progress_update_message(&status_message);
