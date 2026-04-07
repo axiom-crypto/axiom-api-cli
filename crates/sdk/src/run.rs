@@ -180,8 +180,6 @@ impl RunSdk for AxiomSdk {
     }
 
     fn get_execution_logs(&self, execution_id: &str) -> Result<()> {
-        use crate::download_file;
-
         let url = format!("{}/executions/{}/logs", self.config.api_url, execution_id);
         let request = crate::authenticated_get(&self.config, &url)?;
 
@@ -193,9 +191,9 @@ impl RunSdk for AxiomSdk {
         ))?;
 
         let filename = execution_dir.join("logs.txt");
-        download_file(
+        crate::download_file_streaming(
             request,
-            Some(filename.clone()),
+            filename.clone(),
             "Failed to download execution logs",
         )?;
         self.callback
@@ -397,14 +395,14 @@ impl AxiomSdk {
                 }
                 "Queued" => {
                     if !spinner_started {
-                        callback.on_progress_start("Execution queued", None);
+                        callback.on_spinner_start("Execution queued");
                         spinner_started = true;
                     }
                     std::thread::sleep(Duration::from_secs(EXECUTION_POLLING_INTERVAL_SECS));
                 }
                 "InProgress" => {
                     if !spinner_started {
-                        callback.on_progress_start("Executing program", None);
+                        callback.on_spinner_start("Executing program");
                         spinner_started = true;
                     } else {
                         // Update message if we were previously in queued state
@@ -415,7 +413,7 @@ impl AxiomSdk {
                 _ => {
                     let status_message = format!("Execution status: {}", execution_status.status);
                     if !spinner_started {
-                        callback.on_progress_start(&status_message, None);
+                        callback.on_spinner_start(&status_message);
                         spinner_started = true;
                     } else {
                         callback.on_progress_update_message(&status_message);

@@ -1,4 +1,10 @@
-use std::{path::PathBuf, sync::OnceLock};
+use std::{
+    path::PathBuf,
+    sync::{
+        Arc, OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
+};
 
 use bytes::Bytes;
 use dirs::home_dir;
@@ -18,6 +24,16 @@ pub mod verify;
 
 pub const API_KEY_HEADER: &str = "Axiom-API-Key";
 pub const CLI_VERSION_HEADER: &str = "Axiom-CLI-Version";
+
+/// Buffer size for streaming chunked transfers (1 MiB).
+pub const CHUNK_SIZE: usize = 1024 * 1024;
+
+/// Indicates whether a transfer operation is a download or upload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TransferDirection {
+    Download,
+    Upload,
+}
 static CLI_VERSION: OnceLock<String> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -80,7 +96,8 @@ pub const STAGING_DEFAULT_CONFIG_ID: &str = "cfg_01k43tmxayxwktkbh5wqsv10em";
 ///     fn on_section(&self, _title: &str) {}
 ///     fn on_field(&self, _key: &str, _value: &str) {}
 ///     fn on_status(&self, _text: &str) {}
-///     fn on_progress_start(&self, _message: &str, _total: Option<u64>) {}
+///     fn on_progress_start(&self, _message: &str, _total: Option<u64>, _direction: TransferDirection) {}
+///     fn on_spinner_start(&self, _message: &str) {}
 ///     fn on_progress_update(&self, _current: u64) {}
 ///     fn on_progress_update_message(&self, _message: &str) {}
 ///     fn on_progress_finish(&self, _message: &str) {}
@@ -112,7 +129,10 @@ pub trait ProgressCallback {
     /// # Parameters
     /// * `message` - Description of the operation being performed
     /// * `total` - Total number of units if known (for progress bars), None for spinners
-    fn on_progress_start(&self, message: &str, total: Option<u64>);
+    /// * `direction` - The type of transfer, used by UI to style the progress bar
+    fn on_progress_start(&self, message: &str, total: Option<u64>, direction: TransferDirection);
+    /// Called when starting a spinner for polling/waiting operations.
+    fn on_spinner_start(&self, message: &str);
     /// Called to update progress with the current completion count
     fn on_progress_update(&self, current: u64);
     /// Called to update the progress message without restarting
@@ -153,7 +173,14 @@ impl ProgressCallback for NoopCallback {
     fn on_section(&self, _title: &str) {}
     fn on_field(&self, _key: &str, _value: &str) {}
     fn on_status(&self, _text: &str) {}
-    fn on_progress_start(&self, _message: &str, _total: Option<u64>) {}
+    fn on_progress_start(
+        &self,
+        _message: &str,
+        _total: Option<u64>,
+        _direction: TransferDirection,
+    ) {
+    }
+    fn on_spinner_start(&self, _message: &str) {}
     fn on_progress_update(&self, _current: u64) {}
     fn on_progress_update_message(&self, _message: &str) {}
     fn on_progress_finish(&self, _message: &str) {}
@@ -457,6 +484,84 @@ fn handle_response(response: Response) -> Result<()> {
     } else {
         Err(eyre::eyre!(
             "Request failed with status: {}",
+            response.status()
+        ))
+    }
+}
+
+/// A reader wrapper that tracks total bytes read via an atomic counter.
+/// Useful for monitoring upload progress from a separate thread.
+pub struct CountingReader<R: std::io::Read> {
+    pub inner: R,
+    pub progress: Arc<AtomicU64>,
+}
+
+impl<R: std::io::Read> std::io::Read for CountingReader<R> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let bytes_read = self.inner.read(buf)?;
+        if bytes_read > 0 {
+            self.progress
+                .fetch_add(bytes_read as u64, Ordering::Relaxed);
+        }
+        Ok(bytes_read)
+    }
+}
+
+/// Stream a response body to a file, reporting progress via the callback.
+///
+/// When `has_content_length` is true, reports per-chunk progress updates;
+/// otherwise streams without progress updates. Always uses `CHUNK_SIZE` buffer.
+pub fn stream_response_to_file(
+    response: &mut reqwest::blocking::Response,
+    file: &mut std::fs::File,
+    callback: &dyn ProgressCallback,
+    has_content_length: bool,
+) -> Result<u64> {
+    let mut buffer = vec![0u8; CHUNK_SIZE];
+    let mut downloaded = 0u64;
+    loop {
+        let bytes_read = std::io::Read::read(response, &mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        std::io::Write::write_all(file, &buffer[..bytes_read])?;
+        downloaded += bytes_read as u64;
+        if has_content_length {
+            callback.on_progress_update(downloaded);
+        }
+    }
+    Ok(downloaded)
+}
+
+/// Stream a download directly to a file without buffering in memory.
+pub fn download_file_streaming(
+    request_builder: RequestBuilder,
+    output_path: PathBuf,
+    error_context: &str,
+) -> Result<()> {
+    let mut response = request_builder
+        .send()
+        .with_context(|| error_context.to_string())?;
+
+    if response.status().is_success() {
+        if let Some(parent) = output_path.parent() {
+            std::fs::create_dir_all(parent)
+                .context(format!("Failed to create directory: {}", parent.display()))?;
+        }
+        let file = std::fs::File::create(&output_path).context(format!(
+            "Failed to create output file: {}",
+            output_path.display()
+        ))?;
+        let mut writer = std::io::BufWriter::with_capacity(CHUNK_SIZE, file);
+        std::io::copy(&mut response, &mut writer).context("Failed to write response to file")?;
+        Ok(())
+    } else if response.status().is_client_error() {
+        let status = response.status();
+        let error_text = response.text()?;
+        Err(eyre::eyre!("Client error ({}): {}", status, error_text))
+    } else {
+        Err(eyre::eyre!(
+            "Download request failed with status: {}",
             response.status()
         ))
     }
