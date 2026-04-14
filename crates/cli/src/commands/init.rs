@@ -39,8 +39,9 @@ impl InitCmd {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
 enum Vcs {
+    #[default]
     Git,
     None,
 }
@@ -65,8 +66,8 @@ pub struct InitArgs {
     name: Option<String>,
 
     /// Initialize a version control repository (`git` or `none`)
-    #[clap(long, value_enum, value_name = "VCS")]
-    vcs: Option<Vcs>,
+    #[clap(long, value_enum, value_name = "VCS", default_value_t = Vcs::Git)]
+    vcs: Vcs,
 }
 
 fn build_openvm_init_command(args: &InitArgs) -> Command {
@@ -81,15 +82,13 @@ fn build_openvm_init_command(args: &InitArgs) -> Command {
         cmd.arg("--name").arg(name);
     }
 
-    if let Some(vcs) = args.vcs {
-        cmd.arg("--vcs").arg(vcs.as_arg());
-    }
+    cmd.arg("--vcs").arg(args.vcs.as_arg());
 
     cmd
 }
 
-fn should_attempt_git_commit(vcs: Option<Vcs>) -> bool {
-    vcs.unwrap_or(Vcs::Git) == Vcs::Git
+fn should_attempt_git_commit(vcs: Vcs) -> bool {
+    vcs == Vcs::Git
 }
 
 pub fn execute(args: InitArgs) -> Result<()> {
@@ -275,12 +274,12 @@ mod tests {
         let args = InitArgs {
             path: Some("guest".into()),
             name: Some("demo".into()),
-            vcs: None,
+            vcs: Vcs::Git,
         };
 
         assert_eq!(
             command_args(&args),
-            vec!["openvm", "init", "guest", "--name", "demo"]
+            vec!["openvm", "init", "guest", "--name", "demo", "--vcs", "git"]
         );
     }
 
@@ -289,7 +288,7 @@ mod tests {
         let args = InitArgs {
             path: Some("guest".into()),
             name: None,
-            vcs: Some(Vcs::None),
+            vcs: Vcs::None,
         };
 
         assert_eq!(
@@ -300,8 +299,7 @@ mod tests {
 
     #[test]
     fn should_only_attempt_git_commit_for_git() {
-        assert!(should_attempt_git_commit(None));
-        assert!(should_attempt_git_commit(Some(Vcs::Git)));
-        assert!(!should_attempt_git_commit(Some(Vcs::None)));
+        assert!(should_attempt_git_commit(Vcs::Git));
+        assert!(!should_attempt_git_commit(Vcs::None));
     }
 }

@@ -25,12 +25,6 @@
    Alternatively, set the `AXIOM_API_KEY` environment variable in a `.env` file and then run `cargo axiom register` at the directory of the `.env` file.
    See `.env.example` for an example.
 
-To scaffold a new OpenVM project without creating a git repository, use:
-
-```bash
-cargo axiom init --vcs none <PATH>
-```
-
 ## Building Programs
 
 1. Navigate to your program directory (containing a Rust workspace with an OpenVM guest program).
