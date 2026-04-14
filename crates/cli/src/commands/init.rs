@@ -87,10 +87,6 @@ fn build_openvm_init_command(args: &InitArgs) -> Command {
     cmd
 }
 
-fn should_attempt_git_commit(vcs: Vcs) -> bool {
-    vcs == Vcs::Git
-}
-
 pub fn execute(args: InitArgs) -> Result<()> {
     println!("Initializing OpenVM project...");
 
@@ -244,7 +240,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
         .status();
 
     // Attempt to stage and commit initialized files. Ignore failures (e.g., not a git repo or nothing to commit).
-    if should_attempt_git_commit(args.vcs) {
+    if args.vcs == Vcs::Git {
         let _ = Command::new("git")
             .current_dir(&project_dir)
             .args(["add", "."])
@@ -260,7 +256,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{InitArgs, Vcs, build_openvm_init_command, should_attempt_git_commit};
+    use super::{InitArgs, Vcs, build_openvm_init_command};
 
     fn command_args(args: &InitArgs) -> Vec<String> {
         build_openvm_init_command(args)
@@ -295,11 +291,5 @@ mod tests {
             command_args(&args),
             vec!["openvm", "init", "guest", "--vcs", "none"]
         );
-    }
-
-    #[test]
-    fn should_only_attempt_git_commit_for_git() {
-        assert!(should_attempt_git_commit(Vcs::Git));
-        assert!(!should_attempt_git_commit(Vcs::None));
     }
 }
