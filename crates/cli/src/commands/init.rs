@@ -266,7 +266,7 @@ mod tests {
     }
 
     #[test]
-    fn build_openvm_init_command_omits_vcs_by_default() {
+    fn build_openvm_init_command_forwards_vcs_git() {
         let args = InitArgs {
             path: Some("guest".into()),
             name: Some("demo".into()),
