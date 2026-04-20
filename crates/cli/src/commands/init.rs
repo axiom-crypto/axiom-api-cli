@@ -1,6 +1,6 @@
 use std::{fs, path::Path, process::Command};
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use eyre::{OptionExt, Result, WrapErr, bail};
 use toml_edit::{DocumentMut, Item, Table, Value};
 
@@ -39,6 +39,22 @@ impl InitCmd {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
+enum Vcs {
+    #[default]
+    Git,
+    None,
+}
+
+impl Vcs {
+    fn as_arg(self) -> &'static str {
+        match self {
+            Self::Git => "git",
+            Self::None => "none",
+        }
+    }
+}
+
 #[derive(Debug, Parser)]
 pub struct InitArgs {
     /// Path to create the package in
@@ -48,6 +64,27 @@ pub struct InitArgs {
     /// Set the package name, default is the directory name
     #[clap(long, value_name = "NAME")]
     name: Option<String>,
+
+    /// Initialize a version control repository (`git` or `none`)
+    #[clap(long, value_enum, value_name = "VCS", default_value_t = Vcs::Git)]
+    vcs: Vcs,
+}
+
+fn build_openvm_init_command(args: &InitArgs) -> Command {
+    let mut cmd = Command::new("cargo");
+    cmd.arg("openvm").arg("init");
+
+    if let Some(path) = &args.path {
+        cmd.arg(path);
+    }
+
+    if let Some(name) = &args.name {
+        cmd.arg("--name").arg(name);
+    }
+
+    cmd.arg("--vcs").arg(args.vcs.as_arg());
+
+    cmd
 }
 
 pub fn execute(args: InitArgs) -> Result<()> {
@@ -65,18 +102,7 @@ pub fn execute(args: InitArgs) -> Result<()> {
     }
 
     // Build the cargo openvm init command
-    let mut cmd = Command::new("cargo");
-    cmd.arg("openvm").arg("init");
-
-    // Add path if provided
-    if let Some(path) = &args.path {
-        cmd.arg(path);
-    }
-
-    // Add name if provided
-    if let Some(name) = &args.name {
-        cmd.arg("--name").arg(name);
-    }
+    let mut cmd = build_openvm_init_command(&args);
 
     // Execute cargo openvm init
     let status = cmd.status()?;
@@ -214,14 +240,56 @@ pub fn execute(args: InitArgs) -> Result<()> {
         .status();
 
     // Attempt to stage and commit initialized files. Ignore failures (e.g., not a git repo or nothing to commit).
-    let _ = Command::new("git")
-        .current_dir(&project_dir)
-        .args(["add", "."])
-        .status();
-    let _ = Command::new("git")
-        .current_dir(&project_dir)
-        .args(["commit", "-q", "-m", "initial commit"])
-        .status();
+    if args.vcs == Vcs::Git {
+        let _ = Command::new("git")
+            .current_dir(&project_dir)
+            .args(["add", "."])
+            .status();
+        let _ = Command::new("git")
+            .current_dir(&project_dir)
+            .args(["commit", "-q", "-m", "initial commit"])
+            .status();
+    }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{InitArgs, Vcs, build_openvm_init_command};
+
+    fn command_args(args: &InitArgs) -> Vec<String> {
+        build_openvm_init_command(args)
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect()
+    }
+
+    #[test]
+    fn build_openvm_init_command_forwards_vcs_git() {
+        let args = InitArgs {
+            path: Some("guest".into()),
+            name: Some("demo".into()),
+            vcs: Vcs::Git,
+        };
+
+        assert_eq!(
+            command_args(&args),
+            vec!["openvm", "init", "guest", "--name", "demo", "--vcs", "git"]
+        );
+    }
+
+    #[test]
+    fn build_openvm_init_command_forwards_vcs_none() {
+        let args = InitArgs {
+            path: Some("guest".into()),
+            name: None,
+            vcs: Vcs::None,
+        };
+
+        assert_eq!(
+            command_args(&args),
+            vec!["openvm", "init", "guest", "--vcs", "none"]
+        );
+    }
 }
