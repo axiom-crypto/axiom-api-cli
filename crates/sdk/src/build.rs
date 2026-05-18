@@ -11,7 +11,6 @@ use std::{
 
 use eyre::{Context, OptionExt, Result, eyre};
 use flate2::{Compression, write::GzEncoder};
-use openvm_build::{cargo_command, get_rustup_toolchain_name};
 use reqwest::blocking::Client;
 use scopeguard::defer;
 use serde::{Deserialize, Serialize};
@@ -27,6 +26,75 @@ pub const MAX_PROGRAM_SIZE_MB: u64 = 2048;
 const BUILD_POLLING_INTERVAL_SECS: u64 = 10;
 
 pub const AXIOM_CARGO_HOME: &str = "axiom_cargo_home";
+
+// Mirrors of constants/helpers from `openvm-build`. Keep in sync with the openvm
+// version pinned by the proving API (currently v1.6.0). These let the SDK avoid
+// pulling in `openvm-build` (and its transitive deps) just to learn the toolchain
+// name and to run a guest-target `cargo fetch`.
+const DEFAULT_OPENVM_RUST_TOOLCHAIN: &str = "nightly-2025-08-02";
+const OPENVM_RUSTC_TARGET: &str = "riscv32im-risc0-zkvm-elf";
+const OPENVM_TEXT_START: u32 = 0x0020_0800;
+
+fn openvm_rust_toolchain_name() -> String {
+    std::env::var("OPENVM_RUST_TOOLCHAIN")
+        .unwrap_or_else(|_| DEFAULT_OPENVM_RUST_TOOLCHAIN.to_string())
+}
+
+fn sanitized_cmd(tool: &str) -> std::process::Command {
+    let mut cmd = std::process::Command::new(tool);
+    for (key, _) in std::env::vars() {
+        if key.starts_with("CARGO") && key != "CARGO_HOME" {
+            cmd.env_remove(key);
+        }
+    }
+    cmd.env_remove("RUSTUP_TOOLCHAIN");
+    cmd
+}
+
+/// Equivalent of `openvm_build::cargo_command("fetch", &[])`: a sanitized `cargo
+/// fetch` invocation targeting the openvm guest, with the same `-Z build-std`
+/// flags and RUSTFLAGS so cfg-gated dependencies resolve identically to openvm's
+/// guest build.
+fn openvm_guest_cargo_fetch_command() -> std::process::Command {
+    let toolchain = format!("+{}", openvm_rust_toolchain_name());
+
+    let rustc_out = sanitized_cmd("rustup")
+        .args([&toolchain, "which", "rustc"])
+        .output()
+        .expect("rustup failed to find openvm toolchain");
+    let rustc = String::from_utf8(rustc_out.stdout).expect("rustc path was not utf8");
+    let rustc = rustc.trim().to_string();
+
+    let mut cmd = sanitized_cmd("cargo");
+    cmd.args([
+        &toolchain,
+        "fetch",
+        "--target",
+        OPENVM_RUSTC_TARGET,
+        "-Z",
+        "build-std=alloc,core,proc_macro,panic_abort,std",
+        "-Z",
+        "build-std-features=compiler-builtins-mem",
+    ]);
+
+    let rust_flags = [
+        "-C",
+        "passes=lower-atomic",
+        "-C",
+        &format!("link-arg=-Ttext=0x{:08X}", OPENVM_TEXT_START),
+        "-C",
+        "link-arg=--fatal-warnings",
+        "-C",
+        "panic=abort",
+        "--cfg",
+        "getrandom_backend=\"custom\"",
+    ]
+    .join("\x1f");
+
+    cmd.env("RUSTC", rustc)
+        .env("CARGO_ENCODED_RUSTFLAGS", rust_flags);
+    cmd
+}
 
 pub trait BuildSdk {
     fn list_programs(
@@ -629,10 +697,10 @@ impl AxiomSdk {
         if let Some(default_num_gpus) = args.default_num_gpus {
             url.push_str(&format!("&default_num_gpus={}", default_num_gpus));
         }
-        // Always pass the toolchain version - either from args or from openvm-build default
+        // Always pass the toolchain version - either from args or from the openvm default
         let toolchain = args.openvm_rust_toolchain.clone().unwrap_or_else(|| {
             // Use the same toolchain that was used for cargo fetch
-            get_rustup_toolchain_name()
+            openvm_rust_toolchain_name()
         });
         url.push_str(&format!("&openvm_rust_toolchain={}", toolchain));
 
@@ -1162,7 +1230,7 @@ fn create_tar_archive(
     }
 
     // Fetch 3: Run cargo fetch for some host dependencies (std stuffs)
-    let mut cmd = cargo_command("fetch", &[]);
+    let mut cmd = openvm_guest_cargo_fetch_command();
     if let Some(ref tc) = openvm_rust_toolchain {
         cmd.env("OPENVM_RUST_TOOLCHAIN", tc);
     }
