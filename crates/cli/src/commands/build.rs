@@ -56,13 +56,6 @@ enum BuildSubcommand {
         #[clap(long, value_name = "TYPE", value_parser = ["exe", "elf", "source", "app_exe_commit", "all"])]
         artifact: String,
     },
-
-    /// Download build logs for a program
-    Logs {
-        /// The program ID to download logs for
-        #[clap(long, value_name = "ID")]
-        program_id: String,
-    },
 }
 
 #[derive(Debug, Parser)]
@@ -151,7 +144,6 @@ impl BuildCmd {
                 program_id,
                 artifact,
             }) => sdk.download_program(&program_id, &artifact),
-            Some(BuildSubcommand::Logs { program_id }) => sdk.download_build_logs(&program_id),
             None => {
                 let program_dir = std::env::current_dir()?;
 

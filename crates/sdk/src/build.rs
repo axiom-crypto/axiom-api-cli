@@ -108,7 +108,6 @@ pub trait BuildSdk {
     fn get_app_exe_commit(&self, program_id: &str) -> Result<Vec<u8>>;
 
     fn download_program(&self, program_id: &str, program_type: &str) -> Result<()>;
-    fn download_build_logs(&self, program_id: &str) -> Result<()>;
     fn register_new_program(
         &self,
         program_dir: impl AsRef<Path>,
@@ -355,28 +354,6 @@ impl BuildSdk for AxiomSdk {
                 error_text
             ))
         }
-    }
-
-    fn download_build_logs(&self, program_id: &str) -> Result<()> {
-        let url = format!("{}/programs/{}/logs", self.config.api_url, program_id);
-        let build_dir = std::path::PathBuf::from("axiom-artifacts")
-            .join(format!("program-{}", program_id))
-            .join("artifacts");
-        std::fs::create_dir_all(&build_dir).context(format!(
-            "Failed to create build directory: {}",
-            build_dir.display()
-        ))?;
-
-        let filename = build_dir.join("logs.txt");
-        let response = authenticated_get(&self.config, &url)?;
-        crate::download_file_streaming(
-            response,
-            filename.clone(),
-            "Failed to download build logs",
-        )?;
-        self.callback
-            .on_success(&format!("✓ {}", filename.display()));
-        Ok(())
     }
 
     fn register_new_program(
