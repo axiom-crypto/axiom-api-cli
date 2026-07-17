@@ -39,7 +39,7 @@ enum AxiomCommands {
     Init(InitCmd),
     /// Register Axiom API credentials
     Register(RegisterCmd),
-    /// Build the project on Axiom Proving Service
+    /// Upload a locally-built program (ELF + VMEXE) to the Axiom Proving Service
     Build(BuildCmd),
     /// Generate a proof using the Axiom Proving Service
     Prove(ProveCmd),

@@ -839,93 +839,84 @@ impl AxiomSdk {
             eyre::bail!("Not in a Rust project. Make sure Cargo.toml exists.");
         }
 
-        // Look for the openvm build output directory
-        let target_dir = program_dir.as_ref().join("target").join("openvm");
-        if !target_dir.exists() {
+        // openvm v2 `cargo openvm build` output layout (run from the guest crate dir):
+        //   - transpiled VMEXE: <dir>/openvm/<profile>/<bin>.vmexe   (SIBLING of target/)
+        //   - raw ELF:          <dir>/target/<openvm-target>/<profile>/<bin>  (no extension)
+        // NOTE: assumes the default target dir; custom CARGO_TARGET_DIR / workspace target
+        // dirs are not handled yet.
+        let profile = "release";
+        let vmexe_dir = program_dir.as_ref().join("openvm").join(profile);
+        if !vmexe_dir.exists() {
             eyre::bail!(
                 "OpenVM build output not found. Please run 'cargo openvm build' first.\nExpected directory: {}",
-                target_dir.display()
+                vmexe_dir.display()
             );
         }
 
-        // Find the release directory
-        // TODO: Support other profiles beyond release (e.g., dev, custom profiles)
-        let release_dir = target_dir.join("release");
-        if !release_dir.exists() {
-            eyre::bail!(
-                "OpenVM release build not found. Please run 'cargo openvm build' first.\nExpected directory: {}",
-                release_dir.display()
-            );
-        }
-
-        // Find ELF and VMEXE files
-        let elf_files: Vec<_> = std::fs::read_dir(&release_dir)?
+        // Find the transpiled VMEXE files.
+        let vmexe_files: Vec<_> = std::fs::read_dir(&vmexe_dir)?
             .filter_map(Result::ok)
-            .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("elf"))
+            .filter(|entry| entry.path().extension().and_then(|s| s.to_str()) == Some("vmexe"))
             .collect();
 
-        if elf_files.is_empty() {
+        if vmexe_files.is_empty() {
             eyre::bail!(
-                "No ELF files found in {}. Please run 'cargo openvm build' first.",
-                release_dir.display()
+                "No VMEXE files found in {}. Please run 'cargo openvm build' first.",
+                vmexe_dir.display()
             );
         }
 
-        // Filter by bin_name if provided and there are multiple ELFs
-        let elf_path = if elf_files.len() > 1 {
-            if let Some(bin_name) = &args.bin_name {
-                // Filter ELF files by bin_name
-                let matching_elf = elf_files.iter().find(|entry| {
-                    entry
-                        .path()
+        let available_bins = |files: &[std::fs::DirEntry]| -> Vec<String> {
+            files
+                .iter()
+                .filter_map(|e| {
+                    e.path()
                         .file_stem()
                         .and_then(|s| s.to_str())
-                        .map(|name| name == bin_name)
-                        .unwrap_or(false)
-                });
+                        .map(|s| s.to_string())
+                })
+                .collect()
+        };
 
-                if let Some(elf_entry) = matching_elf {
-                    elf_entry.path()
-                } else {
-                    let available: Vec<_> = elf_files
-                        .iter()
-                        .filter_map(|e| {
-                            e.path()
-                                .file_stem()
-                                .and_then(|s| s.to_str())
-                                .map(|s| s.to_string())
-                        })
-                        .collect();
-                    eyre::bail!(
-                        "ELF file '{}' not found. Available ELF files: {}",
+        // Select the VMEXE (by --bin-name when the project has multiple binaries).
+        let vmexe_path = if vmexe_files.len() > 1 {
+            if let Some(bin_name) = &args.bin_name {
+                match vmexe_files.iter().find(|entry| {
+                    entry.path().file_stem().and_then(|s| s.to_str()) == Some(bin_name.as_str())
+                }) {
+                    Some(entry) => entry.path(),
+                    None => eyre::bail!(
+                        "VMEXE for bin '{}' not found. Available: {}",
                         bin_name,
-                        available.join(", ")
-                    );
+                        available_bins(&vmexe_files).join(", ")
+                    ),
                 }
             } else {
-                let available: Vec<_> = elf_files
-                    .iter()
-                    .filter_map(|e| {
-                        e.path()
-                            .file_stem()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.to_string())
-                    })
-                    .collect();
                 eyre::bail!(
-                    "Multiple ELF files found. Please specify which one to upload using --bin-name. Available: {}",
-                    available.join(", ")
+                    "Multiple binaries found. Specify which one with --bin-name. Available: {}",
+                    available_bins(&vmexe_files).join(", ")
                 );
             }
         } else {
-            elf_files[0].path()
+            vmexe_files[0].path()
         };
-        let vmexe_path = elf_path.with_extension("vmexe");
 
-        if !vmexe_path.exists() {
+        // Derive the binary name from the VMEXE, then locate the matching raw ELF.
+        let bin = vmexe_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .ok_or_eyre("Could not determine binary name from VMEXE path")?;
+        let elf_path = program_dir
+            .as_ref()
+            .join("target")
+            .join(OPENVM_RUSTC_TARGET)
+            .join(profile)
+            .join(bin);
+
+        if !elf_path.exists() {
             eyre::bail!(
-                "VMEXE file not found at {}. Please run 'cargo openvm build' first.",
-                vmexe_path.display()
+                "ELF file not found at {}. Please run 'cargo openvm build' first.",
+                elf_path.display()
             );
         }
 
@@ -962,11 +953,10 @@ impl AxiomSdk {
             .ok_or_eyre("No config_id provided and no default config_id in ~/.axiom/config.json")?;
         callback.on_field("Config ID", config_id);
 
-        // Build URL with query parameters
-        let mut url = format!(
-            "{}/programs/upload-exe?config_id={}",
-            self.config.api_url, config_id
-        );
+        // Build URL with query parameters. API 2.0 unified registration onto POST /programs
+        // (the /programs/upload-exe endpoint and the source-tarball build path were removed),
+        // and dropped the server-side bin_name param (the binary is chosen at build time).
+        let mut url = format!("{}/programs?config_id={}", self.config.api_url, config_id);
 
         if let Some(project_id) = &args.project_id {
             url.push_str(&format!("&project_id={}", project_id));
@@ -975,9 +965,6 @@ impl AxiomSdk {
             let encoded: String =
                 url::form_urlencoded::byte_serialize(project_name.as_bytes()).collect();
             url.push_str(&format!("&project_name={}", encoded));
-        }
-        if let Some(bin_name) = &args.bin_name {
-            url.push_str(&format!("&bin_name={}", bin_name));
         }
         if let Some(program_name) = &args.program_name {
             let encoded: String =

@@ -2,7 +2,7 @@ use std::io::{self, Write};
 
 use axiom_sdk::{
     AxiomSdk,
-    build::{BuildSdk, ConfigSource},
+    build::{BuildSdk, UploadExeArgs},
 };
 use clap::{Parser, Subcommand};
 use comfy_table;
@@ -11,7 +11,10 @@ use eyre::Result;
 use crate::{formatting::Formatter, progress::CliProgressCallback};
 
 #[derive(Debug, Parser)]
-#[command(name = "build", about = "Build the project on Axiom Proving Service")]
+#[command(
+    name = "build",
+    about = "Upload a locally-built program (ELF + VMEXE) to the Axiom Proving Service"
+)]
 pub struct BuildCmd {
     #[command(subcommand)]
     command: Option<BuildSubcommand>,
@@ -64,31 +67,19 @@ enum BuildSubcommand {
 
 #[derive(Debug, Parser)]
 pub struct BuildArgs {
-    /// The configuration ID to use for the build
-    #[clap(long, value_name = "ID", conflicts_with = "config")]
+    /// The configuration ID to use (must reference an already-keyed config)
+    #[clap(long, value_name = "ID")]
     config_id: Option<String>,
 
-    /// Path to an OpenVM TOML configuration file
-    #[clap(long, value_name = "PATH")]
-    config: Option<String>,
-
-    /// The binary to build, if there are multiple binaries in the project
+    /// The binary to upload, if the project has multiple binaries
     #[clap(long, value_name = "BIN")]
     bin: Option<String>,
 
-    /// Keep the tar archive after uploading
-    #[clap(long)]
-    keep_tarball: Option<bool>,
+    /// Custom program name
+    #[clap(long, value_name = "NAME")]
+    program_name: Option<String>,
 
-    /// Comma-separated list of file patterns to exclude (e.g. "*.log,temp/*")
-    #[clap(long, value_name = "PATTERNS")]
-    exclude_files: Option<String>,
-
-    /// Comma-separated list of directories to include even if not tracked by git
-    #[clap(long, value_name = "DIRS")]
-    include_dirs: Option<String>,
-
-    /// The project ID to associate with the build
+    /// The project ID to associate with the program
     #[arg(long, value_name = "ID")]
     project_id: Option<String>,
 
@@ -96,17 +87,9 @@ pub struct BuildArgs {
     #[clap(long)]
     detach: bool,
 
-    /// Allow building with uncommitted changes
-    #[clap(long)]
-    allow_dirty: bool,
-
     /// Specify default_num_gpus for this program
     #[clap(long)]
     default_num_gpus: Option<usize>,
-
-    /// OpenVM Rust toolchain version (e.g., nightly-2025-02-14)
-    #[clap(long, value_name = "VERSION")]
-    openvm_rust_toolchain: Option<String>,
 }
 
 impl BuildCmd {
@@ -171,11 +154,6 @@ impl BuildCmd {
             Some(BuildSubcommand::Logs { program_id }) => sdk.download_build_logs(&program_id),
             None => {
                 let program_dir = std::env::current_dir()?;
-                let config_source = match (self.build_args.config_id, self.build_args.config) {
-                    (Some(config_id), _) => Some(ConfigSource::ConfigId(config_id)),
-                    (_, Some(config)) => Some(ConfigSource::ConfigPath(config)),
-                    (None, None) => None,
-                };
 
                 let project_id = {
                     let cache_path = program_dir.join(".axiom").join("project-id");
@@ -204,19 +182,15 @@ impl BuildCmd {
                     if name.is_empty() { None } else { Some(name) }
                 };
 
-                let args = axiom_sdk::build::BuildArgs {
-                    config_source,
-                    bin: self.build_args.bin,
-                    keep_tarball: self.build_args.keep_tarball,
-                    exclude_files: self.build_args.exclude_files,
-                    include_dirs: self.build_args.include_dirs,
+                let args = UploadExeArgs {
+                    config_id: self.build_args.config_id,
                     project_id,
                     project_name: project_name_for_creation.clone(),
-                    allow_dirty: self.build_args.allow_dirty,
+                    bin_name: self.build_args.bin,
+                    program_name: self.build_args.program_name,
                     default_num_gpus: self.build_args.default_num_gpus,
-                    openvm_rust_toolchain: self.build_args.openvm_rust_toolchain,
                 };
-                let program_id = sdk.register_new_program(&program_dir, args)?;
+                let program_id = sdk.upload_exe(&program_dir, args)?;
 
                 // Always fetch the latest build status to get project ID and print console URL
                 let status = sdk.get_build_status(&program_id)?;
