@@ -46,6 +46,11 @@ pub struct ProveArgs {
     pub num_gpus: Option<usize>,
     /// Priority for this proof (1-10, higher = more priority)
     pub priority: Option<u8>,
+    /// Deferred child stark proofs to fold into this job's verify_stark
+    /// deferral circuit (file order = circuit packing order). Each file must
+    /// be the openvm-codec encoding of the proof
+    /// (`VersionedVmStarkProof::encode_to_vec`).
+    pub deferred_proofs: Vec<PathBuf>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -244,10 +249,46 @@ impl AxiomSdk {
             None => json!({ "input": [] }),
         };
 
-        // Make API request using authenticated_post helper
-        let request = authenticated_post(&self.config, &url)?
-            .header("Content-Type", "application/json")
-            .body(body.to_string());
+        // Plain jobs POST the JSON body as before. A deferral job (one or
+        // more --deferred-proof files) is multipart/form-data on the same
+        // endpoint: the `input` form field carries the JSON body string, and
+        // each child proof is a `child_proofs` file part (part order =
+        // circuit packing order).
+        let request = if args.deferred_proofs.is_empty() {
+            authenticated_post(&self.config, &url)?
+                .header("Content-Type", "application/json")
+                .body(body.to_string())
+        } else {
+            callback.on_field("Deferred proofs", &args.deferred_proofs.len().to_string());
+            let mut form =
+                reqwest::blocking::multipart::Form::new().text("input", body.to_string());
+            for path in &args.deferred_proofs {
+                let bytes = fs::read(path)
+                    .with_context(|| format!("Failed to read deferred proof {}", path.display()))?;
+                // The API accepts only the openvm-codec binary encoding. A
+                // codec stream's leading bytes are the version-string length
+                // prefix and can never be '{', so a JSON-looking file is a
+                // mistake worth catching before uploading megabytes.
+                if looks_like_json(&bytes) {
+                    eyre::bail!(
+                        "Deferred proof {} looks like JSON, but the API accepts only the \
+                         openvm-codec binary encoding (VersionedVmStarkProof::encode_to_vec). \
+                         If this is a downloaded stark proof JSON, decode its hex fields with \
+                         the openvm SDK and re-encode.",
+                        path.display()
+                    );
+                }
+                let file_name = path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| "child_proof.bin".to_string());
+                let part = reqwest::blocking::multipart::Part::bytes(bytes)
+                    .file_name(file_name)
+                    .mime_str("application/octet-stream")?;
+                form = form.part("child_proofs", part);
+            }
+            authenticated_post(&self.config, &url)?.multipart(form)
+        };
 
         let response_json: Value = send_request_json(request, "Failed to generate proof")?;
         let proof_id = response_json["id"].as_str().unwrap();
@@ -490,5 +531,30 @@ impl AxiomSdk {
                 }
             }
         }
+    }
+}
+
+/// A file whose first non-whitespace byte is `{` is JSON, never an
+/// openvm-codec stream (whose leading bytes are a version-string length
+/// prefix). Used to reject accidental stark-proof-JSON uploads client-side.
+fn looks_like_json(bytes: &[u8]) -> bool {
+    bytes
+        .iter()
+        .find(|b| !b.is_ascii_whitespace())
+        .is_some_and(|b| *b == b'{')
+}
+
+#[cfg(test)]
+mod deferred_proof_tests {
+    use super::looks_like_json;
+
+    #[test]
+    fn json_sniff_matches_codec_reality() {
+        assert!(looks_like_json(b"{\"version\": \"v2.0\"}"));
+        assert!(looks_like_json(b"  \n {\"proof\": \"\"}"));
+        // openvm-codec streams start with the version-string length prefix
+        // (a small LE u32), e.g. "v2.0" -> 0x04 0x00 0x00 0x00 ...
+        assert!(!looks_like_json(&[0x04, 0x00, 0x00, 0x00, b'v', b'2']));
+        assert!(!looks_like_json(b""));
     }
 }

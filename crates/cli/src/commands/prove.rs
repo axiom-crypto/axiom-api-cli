@@ -118,6 +118,14 @@ pub struct ProveArgs {
     /// Priority for this proof (1-10, higher = more priority)
     #[clap(long, value_parser = validate_priority)]
     priority: Option<u8>,
+
+    /// Deferred child stark proof to fold into this job's verify_stark
+    /// deferral circuit (repeat the flag for multiple children; order =
+    /// circuit packing order). Each file must be the openvm-codec encoding
+    /// of the proof (VersionedVmStarkProof::encode_to_vec), not the JSON
+    /// served by proof download.
+    #[clap(long = "deferred-proof", value_name = "PATH")]
+    deferred_proofs: Vec<std::path::PathBuf>,
 }
 
 impl ProveCmd {
@@ -228,6 +236,7 @@ impl ProveCmd {
                     proof_type: Some(self.prove_args.proof_type),
                     num_gpus: self.prove_args.num_gpus,
                     priority: self.prove_args.priority,
+                    deferred_proofs: self.prove_args.deferred_proofs,
                 };
                 let proof_id = sdk.generate_new_proof(args)?;
 
