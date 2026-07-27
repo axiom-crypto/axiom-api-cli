@@ -24,3 +24,21 @@ url = "2.5"
 scopeguard = "1.2"
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"
+sha2 = "0.10"
+tempfile = "3"
+toml = "0.9"
+
+# openvm pinned to the v2.0.0 release tag, matching what the proving backend's
+# keygen runs (cloud-proving-backend/workloads_v2). stark-backend must match
+# what openvm v2.0.0 pins (also tag v2.0.0) so both resolve to one tagged
+# source. Used by the `deferral` module to derive deferral commits and the
+# verify_stark parent input client-side.
+openvm-sdk = { git = "https://github.com/openvm-org/openvm.git", default-features = false, tag = "v2.0.0", features = [
+    "parallel",
+] }
+openvm-sdk-config = { git = "https://github.com/openvm-org/openvm.git", default-features = false, tag = "v2.0.0" }
+openvm-continuations = { git = "https://github.com/openvm-org/openvm.git", default-features = false, tag = "v2.0.0" }
+openvm-verify-stark-host = { git = "https://github.com/openvm-org/openvm.git", default-features = false, tag = "v2.0.0" }
+openvm-verify-stark-circuit = { git = "https://github.com/openvm-org/openvm.git", default-features = false, tag = "v2.0.0" }
+openvm-stark-backend = { git = "https://github.com/openvm-org/stark-backend.git", default-features = false, tag = "v2.0.0" }
+openvm-stark-sdk = { git = "https://github.com/openvm-org/stark-backend.git", default-features = false, tag = "v2.0.0" }

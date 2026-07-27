@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use crate::{
     AxiomSdk, ProgressCallback, ProofType, authenticated_get, authenticated_post, download_file,
-    input::Input, send_request_json,
+    input::Input, looks_like_json, send_request_json,
 };
 
 const PROOF_POLLING_INTERVAL_SECS: u64 = 10;
@@ -534,19 +534,9 @@ impl AxiomSdk {
     }
 }
 
-/// A file whose first non-whitespace byte is `{` is JSON, never an
-/// openvm-codec stream (whose leading bytes are a version-string length
-/// prefix). Used to reject accidental stark-proof-JSON uploads client-side.
-fn looks_like_json(bytes: &[u8]) -> bool {
-    bytes
-        .iter()
-        .find(|b| !b.is_ascii_whitespace())
-        .is_some_and(|b| *b == b'{')
-}
-
 #[cfg(test)]
 mod deferred_proof_tests {
-    use super::looks_like_json;
+    use crate::looks_like_json;
 
     #[test]
     fn json_sniff_matches_codec_reality() {

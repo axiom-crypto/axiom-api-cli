@@ -16,6 +16,7 @@ use crate::input::decode_hex_string;
 
 pub mod build;
 pub mod config;
+pub mod deferral;
 pub mod input;
 pub mod projects;
 pub mod prove;
@@ -487,6 +488,16 @@ fn handle_response(response: Response) -> Result<()> {
             response.status()
         ))
     }
+}
+
+/// A file whose first non-whitespace byte is `{` is JSON, never an
+/// openvm-codec stream (whose leading bytes are a version-string length
+/// prefix). Used to tell the two proof encodings apart client-side.
+pub(crate) fn looks_like_json(bytes: &[u8]) -> bool {
+    bytes
+        .iter()
+        .find(|b| !b.is_ascii_whitespace())
+        .is_some_and(|b| *b == b'{')
 }
 
 /// A reader wrapper that tracks total bytes read via an atomic counter.
