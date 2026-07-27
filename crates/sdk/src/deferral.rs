@@ -694,8 +694,12 @@ commit = "0x0028f0c4c21eb53a99c7480ecc941110425c5dea91fb74de6d458b29492ebaf7"
 
     /// One-time probe against the standard config's known keyset constants
     /// (openvm v2.0.0, default aggregation params, 100-bit hook params,
-    /// default memory dimensions and public values — what
-    /// openvm_standard.toml yields). Verifies:
+    /// default memory dimensions and public values). The config comes from
+    /// `SdkVmConfig::standard()` — the canonical constructor whose docs embed
+    /// sdk-config's own `openvm_standard.toml` — serialized to the user-toml
+    /// shape and fed through the SAME parse path a served config takes, so
+    /// this also pins constructor ≡ toml equivalence (a divergence would
+    /// change the derived constants and fail the assertions). Verifies:
     /// - the derived `def_hook_commit` matches the backend keyset's artifact
     ///   (the constant guarded by the backend's deferral e2e test);
     /// - the derived circuit commit matches the commit keygen bakes into the
@@ -721,8 +725,17 @@ commit = "0x0028f0c4c21eb53a99c7480ecc941110425c5dea91fb74de6d458b29492ebaf7"
         const EXPECTED_CIRCUIT_CACHED_COMMIT: &str =
             "001d294a5c49bd8a5a1ec12238795ea7c6d25326ab44d6aa493b4b73742e8dff";
 
-        let toml_str = include_str!("../test-fixtures/openvm_standard.toml");
-        let derived = derive_deferral_commits(toml_str).unwrap();
+        // The canonical standard config, from the dependency itself — no
+        // copied fixture to drift.
+        #[derive(serde::Serialize)]
+        struct UserToml {
+            app_vm_config: SdkVmConfig,
+        }
+        let toml_str = toml::to_string(&UserToml {
+            app_vm_config: SdkVmConfig::standard(),
+        })
+        .unwrap();
+        let derived = derive_deferral_commits(&toml_str).unwrap();
 
         let hook_hex = commit_to_bare_hex(&derived.def_hook_commit);
         let cached_hex = commit_to_bare_hex(&derived.circuit_cached_commit);
