@@ -11,8 +11,8 @@ mod formatting;
 mod progress;
 
 use commands::{
-    BuildCmd, ConfigCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd, UploadExeCmd,
-    VerifyCmd, VersionCmd,
+    BuildCmd, ConfigCmd, DeferralCmd, InitCmd, ProjectsCmd, ProveCmd, RegisterCmd, RunCmd,
+    UploadExeCmd, VerifyCmd, VersionCmd,
 };
 
 #[derive(Parser)]
@@ -49,6 +49,8 @@ enum AxiomCommands {
     Config(ConfigCmd),
     /// Verify a proof using the Axiom Verifying Service
     Verify(VerifyCmd),
+    /// Prepare deferral (verify_stark) submissions
+    Deferral(DeferralCmd),
     /// Manage projects
     Projects(ProjectsCmd),
     /// Upload pre-built VMEXE to Axiom Proving Service
@@ -151,6 +153,7 @@ fn main() {
         AxiomCommands::Run(cmd) => cmd.run(),
         AxiomCommands::Config(cmd) => cmd.run(),
         AxiomCommands::Verify(cmd) => cmd.run(),
+        AxiomCommands::Deferral(cmd) => cmd.run(),
         AxiomCommands::Projects(cmd) => cmd.run(),
         AxiomCommands::UploadExe(cmd) => cmd.run(),
         AxiomCommands::Version(cmd) => cmd.run(),

@@ -1,5 +1,6 @@
 pub mod build;
 pub mod config;
+pub mod deferral;
 pub mod init;
 pub mod projects;
 pub mod prove;
@@ -11,6 +12,7 @@ pub mod version;
 
 pub use build::BuildCmd;
 pub use config::ConfigCmd;
+pub use deferral::DeferralCmd;
 pub use init::InitCmd;
 pub use projects::ProjectsCmd;
 pub use prove::ProveCmd;
